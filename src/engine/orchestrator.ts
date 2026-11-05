@@ -384,15 +384,15 @@ export class AgentInstance {
       });
     }
 
-    // 3. Router G_Ω
+    // 3. Router
     if (this.normalizedAInt.size > 0) {
-      this.transitionTo('q_intro', 'router G_Ω (A_int presente)');
+      this.transitionTo('q_intro', 'avvio pianificazione preliminare');
       this.currentDirective = {
         type: 'start_intro',
         prompt: this.framework.policy.formatDirectivePrompt('start_intro')
       };
     } else {
-      this.transitionTo('q_exec', 'router G_Ω (agente reattivo)');
+      this.transitionTo('q_exec', 'avvio diretto in azione operativa');
       this.currentDirective = {
         type: 'start_exec',
         prompt: this.framework.policy.formatDirectivePrompt('start_exec')
@@ -589,7 +589,7 @@ export class AgentInstance {
 
       case 'q_yield': {
         // q_yield è uno stato transitorio verso q_sleep
-        this.transitionTo('q_sleep', 'transizione post-yield verso riposo');
+        this.transitionTo('q_sleep', 'in attesa di nuovi input');
         throw new Error(
           "L'agente ha completato lo yield verso il mondo ed è ora in 'q_sleep'. Attendere i risultati del mondo."
         );
@@ -646,7 +646,7 @@ export class AgentInstance {
         schemaErrorDetail: detail,
         prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail)
       };
-      this.transitionTo('q_repair', 'nessuna azione emessa in fase introspettiva');
+      this.transitionTo('q_repair', 'nessuna operazione indicata');
       this.repairPhase = 'intro';
       this.t++;
       void this.emitEvent({
@@ -679,7 +679,7 @@ export class AgentInstance {
         schemaErrorDetail: detail,
         prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail)
       };
-      this.transitionTo('q_repair', 'violazione vincolo XOR su a_concludi_intro');
+      this.transitionTo('q_repair', 'conclusione pianificazione non separata dalle altre azioni');
       this.repairPhase = 'intro';
       this.t++;
       void this.emitEvent({
@@ -710,7 +710,7 @@ export class AgentInstance {
       });
 
       this.t++;
-      this.transitionTo('q_exec', 'chiusura introspettiva via a_concludi_intro');
+      this.transitionTo('q_exec', 'pianificazione completata con successo');
       this.currentDirective = {
         type: 'start_exec',
         prompt: this.framework.policy.formatDirectivePrompt('start_exec')
@@ -1099,7 +1099,7 @@ export class AgentInstance {
     // YIELD: Ibernazione e incremento c
     this.t++;
     this.c++;
-    this.transitionTo('q_sleep', 'cessione controllo (yield) in attesa del Mondo W');
+    this.transitionTo('q_sleep', 'invio richieste e attesa risposta servizi esterni');
 
     void this.emitEvent({
       type: 'yield',

@@ -14,12 +14,51 @@ export interface ConsoleLoggerOptions {
 }
 
 /**
+ * Traduce gli identificatori tecnici FSM in espressioni chiare in linguaggio naturale.
+ */
+function humanizeFSMState(state: string): string {
+  switch (state) {
+    case 'q_sleep':
+      return 'In attesa di input';
+    case 'q_intro':
+      return 'Pianificazione interna';
+    case 'q_exec':
+      return 'Azione operativa';
+    case 'q_repair':
+      return 'Riparazione automatica';
+    case 'q_yield':
+      return 'Attesa servizi esterni';
+    case 'q_halt':
+      return 'Completato';
+    default:
+      return state;
+  }
+}
+
+/**
+ * Traduce le direttive formali del protocollo in etichette comprensibili.
+ */
+function humanizeDirective(type: string): string {
+  switch (type) {
+    case 'start_intro':
+      return 'Inizio pianificazione';
+    case 'loop_intro':
+      return 'Affinamento piano e memoria';
+    case 'start_exec':
+      return 'Esecuzione azioni nel mondo';
+    case 'err_schema':
+      return 'Risoluzione anomalia';
+    default:
+      return type;
+  }
+}
+
+/**
  * ============================================================================
  * LOGGER DI CONSOLE STRUTTURATO E VISIVO (ConsoleLoggerObserver)
  * ============================================================================
- * Formatta l'avanzamento dell'automa con gerarchia ad albero, box unicode,
- * stili visuali e netta separazione tra ragionamenti interni, azioni cognitive
- * e interazioni fisiche con il Mondo esterno.
+ * Presenta l'avanzamento dell'agente in linguaggio naturale e accessibile,
+ * con formattazione ad albero, box unicode e chiara separazione dei momenti operativi.
  */
 export class ConsoleLoggerObserver implements AgentObserver {
   private level: LogLevel;
@@ -79,7 +118,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
   }
 
   private formatData(data: unknown, indent = 6): string {
-    if (data === undefined) return this.dim('undefined');
+    if (data === undefined) return this.dim('nessun dato');
     if (typeof data === 'string') return `"${data}"`;
     if (typeof data === 'number' || typeof data === 'boolean') return String(data);
     try {
@@ -102,8 +141,9 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
     switch (event.type) {
       case 'macro_cycle_start': {
-        const title = ` INIZIO CICLO MONDO c = ${event.macroCycle} `;
-        const border = '═'.repeat(Math.max(60, title.length + 4));
+        const cycleNum = event.macroCycle + 1;
+        const title = ` CICLO OPERATIVO ${cycleNum} `;
+        const border = '═'.repeat(Math.max(64, title.length + 4));
 
         this.write('');
         this.write(pfx + this.blue(`╔${border}╗`));
@@ -111,21 +151,21 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write(pfx + this.blue(`╚${border}╝`));
 
         if (event.userContent !== undefined) {
-          this.write(pfx + `   ${this.bold('👤 Input Utente:')}`);
+          this.write(pfx + `   ${this.bold('👤 Richiesta Utente:')}`);
           this.write(pfx + `      ${this.cyan(this.formatData(event.userContent, 6))}`);
         }
 
         if (event.worldResults && event.worldResults.length > 0) {
           this.write(
             pfx +
-              `   ${this.bold('🌍 Risultati ricevuti dal Mondo W')} ${this.dim(
-                `(${event.worldResults.length} esiti)`
+              `   ${this.bold('🌍 Risposte ricevute dai servizi esterni')} ${this.dim(
+                `(${event.worldResults.length} esito/i)`
               )}:`
           );
           for (const res of event.worldResults) {
             this.write(
               pfx +
-                `      ${this.green('•')} ${this.dim(`[callId: ${res.callId}]`)} ${this.green(
+                `      ${this.green('•')} ${this.dim(`[Rif: ${res.callId}]`)} ${this.green(
                   this.formatData(res.result, 8)
                 )}`
             );
@@ -136,10 +176,13 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
       case 'step_start': {
         if (this.level === 'verbose') {
+          const stepNum = event.tick + 1;
+          const phase = humanizeFSMState(event.controlState);
+          const directiveDesc = humanizeDirective(event.directive.type);
           this.write(
             pfx +
-              `  ${this.cyan('┌──')} ${this.bold(`Passo [t=${event.tick}]`)} ${this.dim(
-                `[FSM: ${event.controlState} | Direttiva: ${event.directive.type}]`
+              `  ${this.cyan('┌──')} ${this.bold(`Passo ${stepNum}`)} ${this.dim(
+                `[Fase: ${phase} • ${directiveDesc}]`
               )}`
           );
         }
@@ -150,7 +193,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
         const pipe = this.cyan('  │  ');
 
         if (this.showSystemFrame && this.level === 'verbose') {
-          this.write(pfx + `${pipe}${this.dim('📄 Frame Proiettato:')}`);
+          this.write(pfx + `${pipe}${this.dim('📄 Contesto operativo:')}`);
           for (const line of event.context.systemFrame.split('\n')) {
             this.write(pfx + `${pipe}  ${this.dim(line)}`);
           }
@@ -158,12 +201,14 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
         if (this.showVisibleTools && this.level === 'verbose') {
           const toolNames = event.context.visibleTools.map((t) => t.id).join(', ');
-          this.write(pfx + `${pipe}${this.dim(`👁️  Tool Visibili: [${toolNames}]`)}`);
+          this.write(
+            pfx + `${pipe}${this.dim(`🛠️  Strumenti disponibili in questa fase: [${toolNames}]`)}`
+          );
         }
 
         if (this.showThoughts && event.output.thought) {
           this.write(pfx + `${pipe}`);
-          this.write(pfx + `${pipe}${this.yellow(this.bold('💭 Pensiero:'))}`);
+          this.write(pfx + `${pipe}${this.yellow(this.bold('💭 Ragionamento dell\'Agente:'))}`);
           const lines = event.output.thought.split('\n');
           for (const l of lines) {
             this.write(pfx + `${pipe}   ${this.yellow(this.c('\x1b[3m', `"${l}"`))}`);
@@ -174,7 +219,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
           this.write(pfx + `${pipe}`);
           this.write(
             pfx +
-              `${pipe}${this.bold('📞 Decisione Modello')} ${this.dim(
+              `${pipe}${this.bold('📞 Azioni stabilite dall\'Agente')} ${this.dim(
                 `(${event.durationMs}ms)`
               )}:`
           );
@@ -194,22 +239,26 @@ export class ConsoleLoggerObserver implements AgentObserver {
         const pipe = this.cyan('  │  ');
         this.write(
           pfx +
-            `${pipe}${this.magenta('🧠')} ${this.bold(event.toolName)}${this.dim('(')}${this.magenta(
+            `${pipe}   ${this.magenta('🧠')} ${this.dim('Operazione mentale:')} ${this.bold(
+              event.toolName
+            )}${this.dim('(')}${this.magenta(
               this.formatData(event.args, 8)
-            )}${this.dim(')')} ${this.dim('➔')} ${this.green(this.formatData(event.result))}`
+            )}${this.dim(')')} ${this.dim('➔')} ${this.green('completata')}`
         );
         break;
       }
 
       case 'state_transition': {
         if (this.level === 'verbose') {
+          const fromName = humanizeFSMState(event.from);
+          const toName = humanizeFSMState(event.to);
           const reasonStr = event.reason ? ` ${this.dim(`(${event.reason})`)}` : '';
           this.write(
             pfx +
               `  ${this.cyan('└──')} ${this.yellow('🔀')} ${this.bold(
-                'Transizione FSM:'
-              )} ${this.cyan(event.from)} ${this.dim('➔')} ${this.bold(
-                this.cyan(event.to)
+                'Cambio fase:'
+              )} ${this.cyan(fromName)} ${this.dim('➔')} ${this.bold(
+                this.cyan(toName)
               )}${reasonStr}\n`
           );
         }
@@ -221,12 +270,17 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write(pfx + `${pipe}`);
         this.write(
           pfx +
-            `${pipe}${this.red(this.bold('⚠️  Errore di Schema'))} ${this.dim(
-              `su '${event.targetToolId}':`
+            `${pipe}${this.red(this.bold('⚠️  Richiesta non conforme'))} ${this.dim(
+              `sull'azione '${event.targetToolId}':`
             )}`
         );
         this.write(pfx + `${pipe}   ${this.red(event.errorDetail)}`);
-        this.write(pfx + `${pipe}   ${this.dim('Avviata procedura di riparazione in q_repair.')}`);
+        this.write(
+          pfx +
+            `${pipe}   ${this.dim(
+              'Avviata procedura di auto-correzione prima di procedere.'
+            )}`
+        );
         break;
       }
 
@@ -234,8 +288,8 @@ export class ConsoleLoggerObserver implements AgentObserver {
         const callsStr = event.pendingCalls.map((c) => this.bold(c.name)).join(', ');
         this.write(
           pfx +
-            `  ${this.cyan('└──')} ${this.yellow('⏸️  Cessione Controllo (Yield)')} ${this.dim(
-              'in attesa del Mondo W per:'
+            `  ${this.cyan('└──')} ${this.yellow('⏸️  In attesa dei servizi esterni')} ${this.dim(
+              'per l\'esecuzione di:'
             )} [ ${callsStr} ]\n`
         );
         break;
@@ -244,21 +298,26 @@ export class ConsoleLoggerObserver implements AgentObserver {
       case 'world_action': {
         this.write(
           pfx +
-            `   ${this.green('🌍 Esecuzione Tool Mondo:')} ${this.bold(
+            `   ${this.green('🌍 Esecuzione servizio esterno:')} ${this.bold(
               this.green(event.toolId)
             )} ${this.dim(`(${event.durationMs}ms)`)}`
         );
         this.write(
-          pfx + `      ${this.dim('├─ Input: ')} ${this.cyan(this.formatData(event.args, 9))}`
+          pfx + `      ${this.dim('├─ Parametri inviati: ')} ${this.cyan(this.formatData(event.args, 9))}`
         );
         if (event.error) {
           this.write(
-            pfx + `      ${this.red('└─ ❌ Errore:')} ${this.red(this.formatData(event.error, 9))}`
+            pfx +
+              `      ${this.red('└─ ❌ Errore riscontrato:')} ${this.red(
+                this.formatData(event.error, 9)
+              )}`
           );
         } else {
           this.write(
             pfx +
-              `      ${this.green('└─ Risultato:')} ${this.green(this.formatData(event.result, 9))}`
+              `      ${this.green('└─ Risultato ottenuto:')} ${this.green(
+                this.formatData(event.result, 9)
+              )}`
           );
         }
         this.write('');
@@ -266,15 +325,15 @@ export class ConsoleLoggerObserver implements AgentObserver {
       }
 
       case 'halt': {
-        const title = ` ARRESTO (Halt) con contratto: '${event.result.type}' `;
-        const border = '═'.repeat(Math.max(60, title.length + 4));
+        const title = ` OBIETTIVO COMPLETATO CON SUCCESSO (Esito: '${event.result.type}') `;
+        const border = '═'.repeat(Math.max(64, title.length + 4));
 
         this.write('');
         this.write(pfx + this.green(`╔${border}╗`));
         this.write(pfx + this.green(`║  ${this.bold(title.padEnd(border.length - 2))}║`));
         this.write(pfx + this.green(`╚${border}╝`));
 
-        this.write(pfx + `   ${this.bold('📦 Risultato Finale Tipizzato:')}`);
+        this.write(pfx + `   ${this.bold('📦 Risposta Finale Strutturata:')}`);
         const formattedResult = JSON.stringify(event.result.payload, null, 2);
         for (const line of formattedResult.split('\n')) {
           this.write(pfx + `      ${this.green(line)}`);
