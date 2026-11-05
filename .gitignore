@@ -43,5 +43,6 @@ desktop.ini
 # Temporary files and scratch pads
 tmp/
 temp/
+scratch/
 .cache/
 

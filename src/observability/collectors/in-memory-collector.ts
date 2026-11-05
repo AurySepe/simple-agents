@@ -71,10 +71,76 @@ export class InMemoryTelemetryCollector implements AgentObserver {
   }
 
   /**
-   * Serializza l'intera storia di telemetria in formato JSON.
+   * Estrae la timeline strutturata dello stato dell'agente ad ogni fase/passo,
+   * pronta per essere ispezionata, salvata su file o analizzata in formato JSON.
+   */
+  public getStateTimeline(): Array<{
+    step: number;
+    macroCycle: number;
+    tick: number;
+    phase: string;
+    directive: string;
+    state: {
+      I: string;
+      Ms: string;
+      Ds: Record<string, unknown>;
+      Ta: string[];
+      Ka: string[];
+      messageCount: number;
+    };
+    thought?: string;
+    calls: Array<{ id: string; name: string; payload: unknown }>;
+  }> {
+    const inferences = this.filterByType('model_inference');
+    return inferences.map((inf, idx) => ({
+      step: idx + 1,
+      macroCycle: inf.macroCycle,
+      tick: inf.tick,
+      phase: inf.controlState,
+      directive: inf.directive.type,
+      state: {
+        I: inf.stateSnapshot.I,
+        Ms: inf.stateSnapshot.Ms,
+        Ds: { ...inf.stateSnapshot.Ds },
+        Ta: Array.from(inf.stateSnapshot.Ta),
+        Ka: Array.from(inf.stateSnapshot.Ka ? inf.stateSnapshot.Ka.keys() : []),
+        messageCount: inf.stateSnapshot.Ep.length
+      },
+      thought: inf.output.thought,
+      calls: inf.output.calls.map((c) => ({
+        id: c.id,
+        name: c.name,
+        payload: c.payload
+      }))
+    }));
+  }
+
+  /**
+   * Esporta la cronologia completa dell'evoluzione dello stato ad ogni fase
+   * in una stringa JSON formattata e leggibile.
+   */
+  public exportStateTimelineJSON(): string {
+    return JSON.stringify(this.getStateTimeline(), null, 2);
+  }
+
+  /**
+   * Serializza l'intera storia di telemetria in formato JSON,
+   * convertendo correttamente Set e Map in strutture dati JSON native.
    */
   public toJSON(): string {
-    return JSON.stringify(this.events, null, 2);
+    return JSON.stringify(
+      this.events,
+      (_key, value) => {
+        if (value instanceof Set) {
+          return Array.from(value);
+        }
+        if (value instanceof Map) {
+          return Object.fromEntries(value.entries());
+        }
+        return value;
+      },
+      2
+    );
   }
 }
 
