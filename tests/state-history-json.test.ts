@@ -244,3 +244,4 @@ describe('Test Esportazione JSON dello Stato ad Ogni Fase', () => {
     expect(inferenceEvents[1].stateSnapshot.Ta).toContain('w_db_ordini');
   });
 });
+
