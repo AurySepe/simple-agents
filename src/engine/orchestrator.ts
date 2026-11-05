@@ -328,6 +328,17 @@ export class AgentInstance {
     return this.state;
   }
 
+  public getSnapshot(): Readonly<AgentState> {
+    return {
+      I: this.state.I,
+      Ms: this.state.Ms,
+      Ds: { ...this.state.Ds },
+      Ta: new Set(this.state.Ta),
+      Ka: new Map(this.state.Ka),
+      Ep: [...this.state.Ep]
+    };
+  }
+
   public getTimeIndex(): { c: number; t: number } {
     return { c: this.c, t: this.t };
   }
@@ -561,7 +572,8 @@ export class AgentInstance {
         macroCycle: this.c,
         tick: this.t,
         controlState: this.controlState,
-        directive: this.currentDirective
+        directive: this.currentDirective,
+        stateSnapshot: this.getSnapshot()
       });
     }
 
@@ -631,7 +643,8 @@ export class AgentInstance {
       directive: this.currentDirective,
       context,
       output,
-      durationMs
+      durationMs,
+      stateSnapshot: this.getSnapshot()
     });
 
     if (output.thought) {
@@ -908,7 +921,8 @@ export class AgentInstance {
       directive: this.currentDirective,
       context,
       output,
-      durationMs
+      durationMs,
+      stateSnapshot: this.getSnapshot()
     });
 
     if (output.thought) {
@@ -1149,7 +1163,8 @@ export class AgentInstance {
       directive: this.currentDirective,
       context,
       output,
-      durationMs
+      durationMs,
+      stateSnapshot: this.getSnapshot()
     });
 
     if (output.thought) {

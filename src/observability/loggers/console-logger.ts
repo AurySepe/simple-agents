@@ -1,6 +1,6 @@
 import { AgentEvent } from '../events.js';
 import { AgentObserver } from '../observer.js';
-import { TransitionReasonCode } from '../../types/index.js';
+import { AgentState, TransitionReasonCode } from '../../types/index.js';
 
 export type LogLevel = 'verbose' | 'info' | 'warn' | 'error';
 
@@ -10,6 +10,7 @@ export interface ConsoleLoggerOptions {
   showSystemFrame?: boolean;
   showVisibleTools?: boolean;
   showModelInputs?: boolean;
+  showState?: boolean;
   useColors?: boolean;
   prefix?: string;
   writer?: (message: string) => void;
@@ -38,96 +39,27 @@ function humanizeFSMState(state: string): string {
 }
 
 /**
- * Fornisce metadati semantici e descrittivi sul tipo di passo in corso.
+ * Traduce le direttive formali del protocollo in etichette comprensibili.
  */
-function describeStepType(state: string): { title: string; category: string; description: string } {
-  switch (state) {
-    case 'q_intro':
-      return {
-        title: 'Pianificazione Interna',
-        category: 'Introspezione Cognitiva',
-        description: 'L\'agente consulta le policy, aggiorna la memoria di lavoro e prepara gli strumenti necessari.'
-      };
-    case 'q_exec':
-      return {
-        title: 'Azione Operativa',
-        category: 'Esecuzione nel Mondo',
-        description: 'L\'agente interagisce con l\'ambiente esterno chiamando servizi o emettendo la conclusione finale.'
-      };
-    case 'q_repair':
-      return {
-        title: 'Risoluzione Anomalia',
-        category: 'Auto-Riparazione',
-        description: 'L\'agente rileva parametri non conformi o tool non validi e auto-corregge la richiesta.'
-      };
-    case 'q_sleep':
-      return {
-        title: 'Attesa Input',
-        category: 'Ibernazione',
-        description: 'L\'agente è in attesa di una nuova richiesta o di risposte asincrone dai servizi esterni.'
-      };
-    case 'q_yield':
-      return {
-        title: 'Yield ai Servizi Esterni',
-        category: 'Sospensione Operativa',
-        description: 'L\'agente ha inviato le richieste e attende i risultati dal Mondo esterno.'
-      };
-    case 'q_halt':
-      return {
-        title: 'Obiettivo Concluso',
-        category: 'Terminazione',
-        description: 'L\'agente ha completato l\'incarico e restituito il risultato finale.'
-      };
-    default:
-      return {
-        title: state,
-        category: 'Fase del Sistema',
-        description: ''
-      };
-  }
-}
-
-/**
- * Traduce le direttive formali del protocollo in etichette e spiegazioni comprensibili.
- */
-function humanizeDirectiveDetail(directive: {
-  type: string;
-  prompt?: string;
-  targetToolId?: string;
-}): { label: string; explanation: string } {
+function humanizeDirectiveLabel(directive: { type: string; targetToolId?: string }): string {
   switch (directive.type) {
     case 'start_intro':
-      return {
-        label: 'Inizio pianificazione',
-        explanation: 'Analizzare la richiesta iniziale, consultare i concetti e montare gli strumenti operativi.'
-      };
+      return 'Inizio pianificazione (analisi richiesta, ricerca tool e policy)';
     case 'loop_intro':
-      return {
-        label: 'Affinamento piano e memoria',
-        explanation: 'Elaborare i dati acquisiti, salvare le informazioni in memoria o concludere la preparazione.'
-      };
+      return 'Affinamento memoria e piano interno';
     case 'start_exec':
-      return {
-        label: 'Esecuzione azioni nel mondo',
-        explanation: 'Invocare i servizi esterni necessari o emettere il contratto di terminazione finale.'
-      };
+      return 'Esecuzione azioni nel Mondo esterno';
     case 'err_schema':
-      return {
-        label: 'Correzione parametri anomali',
-        explanation: directive.targetToolId
-          ? `Correggere la chiamata non valida sul tool '${directive.targetToolId}' o abortire l'azione.`
-          : 'Correggere la chiamata non conforme o abortire.'
-      };
+      return directive.targetToolId
+        ? `Correzione parametri non conformi su '${directive.targetToolId}'`
+        : 'Correzione parametri anomali';
     default:
-      return {
-        label: directive.type,
-        explanation: ''
-      };
+      return directive.type;
   }
 }
 
 /**
- * Traduce i codici simbolici di transizione in descrizioni leggibili in linguaggio naturale.
+ * Traduce i codici simbolici di transizione in descrizioni concise.
  */
 function humanizeTransitionReason(
   code: TransitionReasonCode,
@@ -140,7 +72,7 @@ function humanizeTransitionReason(
     case 'router_initial_exec':
       return 'avvio diretto in azione operativa';
     case 'intro_concluded':
-      return 'pianificazione completata con successo';
+      return 'pianificazione completata';
     case 'intro_empty_action':
       return 'nessuna operazione indicata';
     case 'intro_xor_violation':
@@ -150,17 +82,17 @@ function humanizeTransitionReason(
     case 'intro_unregistered_action':
       return toolId ? `azione non registrata: ${toolId}` : 'azione non registrata';
     case 'intro_action_execution_error':
-      return toolId ? `errore parametri operazione mentale: ${toolId}` : 'errore parametri operazione';
+      return toolId ? `errore operazione mentale: ${toolId}` : 'errore operazione';
     case 'exec_empty_calls':
-      return 'nessuna azione o chiamata emessa in fase esecutiva';
+      return 'nessuna chiamata emessa in fase esecutiva';
     case 'exec_term_schema_error':
-      return toolId ? `violazione schema contratto terminazione: ${toolId}` : 'violazione schema contratto terminazione';
+      return toolId ? `violazione contratto terminazione: ${toolId}` : 'violazione terminazione';
     case 'exec_term_success':
       return toolId ? `terminazione con contratto ${toolId}` : 'terminazione con contratto';
     case 'exec_world_unmounted_tool':
-      return toolId ? `servizio esterno non abilitato: ${toolId}` : 'servizio esterno non abilitato';
+      return toolId ? `servizio esterno non abilitato: ${toolId}` : 'servizio non abilitato';
     case 'exec_world_schema_error':
-      return toolId ? `parametri non conformi per il servizio esterno: ${toolId}` : 'parametri non conformi per il servizio';
+      return toolId ? `parametri non conformi per: ${toolId}` : 'parametri non conformi';
     case 'exec_world_yield':
       return 'invio richieste e attesa risposta servizi esterni';
     case 'repair_abort_success':
@@ -181,7 +113,7 @@ function humanizeTransitionReason(
 }
 
 /**
- * Estrae l'ultimo input rilevante (richiesta utente o risposta da servizio esterno) dalla cronologia.
+ * Estrae l'ultimo input rilevante (richiesta utente o risposta da servizio esterno).
  */
 function extractRecentInput(
   messages: Array<{ role: string; channel: string; callId?: string; content: unknown }>
@@ -193,7 +125,7 @@ function extractRecentInput(
     if (msg.role === 'world' && msg.channel === 'result') {
       const ref = msg.callId ? ` [Rif: ${msg.callId}]` : '';
       return {
-        label: `Risposta servizio esterno${ref}`,
+        label: `Risposta ricevuta dal servizio esterno${ref}`,
         data: msg.content
       };
     }
@@ -203,27 +135,39 @@ function extractRecentInput(
         data: msg.content
       };
     }
-    if (msg.role === 'orchestrator' && msg.channel === 'result') {
-      const ref = msg.callId ? ` [Rif: ${msg.callId}]` : '';
-      return {
-        label: `Esito operazione cognitiva${ref}`,
-        data: msg.content
-      };
-    }
   }
   return null;
 }
 
 /**
+ * Formatta in modo compatto o multi-linea una chiamata di tool con i suoi argomenti.
+ */
+function formatCall(name: string, payload: unknown): string {
+  if (!payload || (typeof payload === 'object' && Object.keys(payload as object).length === 0)) {
+    return `${name}()`;
+  }
+  const json = JSON.stringify(payload);
+  if (json.length < 65) {
+    return `${name}(${json})`;
+  }
+  const formatted = JSON.stringify(payload, null, 2);
+  const indented = formatted
+    .split('\n')
+    .map((line, idx) => (idx === 0 ? line : '     ' + line))
+    .join('\n');
+  return `${name}(\n     ${indented}\n   )`;
+}
+
+/**
  * ============================================================================
- * LOGGER DI CONSOLE STRUTTURATO E VISIVO (ConsoleLoggerObserver)
+ * LOGGER DI CONSOLE ESSENZIALE, TRASPARENTE E CENTRATO SUI DATI
  * ============================================================================
- * Presenta l'avanzamento dell'agente in linguaggio naturale e accessibile:
- * - Mostra con chiarezza per ciascun passo il tipo di passo e la sua natura
- * - Mostra gli argomenti e il contesto forniti in ingresso alla chiamata al modello
- * - Mostra il flusso di coscienza (ragionamento interiore) generato dal modello
- * - Mostra le chiamate e azioni decise dal modello con i rispettivi argomenti
- * - Mostra gli esiti e le transizioni di stato in una narrazione fluida e comprensibile
+ * Mostra ad ogni passo:
+ * 1. Da cosa è composto lo STATO dell'Agente prima del passo (Ms, Ds, Ta, Ka)
+ * 2. Cosa viene effettivamente PASSATO al modello (input, direttiva, tool)
+ * 3. Il FLUSSO DI COSCIENZA del modello (thought)
+ * 4. Le CHIAMATE e ARGOMENTI decisi dal modello
+ * 5. Gli ESITI dei servizi esterni e le transizioni
  */
 export class ConsoleLoggerObserver implements AgentObserver {
   private level: LogLevel;
@@ -231,6 +175,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
   private showSystemFrame: boolean;
   private showVisibleTools: boolean;
   private showModelInputs: boolean;
+  private showState: boolean;
   private useColors: boolean;
   private prefix: string;
   private writer: (message: string) => void;
@@ -241,12 +186,13 @@ export class ConsoleLoggerObserver implements AgentObserver {
     this.showSystemFrame = options?.showSystemFrame ?? false;
     this.showVisibleTools = options?.showVisibleTools ?? true;
     this.showModelInputs = options?.showModelInputs ?? true;
+    this.showState = options?.showState ?? true;
     this.useColors = options?.useColors ?? true;
     this.prefix = options?.prefix ?? '';
     this.writer = options?.writer ?? ((msg: string) => console.log(msg));
   }
 
-  // --- Utility per formattazione e colori ANSI ---
+  // --- Utility ANSI ---
   private c(colorCode: string, text: string): string {
     if (!this.useColors) return text;
     return `${colorCode}${text}\x1b[0m`;
@@ -293,6 +239,10 @@ export class ConsoleLoggerObserver implements AgentObserver {
       return Array.isArray(data) ? '[]' : '{}';
     }
     try {
+      const compact = JSON.stringify(data);
+      if (compact.length < 65) {
+        return compact;
+      }
       const formatted = JSON.stringify(data, null, 2);
       return formatted
         .split('\n')
@@ -310,7 +260,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
       case 'macro_cycle_start': {
         const cycleNum = event.macroCycle + 1;
         const title = ` CICLO OPERATIVO ${cycleNum} `;
-        const border = '═'.repeat(Math.max(68, title.length + 4));
+        const border = '═'.repeat(Math.max(64, title.length + 4));
 
         this.write('');
         this.write(pfx + this.blue(`╔${border}╗`));
@@ -318,8 +268,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write(pfx + this.blue(`╚${border}╝`));
 
         if (event.userContent !== undefined) {
-          this.write(pfx + `👤 ${this.bold('Richiesta Utente:')}`);
-          this.write(pfx + `   ${this.cyan(this.formatData(event.userContent, 3))}`);
+          this.write(pfx + `👤 ${this.bold('Richiesta Utente:')} ${this.cyan(this.formatData(event.userContent, 3))}`);
         }
 
         if (event.worldResults && event.worldResults.length > 0) {
@@ -332,7 +281,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
           for (const res of event.worldResults) {
             this.write(
               pfx +
-                `   • ${this.dim(`[Rif: ${res.callId}]`)} ${this.green(
+                `   • ${this.dim(`[${res.callId}]`)} ${this.green(
                   this.formatData(res.result, 5)
                 )}`
             );
@@ -343,159 +292,151 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
       case 'step_start': {
         const stepNum = event.tick + 1;
-        const stepInfo = describeStepType(event.controlState);
-        const directiveInfo = humanizeDirectiveDetail(event.directive);
+        const phase = humanizeFSMState(event.controlState);
 
         this.write('');
-        this.write(pfx + this.cyan('─'.repeat(80)));
-        this.write(
-          pfx +
-            this.bold(
-              this.cyan(`PASSO ${stepNum} • ${stepInfo.title} (${stepInfo.category})`)
-            )
-        );
-        this.write(pfx + this.cyan('─'.repeat(80)));
-        this.write(pfx + `📌 ${this.bold('Natura del passo:')} ${this.dim(stepInfo.description)}`);
-        this.write(
-          pfx +
-            `🎯 ${this.bold('Direttiva attiva:')} ${this.yellow(directiveInfo.label)} ${this.dim(
-              `— ${directiveInfo.explanation}`
-            )}`
-        );
+        this.write(pfx + this.bold(this.cyan(`▶ PASSO ${stepNum} [${phase}]`)));
+
+        // 1. STATO DELL'AGENTE PRIMA DEL PASSO (Ms, Ds, Ta, Ka)
+        if (this.showState && event.stateSnapshot) {
+          const s = event.stateSnapshot;
+          this.write(pfx + `  🧠 ${this.bold('Stato Agente prima del passo:')}`);
+          this.write(pfx + `     • ${this.bold('Scopo (Ms):')} ${this.cyan(`"${s.Ms}"`)}`);
+
+          const dsKeys = Object.keys(s.Ds);
+          if (dsKeys.length === 0) {
+            this.write(pfx + `     • ${this.bold('Memoria (Ds):')} ${this.dim('{} (vuota)')}`);
+          } else {
+            const compactDs = JSON.stringify(s.Ds);
+            if (compactDs.length < 65) {
+              this.write(pfx + `     • ${this.bold('Memoria (Ds):')} ${this.cyan(compactDs)}`);
+            } else {
+              this.write(pfx + `     • ${this.bold('Memoria (Ds):')}`);
+              for (const line of JSON.stringify(s.Ds, null, 2).split('\n')) {
+                this.write(pfx + `         ${this.cyan(line)}`);
+              }
+            }
+          }
+
+          const taList = Array.from(s.Ta);
+          this.write(
+            pfx +
+              `     • ${this.bold('Tool attivi (Ta):')} ${
+                taList.length > 0
+                  ? this.cyan(`[ ${taList.join(', ')} ]`)
+                  : this.dim('[ ] (nessun tool montato)')
+              }`
+          );
+
+          if (s.Ka && s.Ka.size > 0) {
+            const kaList = Array.from(s.Ka.keys());
+            this.write(pfx + `     • ${this.bold('Policy attive (Ka):')} ${this.cyan(`[ ${kaList.join(', ')} ]`)}`);
+          }
+        }
         break;
       }
 
       case 'model_inference': {
-        // 1. Argomenti e Contesto forniti in ingresso al modello
+        // 2. COSA VIENE PASSATO AL MODELLO
         if (this.showModelInputs) {
           const recentInput = extractRecentInput(event.context.messages);
           const toolNames = event.context.visibleTools.map((t) => t.id).join(', ');
+          const directiveLabel = humanizeDirectiveLabel(event.directive);
 
-          this.write('');
-          this.write(pfx + `📥 ${this.bold('Input e argomenti passati alla chiamata del modello:')}`);
+          this.write(pfx + `  📥 ${this.bold('Cosa riceve il modello in questa chiamata:')}`);
+          this.write(pfx + `     • ${this.bold('Direttiva / Guida:')} ${this.yellow(directiveLabel)}`);
           if (recentInput) {
             this.write(
               pfx +
-                `   • ${this.bold(recentInput.label)}:\n` +
-                `     ${this.cyan(this.formatData(recentInput.data, 5))}`
+                `     • ${this.bold(recentInput.label)}: ${this.cyan(
+                  this.formatData(recentInput.data, 7)
+                )}`
             );
           }
           if (this.showVisibleTools) {
             this.write(
               pfx +
-                `   • ${this.bold('Strumenti utilizzabili in questo passo')} ${this.dim(
+                `     • ${this.bold('Tool utilizzabili')} ${this.dim(
                   `(${event.context.visibleTools.length})`
-                )}:\n` +
-                `     [ ${this.dim(toolNames)} ]`
+                )}: [ ${this.dim(toolNames)} ]`
             );
           }
           if (this.showSystemFrame && this.level === 'verbose') {
-            this.write(pfx + `   • ${this.bold('System Frame (Istruzioni di sistema):')}`);
+            this.write(pfx + `     • ${this.bold('System Frame (Prompt):')}`);
             for (const line of event.context.systemFrame.split('\n')) {
-              this.write(pfx + `     ${this.dim(line)}`);
+              this.write(pfx + `       ${this.dim(line)}`);
             }
           }
         }
 
-        // 2. Flusso di coscienza (Ragionamento del modello)
+        // 3. FLUSSO DI COSCIENZA DEL MODELLO
         if (this.showThoughts && event.output.thought) {
-          this.write('');
           this.write(
             pfx +
-              `💭 ${this.yellow(
-                this.bold('Flusso di coscienza (Ragionamento dell\'Agente):')
+              `  💭 ${this.yellow(
+                this.bold("Flusso di coscienza (Ragionamento dell'Agente):")
               )}`
           );
           const lines = event.output.thought.split('\n');
           for (const l of lines) {
-            this.write(pfx + `   ${this.yellow(l)}`);
+            this.write(pfx + `     ${this.yellow(l)}`);
           }
         }
 
-        // 3. Azioni e Chiamate decise dal modello con i rispettivi argomenti
-        this.write('');
+        // 4. CHIAMATE E ARGOMENTI DECISI DAL MODELLO
         if (event.output.calls.length > 0) {
+          const callCount = event.output.calls.length;
           this.write(
             pfx +
-              `⚡ ${this.bold('Chiamate decise dal modello')} ${this.dim(
-                `(inferenza completata in ${event.durationMs}ms)`
-              )}:`
+              `  ⚡ ${this.bold(callCount > 1 ? 'Chiamate decise dal modello:' : 'Chiamata decisa dal modello:')} ${this.dim(
+                `(${event.durationMs}ms)`
+              )}`
           );
-          for (let i = 0; i < event.output.calls.length; i++) {
-            const call = event.output.calls[i];
-            const num = event.output.calls.length > 1 ? `${i + 1}. ` : '• ';
-            this.write(pfx + `   ${this.green(num)}${this.bold(call.name)}`);
-            this.write(pfx + `     ${this.dim('Argomenti passati:')}`);
-            this.write(pfx + `     ${this.cyan(this.formatData(call.payload, 7))}`);
+          for (const call of event.output.calls) {
+            this.write(pfx + `     • ${this.green(formatCall(call.name, call.payload))}`);
           }
         } else {
-          this.write(pfx + `⚡ ${this.dim('Nessuna chiamata a strumenti emessa dal modello in questo passo.')}`);
+          this.write(pfx + `  ⚡ ${this.dim('Nessuna chiamata emessa dal modello.')}`);
         }
         break;
       }
 
       case 'cognitive_action': {
-        this.write('');
-        this.write(
-          pfx +
-            `🧠 ${this.magenta('Operazione mentale eseguita:')} ${this.bold(
-              event.toolName
-            )} ${this.dim('➔')} ${this.green('completata con successo')}`
-        );
-        if (
-          event.result !== undefined &&
-          event.result !== null &&
-          typeof event.result === 'object' &&
-          Object.keys(event.result).length > 0
-        ) {
-          this.write(
-            pfx + `   ${this.dim('Esito memorizzato:')} ${this.magenta(this.formatData(event.result, 5))}`
-          );
+        let detail = '';
+        if (event.toolName === 'imposta_dato' && event.args && typeof event.args === 'object') {
+          const k = (event.args as Record<string, unknown>).chiave;
+          if (k) detail = `: salvato dato '${k}'`;
+        } else if (event.toolName === 'aggiorna_missione') {
+          detail = `: nuovo scopo impostato`;
+        } else if (event.toolName === 'carica_tool' && Array.isArray((event.args as any)?.tool_ids)) {
+          detail = `: montati [${((event.args as any).tool_ids as string[]).join(', ')}]`;
+        } else if (event.toolName === 'carica_concetto' && Array.isArray((event.args as any)?.concetto_ids)) {
+          detail = `: caricate policy [${((event.args as any).concetto_ids as string[]).join(', ')}]`;
+        } else if (event.toolName === 'cerca_tool' || event.toolName === 'cerca_concetti') {
+          detail = `: ricerca '${(event.args as any)?.query ?? ''}'`;
         }
+        this.write(
+          pfx + `  ${this.magenta('✓')} ${this.dim('Operazione interna:')} ${this.bold(event.toolName)}${detail}`
+        );
         break;
       }
 
       case 'state_transition': {
-        const fromName = humanizeFSMState(event.from);
         const toName = humanizeFSMState(event.to);
         const reasonText = humanizeTransitionReason(event.reasonCode, event.context);
-        const reasonStr = reasonText ? ` ${this.dim(`(motivo: ${reasonText})`)}` : '';
-        this.write('');
+        const reasonStr = reasonText ? ` ${this.dim(`(${reasonText})`)}` : '';
         this.write(
           pfx +
-            `🔀 ${this.bold('Cambio di fase:')} ${this.cyan(fromName)} ${this.dim(
-              '➔'
-            )} ${this.bold(this.cyan(toName))}${reasonStr}`
-        );
-        break;
-      }
-
-      case 'schema_error': {
-        this.write('');
-        this.write(
-          pfx +
-            `⚠️  ${this.red(this.bold('Anomalia nella chiamata'))} ${this.dim(
-              `sull'azione '${event.targetToolId}':`
-            )}`
-        );
-        this.write(pfx + `   ${this.red(event.errorDetail)}`);
-        this.write(
-          pfx +
-            `   ${this.dim(
-              'Avviata procedura di auto-riparazione per correggere i parametri.'
-            )}`
+            `  🔀 ${this.bold('Passaggio a:')} ${this.bold(this.cyan(toName))}${reasonStr}`
         );
         break;
       }
 
       case 'yield': {
         const callsStr = event.pendingCalls.map((c) => this.bold(c.name)).join(', ');
-        this.write('');
         this.write(
           pfx +
-            `⏸️  ${this.yellow(this.bold('In attesa dei servizi esterni:'))} ${this.dim(
-              'sospensione temporanea per l\'esecuzione di'
-            )} [ ${callsStr} ]`
+            `  ⏸️  ${this.yellow(this.bold('In attesa dei servizi esterni:'))} [ ${callsStr} ]`
         );
         break;
       }
@@ -504,12 +445,12 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write('');
         this.write(
           pfx +
-            `🌍 ${this.green(this.bold('Esecuzione servizio esterno:'))} ${this.bold(
+            `🌍 ${this.green(this.bold('Servizio esterno:'))} ${this.bold(
               this.green(event.toolId)
             )} ${this.dim(`(${event.durationMs}ms)`)}`
         );
         this.write(
-          pfx + `   ${this.dim('Argomenti inviati:')} ${this.cyan(this.formatData(event.args, 5))}`
+          pfx + `   ${this.dim('→ Inviato:')} ${this.cyan(this.formatData(event.args, 5))}`
         );
         if (event.error) {
           this.write(
@@ -517,22 +458,33 @@ export class ConsoleLoggerObserver implements AgentObserver {
           );
         } else {
           this.write(
-            pfx + `   ${this.green('✓ Risultato:')} ${this.green(this.formatData(event.result, 5))}`
+            pfx + `   ${this.green('→ Ricevuto:')} ${this.green(this.formatData(event.result, 5))}`
           );
         }
         break;
       }
 
+      case 'schema_error': {
+        this.write('');
+        this.write(
+          pfx +
+            `⚠️  ${this.red(this.bold('Parametri non conformi'))} ${this.dim(
+              `su '${event.targetToolId}':`
+            )} ${this.red(event.errorDetail)}`
+        );
+        break;
+      }
+
       case 'halt': {
         const title = ` OBIETTIVO COMPLETATO CON SUCCESSO (Esito: '${event.result.type}') `;
-        const border = '═'.repeat(Math.max(68, title.length + 4));
+        const border = '═'.repeat(Math.max(64, title.length + 4));
 
         this.write('');
         this.write(pfx + this.green(`╔${border}╗`));
         this.write(pfx + this.green(`║  ${this.bold(title.padEnd(border.length - 2))}║`));
         this.write(pfx + this.green(`╚${border}╝`));
 
-        this.write(pfx + `   ${this.bold('📦 Risposta Finale Strutturata:')}`);
+        this.write(pfx + `   📦 ${this.bold('Dati di uscita finali:')}`);
         const formattedResult = JSON.stringify(event.result.payload, null, 2);
         for (const line of formattedResult.split('\n')) {
           this.write(pfx + `      ${this.green(line)}`);

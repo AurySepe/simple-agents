@@ -33,6 +33,7 @@ export interface StepStartEvent extends BaseAgentEvent {
   type: 'step_start';
   controlState: FSMControlState;
   directive: Directive;
+  stateSnapshot: Readonly<AgentState>;
 }
 
 export interface ModelInferenceEvent extends BaseAgentEvent {
@@ -42,6 +43,7 @@ export interface ModelInferenceEvent extends BaseAgentEvent {
   context: InferenceTriple;
   output: ModelOutput;
   durationMs: number;
+  stateSnapshot: Readonly<AgentState>;
 }
 
 export interface CognitiveActionEvent extends BaseAgentEvent {
