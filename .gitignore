@@ -46,4 +46,5 @@ temp/
 scratch/
 .cache/
 agent-state-audit.json
+audit/
 

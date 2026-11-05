@@ -9,6 +9,7 @@ import {
   FrameworkEngine,
   InMemoryTelemetryCollector,
   LanguageModelAdapter,
+  ModularAuditExporter,
   WorldTool
 } from '../src/index.js';
 
@@ -242,6 +243,97 @@ describe('Test Esportazione JSON dello Stato ad Ogni Fase', () => {
     // Verifica che stateSnapshot.Ta sia stato serializzato come Array e non come oggetto vuoto {}
     expect(Array.isArray(inferenceEvents[1].stateSnapshot.Ta)).toBe(true);
     expect(inferenceEvents[1].stateSnapshot.Ta).toContain('w_db_ordini');
+  });
+
+  it('dovrebbe esportare la struttura modulare divisa per Fasi FSM e per Step con ModularAuditExporter', () => {
+    // 1. Setup collector con eventi simulati
+    const collector = new InMemoryTelemetryCollector();
+
+    collector.onEvent({
+      type: 'model_inference',
+      timestamp: new Date(),
+      macroCycle: 0,
+      tick: 0,
+      controlState: 'q_intro',
+      directive: { type: 'start_intro', prompt: 'Inizia intro' },
+      context: {
+        systemFrame: 'System Prompt F_Omega',
+        messages: [
+          { index: 0, tau: { c: 0, t: 0 }, role: 'user', channel: 'payload', content: 'Richiesta di test' }
+        ],
+        visibleTools: []
+      },
+      output: {
+        thought: 'Penso e pianifico',
+        calls: [{ id: 'c1', name: 'cerca_tool', payload: { query: 'test' } }]
+      },
+      durationMs: 50,
+      stateSnapshot: {
+        I: 'Agente Test',
+        Ms: 'Scopo Test',
+        Ds: { k: 'v' },
+        Ta: new Set(['t1']),
+        Ka: new Map(),
+        Ep: []
+      }
+    });
+
+    collector.onEvent({
+      type: 'model_inference',
+      timestamp: new Date(),
+      macroCycle: 0,
+      tick: 1,
+      controlState: 'q_exec',
+      directive: { type: 'start_exec', prompt: 'Esegui azione' },
+      context: {
+        systemFrame: 'System Prompt F_Omega Exec',
+        messages: [],
+        visibleTools: []
+      },
+      output: {
+        thought: 'Eseguo azione',
+        calls: [{ id: 'c2', name: 't1', payload: { param: 123 } }]
+      },
+      durationMs: 40,
+      stateSnapshot: {
+        I: 'Agente Test',
+        Ms: 'Scopo Test',
+        Ds: { k: 'v' },
+        Ta: new Set(['t1']),
+        Ka: new Map(),
+        Ep: []
+      }
+    });
+
+    const testExportDir = path.resolve(process.cwd(), 'scratch', 'test-modular-audit');
+    const result = ModularAuditExporter.export(collector, {
+      outputDir: testExportDir,
+      scenarioName: 'Test Modular Export',
+      generateHtmlDashboard: true
+    });
+
+    expect(result.phasesCount).toBe(2);
+    expect(result.stepsCount).toBe(2);
+
+    // Verifica esistenza file generati
+    expect(fs.existsSync(path.join(testExportDir, 'index.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testExportDir, 'index.html'))).toBe(true);
+    expect(fs.existsSync(path.join(testExportDir, 'phases'))).toBe(true);
+
+    const indexContent = JSON.parse(fs.readFileSync(path.join(testExportDir, 'index.json'), 'utf8'));
+    expect(indexContent.scenario).toBe('Test Modular Export');
+    expect(indexContent.statisticheGenerali.totalePassi).toBe(2);
+    expect(indexContent.statisticheGenerali.totaleFasiFSM).toBe(2);
+
+    // Verifica step_01.json
+    const step1File = path.join(testExportDir, indexContent.mappaFasiFSM[0].filePassi[0]);
+    expect(fs.existsSync(step1File)).toBe(true);
+    const step1Data = JSON.parse(fs.readFileSync(step1File, 'utf8'));
+    expect(step1Data.coordinate.stepNumber).toBe(1);
+    expect(step1Data.inputGrezzoPassatoAlModello.systemFrame).toBe('System Prompt F_Omega');
+    expect(step1Data.inputGrezzoPassatoAlModello.messagesHistory[0].content).toBe('Richiesta di test');
+    expect(step1Data.outputGrezzoDalModello.thought).toBe('Penso e pianifico');
+    expect(step1Data.outputGrezzoDalModello.calls[0].payload).toEqual({ query: 'test' });
   });
 });
 

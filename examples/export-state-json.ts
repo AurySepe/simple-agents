@@ -8,12 +8,13 @@ import {
   FrameworkEngine,
   InMemoryTelemetryCollector,
   LanguageModelAdapter,
+  ModularAuditExporter,
   WorldTool
 } from '../src/index.js';
 
 async function runAndExport() {
   console.log('='.repeat(80));
-  console.log('   ESPORTAZIONE STATO AGENTE IN FORMATO JSON (DEMO AUDIT TIMELINE)');
+  console.log('   ESPORTAZIONE STRUTTURATA AUDIT FSM (DIVISIONE PER FASI E STEP)');
   console.log('='.repeat(80));
   console.log('\n🚀 Esecuzione dello scenario commerciale in corso...\n');
 
@@ -203,87 +204,30 @@ async function runAndExport() {
   });
 
   // ==========================================================================
-  // 5. Costruzione del documento JSON di Audit
+  // 5. Esportazione Modulare dell'Audit (Fasi FSM + Step con Payload Reali)
   // ==========================================================================
-  const inferences = collector.filterByType('model_inference');
+  const auditDir = path.resolve(process.cwd(), 'audit');
 
-  const auditDocument = {
-    metadata: {
-      generatedAt: new Date().toISOString(),
-      scenario: 'Walkthrough Commerciale: Verifica Preventivo e Applicazione Sconto',
-      totalStepsExecuted: runResult.ticks,
-      macroCyclesConsumed: runResult.macroCycles,
-      exitContract: runResult.result.type,
-      exitPayload: runResult.result.payload,
-      finalState: {
-        Ms: runResult.state.Ms,
-        Ds: runResult.state.Ds,
-        Ta: Array.from(runResult.state.Ta),
-        Ka: Array.from(runResult.state.Ka.keys()),
-        totalMessagesInHistory: runResult.state.Ep.length
-      }
-    },
-    phasesTimeline: inferences.map((inf, idx) => {
-      const state = inf.stateSnapshot;
-      return {
-        stepNumber: idx + 1,
-        macroCycle: inf.macroCycle,
-        tick: inf.tick,
-        phase: inf.controlState,
-        phaseDescription:
-          inf.controlState === 'q_intro'
-            ? 'Pianificazione interna (Introspezione)'
-            : inf.controlState === 'q_exec'
-            ? 'Azione operativa (Esecuzione nel Mondo)'
-            : inf.controlState,
-        directive: {
-          type: inf.directive.type,
-          prompt: inf.directive.prompt
-        },
-        stateBeforeStep: {
-          scopo_Ms: state.Ms,
-          memoria_Ds: state.Ds,
-          tool_attivi_Ta: Array.from(state.Ta),
-          policy_attive_Ka: Array.from(state.Ka ? state.Ka.keys() : []),
-          messaggi_in_cronologia: state.Ep.length
-        },
-        modelInput: {
-          systemFrame: inf.context.systemFrame,
-          recentMessagesExtract: inf.context.messages.slice(-3).map((m) => ({
-            role: m.role,
-            channel: m.channel,
-            callId: m.callId,
-            content: m.content
-          })),
-          visibleToolsMask: inf.context.visibleTools.map((t) => t.id)
-        },
-        modelOutput: {
-          thought: inf.output.thought,
-          durationMs: inf.durationMs,
-          callsEmitted: inf.output.calls.map((c) => ({
-            id: c.id,
-            name: c.name,
-            arguments: c.payload
-          }))
-        }
-      };
-    })
-  };
-
-  const outputFileName = 'agent-state-audit.json';
-  const outputPath = path.resolve(process.cwd(), outputFileName);
-
-  fs.writeFileSync(outputPath, JSON.stringify(auditDocument, null, 2), 'utf8');
+  const exportResult = ModularAuditExporter.export(collector, {
+    outputDir: auditDir,
+    scenarioName: 'Walkthrough Commerciale: Verifica Preventivo e Applicazione Sconto',
+    generateHtmlDashboard: true
+  });
 
   console.log('='.repeat(80));
-  console.log(`✅ FILE JSON CREATO CON SUCCESSO!`);
+  console.log('✅ AUDIT MODULARE GENERATO CON SUCCESSO!');
   console.log('='.repeat(80));
-  console.log(`📁 Percorso file: ${outputPath}`);
-  console.log(`📊 Passi registrati nella timeline: ${auditDocument.phasesTimeline.length}`);
-  console.log(`🏁 Esito finale: ${runResult.result.type}`);
-  console.log(`💾 Dimensione file: ${(fs.statSync(outputPath).size / 1024).toFixed(2)} KB\n`);
-  console.log('Puoi aprire direttamente "agent-state-audit.json" nel tuo editor per ispezionare');
-  console.log('tutti i valori dello stato (Ms, Ds, Ta, Ka, messaggi, thought, chiamate) ad ogni fase.');
+  console.log(`📁 Cartella radice audit: ${exportResult.outputDir}`);
+  console.log(`📑 Fasi FSM individuate:  ${exportResult.phasesCount}`);
+  console.log(`🔢 Micro-passi registrati: ${exportResult.stepsCount}`);
+  console.log(`🏁 Contratto finale:       ${runResult.result.type}`);
+  console.log('');
+  console.log('Struttura file generata:');
+  console.log('  • audit/index.json                   <-- Indice delle Fasi e mappa dei file');
+  console.log('  • audit/index.html                   <-- Dashboard visuale interattiva con ispettore');
+  console.log('  • audit/phases/01_cycle0_q_intro/    <-- File phase_summary.json + step_01.json, etc.');
+  console.log('  • audit/phases/02_cycle0_q_exec/     <-- Chiamate esterne e payload reali');
+  console.log('  • audit/phases/...');
   console.log('='.repeat(80));
 }
 
@@ -291,3 +235,4 @@ runAndExport().catch((err) => {
   console.error('Errore durante la generazione del JSON:', err);
   process.exit(1);
 });
+
