@@ -113,30 +113,46 @@ function humanizeTransitionReason(
 }
 
 /**
- * Estrae l'ultimo input rilevante (richiesta utente o risposta da servizio esterno).
+ * Formatta in modo compatto il contenuto di un messaggio per l'estratto di cronologia.
  */
-function extractRecentInput(
-  messages: Array<{ role: string; channel: string; callId?: string; content: unknown }>
-): { label: string; data: unknown } | null {
-  if (!messages || messages.length === 0) return null;
-
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role === 'world' && msg.channel === 'result') {
-      const ref = msg.callId ? ` [Rif: ${msg.callId}]` : '';
-      return {
-        label: `Risposta ricevuta dal servizio esterno${ref}`,
-        data: msg.content
-      };
-    }
-    if (msg.role === 'user') {
-      return {
-        label: 'Richiesta Utente',
-        data: msg.content
-      };
-    }
+function formatMessageContent(content: unknown): string {
+  if (content === undefined || content === null) return '';
+  if (typeof content === 'string') {
+    const singleLine = content.replace(/\s+/g, ' ').trim();
+    return singleLine.length > 95 ? `"${singleLine.slice(0, 92)}..."` : `"${singleLine}"`;
   }
-  return null;
+  const json = JSON.stringify(content);
+  return json.length > 95 ? `${json.slice(0, 92)}...` : json;
+}
+
+/**
+ * Estrae e formatta gli ultimi N messaggi dalla cronologia Ep.
+ */
+function formatRecentMessages(
+  messages: Array<{ role: string; channel: string; callId?: string; content: unknown }>,
+  maxCount = 3
+): string[] {
+  if (!messages || messages.length === 0) {
+    return ['(nessun messaggio presente in cronologia)'];
+  }
+
+  const lines: string[] = [];
+  const total = messages.length;
+  const startIdx = Math.max(0, total - maxCount);
+
+  if (startIdx > 0) {
+    lines.push(`... (${startIdx} messaggi precedenti omessi)`);
+  }
+
+  for (let i = startIdx; i < total; i++) {
+    const msg = messages[i];
+    const callRef = msg.callId ? ` [${msg.callId}]` : '';
+    const tag = `[${msg.role}:${msg.channel}${callRef}]`;
+    const formattedContent = formatMessageContent(msg.content);
+    lines.push(`${tag} ${formattedContent}`);
+  }
+
+  return lines;
 }
 
 /**
@@ -183,7 +199,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
   constructor(options?: ConsoleLoggerOptions) {
     this.level = options?.level ?? 'info';
     this.showThoughts = options?.showThoughts ?? true;
-    this.showSystemFrame = options?.showSystemFrame ?? false;
+    this.showSystemFrame = options?.showSystemFrame ?? true;
     this.showVisibleTools = options?.showVisibleTools ?? true;
     this.showModelInputs = options?.showModelInputs ?? true;
     this.showState = options?.showState ?? true;
@@ -337,35 +353,41 @@ export class ConsoleLoggerObserver implements AgentObserver {
       }
 
       case 'model_inference': {
-        // 2. COSA VIENE PASSATO AL MODELLO
+        // 2. COSA VIENE PASSATO AL MODELLO (F_Ω, Ep, V_Ω)
         if (this.showModelInputs) {
-          const recentInput = extractRecentInput(event.context.messages);
           const toolNames = event.context.visibleTools.map((t) => t.id).join(', ');
           const directiveLabel = humanizeDirectiveLabel(event.directive);
+          const totalMsgs = event.context.messages.length;
+          const recentMsgs = formatRecentMessages(event.context.messages, 3);
 
           this.write(pfx + `  📥 ${this.bold('Cosa riceve il modello in questa chiamata:')}`);
           this.write(pfx + `     • ${this.bold('Direttiva / Guida:')} ${this.yellow(directiveLabel)}`);
-          if (recentInput) {
-            this.write(
-              pfx +
-                `     • ${this.bold(recentInput.label)}: ${this.cyan(
-                  this.formatData(recentInput.data, 7)
-                )}`
-            );
-          }
-          if (this.showVisibleTools) {
-            this.write(
-              pfx +
-                `     • ${this.bold('Tool utilizzabili')} ${this.dim(
-                  `(${event.context.visibleTools.length})`
-                )}: [ ${this.dim(toolNames)} ]`
-            );
-          }
-          if (this.showSystemFrame && this.level === 'verbose') {
-            this.write(pfx + `     • ${this.bold('System Frame (Prompt):')}`);
+
+          // Frame di sistema usato (F_Ω)
+          if (this.showSystemFrame) {
+            this.write(pfx + `     • ${this.bold('Frame di sistema usato (F_Ω):')}`);
             for (const line of event.context.systemFrame.split('\n')) {
               this.write(pfx + `       ${this.dim(line)}`);
             }
+          }
+
+          // Cronologia messaggi (estratto degli ultimi messaggi)
+          const msgHeader = totalMsgs > 3
+            ? `Cronologia messaggi (ultimi 3 di ${totalMsgs}):`
+            : `Cronologia messaggi (${totalMsgs}):`;
+          this.write(pfx + `     • ${this.bold(msgHeader)}`);
+          for (const ml of recentMsgs) {
+            this.write(pfx + `       ${this.cyan(ml)}`);
+          }
+
+          // Tool disponibili (V_Ω)
+          if (this.showVisibleTools) {
+            this.write(
+              pfx +
+                `     • ${this.bold('Tool disponibili (V_Ω)')} ${this.dim(
+                  `(${event.context.visibleTools.length})`
+                )}: [ ${this.dim(toolNames)} ]`
+            );
           }
         }
 
