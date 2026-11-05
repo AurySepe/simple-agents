@@ -182,7 +182,7 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
 
     expect(joinedLogs).toContain('[TEST-LOGGER]');
     expect(joinedLogs).toContain('CICLO OPERATIVO 1');
-    expect(joinedLogs).toContain("💭 Ragionamento dell'Agente:");
+    expect(joinedLogs).toContain("Flusso di coscienza (Ragionamento dell'Agente):");
     expect(joinedLogs).toContain('Penso e termino subito.');
     expect(joinedLogs).toContain("OBIETTIVO COMPLETATO CON SUCCESSO (Esito: 'termina')");
   });
