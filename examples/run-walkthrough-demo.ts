@@ -222,8 +222,7 @@ async function main() {
     level: 'verbose',
     showThoughts: true,
     showVisibleTools: true,
-    showSystemFrame: false, // se true stampa anche l'intero frame di prompt Markdown
-    prefix: '[AUTOMA]'
+    showSystemFrame: false // se true stampa anche l'intero frame di prompt Markdown
   });
 
   // ==========================================================================

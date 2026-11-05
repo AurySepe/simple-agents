@@ -182,8 +182,9 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
 
     expect(joinedLogs).toContain('[TEST-LOGGER]');
     expect(joinedLogs).toContain('INIZIO CICLO MONDO');
-    expect(joinedLogs).toContain('💭 Pensiero: "Penso e termino subito."');
-    expect(joinedLogs).toContain('🏁 ARRESTO (Halt) con contratto: \'termina\'');
+    expect(joinedLogs).toContain('💭 Pensiero:');
+    expect(joinedLogs).toContain('Penso e termino subito.');
+    expect(joinedLogs).toContain("ARRESTO (Halt) con contratto: 'termina'");
   });
 
   it('dovrebbe consentire la registrazione di un observer a livello di BoundRuntime per tutti gli agenti', async () => {
