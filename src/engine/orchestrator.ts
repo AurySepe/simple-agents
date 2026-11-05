@@ -15,7 +15,8 @@ import {
   Message,
   SchemaErrorKind,
   ToolCall,
-  ToolDefinition
+  ToolDefinition,
+  TransitionReasonCode
 } from '../types/index.js';
 import { WorldRegistry } from '../world/index.js';
 import { executeCognitiveTool } from './introspective-universe.js';
@@ -31,7 +32,7 @@ export interface WakeupPayload {
   worldResults?: Array<{ callId: string; result: unknown }>;
 }
 
-export type { FSMControlState } from '../types/index.js';
+export type { FSMControlState, TransitionReasonCode } from '../types/index.js';
 
 /**
  * ============================================================================
@@ -299,9 +300,14 @@ export class AgentInstance {
   }
 
   /**
-   * Gestisce le transizioni di stato FSM emettendo l'evento corrispondente.
+   * Gestisce le transizioni di stato FSM emettendo l'evento tipizzato corrispondente.
+   * Utilizza codici simbolici costanti anziché testo in linguaggio naturale.
    */
-  private transitionTo(newState: FSMControlState, reason?: string): void {
+  private transitionTo(
+    newState: FSMControlState,
+    reasonCode: TransitionReasonCode,
+    context?: Record<string, unknown>
+  ): void {
     if (this.controlState !== newState) {
       const from = this.controlState;
       this.controlState = newState;
@@ -312,7 +318,8 @@ export class AgentInstance {
         tick: this.t,
         from,
         to: newState,
-        reason
+        reasonCode,
+        context
       });
     }
   }
@@ -342,7 +349,7 @@ export class AgentInstance {
    * (utile per checkpointing, de-serializzazione, o avvii controllati).
    */
   public setControlState(state: FSMControlState, directive?: Directive): void {
-    this.transitionTo(state, 'forzatura manuale');
+    this.transitionTo(state, 'manual_override');
     if (directive) {
       this.currentDirective = directive;
     }
@@ -386,13 +393,13 @@ export class AgentInstance {
 
     // 3. Router
     if (this.normalizedAInt.size > 0) {
-      this.transitionTo('q_intro', 'avvio pianificazione preliminare');
+      this.transitionTo('q_intro', 'router_initial_intro');
       this.currentDirective = {
         type: 'start_intro',
         prompt: this.framework.policy.formatDirectivePrompt('start_intro')
       };
     } else {
-      this.transitionTo('q_exec', 'avvio diretto in azione operativa');
+      this.transitionTo('q_exec', 'router_initial_exec');
       this.currentDirective = {
         type: 'start_exec',
         prompt: this.framework.policy.formatDirectivePrompt('start_exec')
@@ -589,7 +596,7 @@ export class AgentInstance {
 
       case 'q_yield': {
         // q_yield è uno stato transitorio verso q_sleep
-        this.transitionTo('q_sleep', 'in attesa di nuovi input');
+        this.transitionTo('q_sleep', 'post_yield_sleep');
         throw new Error(
           "L'agente ha completato lo yield verso il mondo ed è ora in 'q_sleep'. Attendere i risultati del mondo."
         );
@@ -646,7 +653,7 @@ export class AgentInstance {
         schemaErrorDetail: detail,
         prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail)
       };
-      this.transitionTo('q_repair', 'nessuna operazione indicata');
+      this.transitionTo('q_repair', 'intro_empty_action');
       this.repairPhase = 'intro';
       this.t++;
       void this.emitEvent({
@@ -679,7 +686,7 @@ export class AgentInstance {
         schemaErrorDetail: detail,
         prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail)
       };
-      this.transitionTo('q_repair', 'conclusione pianificazione non separata dalle altre azioni');
+      this.transitionTo('q_repair', 'intro_xor_violation');
       this.repairPhase = 'intro';
       this.t++;
       void this.emitEvent({
@@ -710,7 +717,7 @@ export class AgentInstance {
       });
 
       this.t++;
-      this.transitionTo('q_exec', 'pianificazione completata con successo');
+      this.transitionTo('q_exec', 'intro_concluded');
       this.currentDirective = {
         type: 'start_exec',
         prompt: this.framework.policy.formatDirectivePrompt('start_exec')
@@ -743,7 +750,7 @@ export class AgentInstance {
           schemaErrorDetail: detail,
           prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
         };
-        this.transitionTo('q_repair', `azione cognitiva non autorizzata: ${call.name}`);
+        this.transitionTo('q_repair', 'intro_unauthorized_action', { toolId: call.name });
         this.repairPhase = 'intro';
         this.t++;
         void this.emitEvent({
@@ -776,7 +783,7 @@ export class AgentInstance {
           schemaErrorDetail: detail,
           prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
         };
-        this.transitionTo('q_repair', `azione cognitiva non registrata: ${call.name}`);
+        this.transitionTo('q_repair', 'intro_unregistered_action', { toolId: call.name });
         this.repairPhase = 'intro';
         this.t++;
         void this.emitEvent({
@@ -813,7 +820,7 @@ export class AgentInstance {
           schemaErrorDetail: execResult.errorDetail,
           prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, execResult.errorDetail)
         };
-        this.transitionTo('q_repair', `errore parametri tool cognitivo: ${call.name}`);
+        this.transitionTo('q_repair', 'intro_action_execution_error', { toolId: call.name });
         this.repairPhase = 'intro';
         this.t++;
         void this.emitEvent({
@@ -921,7 +928,7 @@ export class AgentInstance {
         schemaErrorDetail: detail,
         prompt: this.framework.policy.formatSchemaErrorPrompt('exec', detail)
       };
-      this.transitionTo('q_repair', 'nessuna azione o chiamata emessa in fase esecutiva');
+      this.transitionTo('q_repair', 'exec_empty_calls');
       this.repairPhase = 'exec';
       this.t++;
       void this.emitEvent({
@@ -959,7 +966,7 @@ export class AgentInstance {
           schemaErrorDetail: detail,
           prompt: this.framework.policy.formatSchemaErrorPrompt(termCall.name, detail)
         };
-        this.transitionTo('q_repair', `violazione schema contratto terminazione: ${termCall.name}`);
+        this.transitionTo('q_repair', 'exec_term_schema_error', { toolId: termCall.name });
         this.repairPhase = 'exec';
         this.t++;
         void this.emitEvent({
@@ -988,7 +995,7 @@ export class AgentInstance {
       });
 
       this.t++;
-      this.transitionTo('q_halt', `terminazione con contratto ${termCall.name}`);
+      this.transitionTo('q_halt', 'exec_term_success', { toolId: termCall.name });
       this.lastHaltResult = {
         type: termCall.name,
         payload: parsed.data
@@ -1026,7 +1033,7 @@ export class AgentInstance {
           schemaErrorDetail: detail,
           prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
         };
-        this.transitionTo('q_repair', `tool fisico non montato: ${call.name}`);
+        this.transitionTo('q_repair', 'exec_world_unmounted_tool', { toolId: call.name });
         this.repairPhase = 'exec';
         this.t++;
         void this.emitEvent({
@@ -1061,7 +1068,7 @@ export class AgentInstance {
           schemaErrorDetail: detail,
           prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
         };
-        this.transitionTo('q_repair', `errore parametri tool fisico: ${call.name}`);
+        this.transitionTo('q_repair', 'exec_world_schema_error', { toolId: call.name });
         this.repairPhase = 'exec';
         this.t++;
         void this.emitEvent({
@@ -1099,7 +1106,7 @@ export class AgentInstance {
     // YIELD: Ibernazione e incremento c
     this.t++;
     this.c++;
-    this.transitionTo('q_sleep', 'invio richieste e attesa risposta servizi esterni');
+    this.transitionTo('q_sleep', 'exec_world_yield');
 
     void this.emitEvent({
       type: 'yield',
@@ -1179,7 +1186,7 @@ export class AgentInstance {
       this.t++;
 
       if (this.repairPhase === 'intro') {
-        this.transitionTo('q_intro', 'recupero completato con abort');
+        this.transitionTo('q_intro', 'repair_abort_success');
         this.currentDirective = {
           type: 'loop_intro',
           prompt: this.framework.policy.formatDirectivePrompt('loop_intro')
@@ -1194,7 +1201,7 @@ export class AgentInstance {
       } else {
         // Abort da exec: consuma il ciclo e va in yield a vuoto
         this.c++;
-        this.transitionTo('q_sleep', 'recupero completato con abort da exec');
+        this.transitionTo('q_sleep', 'repair_abort_yield');
         void this.emitEvent({
           type: 'yield',
           timestamp: new Date(),
@@ -1216,7 +1223,7 @@ export class AgentInstance {
     this.t++;
 
     if (this.repairPhase === 'intro') {
-      this.transitionTo('q_intro', 'ritorno a intro dopo correzione');
+      this.transitionTo('q_intro', 'repair_retry_intro');
       this.currentDirective = {
         type: 'loop_intro',
         prompt: this.framework.policy.formatDirectivePrompt('loop_intro')
@@ -1229,7 +1236,7 @@ export class AgentInstance {
         state: this.state
       };
     } else {
-      this.transitionTo('q_exec', 'ritorno a exec dopo correzione');
+      this.transitionTo('q_exec', 'repair_retry_exec');
       this.currentDirective = {
         type: 'start_exec',
         prompt: this.framework.policy.formatDirectivePrompt('start_exec')

@@ -284,4 +284,34 @@ export type FSMControlState =
   | 'q_yield'
   | 'q_halt';
 
+/**
+ * ============================================================================
+ * 14. CODICI SIMBOLICI DELLE TRANSIZIONI FSM
+ * ============================================================================
+ * Codici costanti simbolici astratti che identificano la causa di una transizione
+ * senza alcuna stringa in linguaggio naturale all'interno del motore Ω.
+ */
+export type TransitionReasonCode =
+  | 'router_initial_intro'
+  | 'router_initial_exec'
+  | 'intro_concluded'
+  | 'intro_empty_action'
+  | 'intro_xor_violation'
+  | 'intro_unauthorized_action'
+  | 'intro_unregistered_action'
+  | 'intro_action_execution_error'
+  | 'exec_empty_calls'
+  | 'exec_term_schema_error'
+  | 'exec_term_success'
+  | 'exec_world_unmounted_tool'
+  | 'exec_world_schema_error'
+  | 'exec_world_yield'
+  | 'repair_abort_success'
+  | 'repair_abort_yield'
+  | 'repair_retry_intro'
+  | 'repair_retry_exec'
+  | 'manual_override'
+  | 'post_yield_sleep';
+
+
 

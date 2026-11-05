@@ -5,7 +5,8 @@ import {
   FSMControlState,
   InferenceTriple,
   ModelOutput,
-  ToolCall
+  ToolCall,
+  TransitionReasonCode
 } from '../types/index.js';
 
 /**
@@ -65,7 +66,8 @@ export interface StateTransitionEvent extends BaseAgentEvent {
   type: 'state_transition';
   from: FSMControlState;
   to: FSMControlState;
-  reason?: string;
+  reasonCode: TransitionReasonCode;
+  context?: Record<string, unknown>;
 }
 
 export interface SchemaErrorEvent extends BaseAgentEvent {

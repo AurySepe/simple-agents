@@ -1,5 +1,6 @@
 import { AgentEvent } from '../events.js';
 import { AgentObserver } from '../observer.js';
+import { TransitionReasonCode } from '../../types/index.js';
 
 export type LogLevel = 'verbose' | 'info' | 'warn' | 'error';
 
@@ -50,6 +51,60 @@ function humanizeDirective(type: string): string {
       return 'Risoluzione anomalia';
     default:
       return type;
+  }
+}
+
+/**
+ * Traduce i codici simbolici di transizione in descrizioni leggibili in linguaggio naturale.
+ */
+function humanizeTransitionReason(
+  code: TransitionReasonCode,
+  context?: Record<string, unknown>
+): string {
+  const toolId = context?.toolId ? `'${context.toolId}'` : '';
+  switch (code) {
+    case 'router_initial_intro':
+      return 'avvio pianificazione preliminare';
+    case 'router_initial_exec':
+      return 'avvio diretto in azione operativa';
+    case 'intro_concluded':
+      return 'pianificazione completata con successo';
+    case 'intro_empty_action':
+      return 'nessuna operazione indicata';
+    case 'intro_xor_violation':
+      return 'conclusione pianificazione non separata dalle altre azioni';
+    case 'intro_unauthorized_action':
+      return toolId ? `azione non autorizzata: ${toolId}` : 'azione non autorizzata';
+    case 'intro_unregistered_action':
+      return toolId ? `azione non registrata: ${toolId}` : 'azione non registrata';
+    case 'intro_action_execution_error':
+      return toolId ? `errore parametri operazione mentale: ${toolId}` : 'errore parametri operazione';
+    case 'exec_empty_calls':
+      return 'nessuna azione o chiamata emessa in fase esecutiva';
+    case 'exec_term_schema_error':
+      return toolId ? `violazione schema contratto terminazione: ${toolId}` : 'violazione schema contratto terminazione';
+    case 'exec_term_success':
+      return toolId ? `terminazione con contratto ${toolId}` : 'terminazione con contratto';
+    case 'exec_world_unmounted_tool':
+      return toolId ? `servizio esterno non abilitato: ${toolId}` : 'servizio esterno non abilitato';
+    case 'exec_world_schema_error':
+      return toolId ? `parametri non conformi per il servizio esterno: ${toolId}` : 'parametri non conformi per il servizio';
+    case 'exec_world_yield':
+      return 'invio richieste e attesa risposta servizi esterni';
+    case 'repair_abort_success':
+      return 'recupero completato con abort';
+    case 'repair_abort_yield':
+      return 'recupero completato con abort da exec';
+    case 'repair_retry_intro':
+      return 'ritorno a pianificazione dopo correzione';
+    case 'repair_retry_exec':
+      return 'ritorno ad azione operativa dopo correzione';
+    case 'manual_override':
+      return 'forzatura manuale';
+    case 'post_yield_sleep':
+      return 'in attesa di nuovi input';
+    default:
+      return code;
   }
 }
 
@@ -252,7 +307,8 @@ export class ConsoleLoggerObserver implements AgentObserver {
         if (this.level === 'verbose') {
           const fromName = humanizeFSMState(event.from);
           const toName = humanizeFSMState(event.to);
-          const reasonStr = event.reason ? ` ${this.dim(`(${event.reason})`)}` : '';
+          const reasonText = humanizeTransitionReason(event.reasonCode, event.context);
+          const reasonStr = reasonText ? ` ${this.dim(`(${reasonText})`)}` : '';
           this.write(
             pfx +
               `  ${this.cyan('└──')} ${this.yellow('🔀')} ${this.bold(
