@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build and compilation outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Test and coverage artifacts
+coverage/
+.nyc_output/
+.vitest/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment and sensitive files
+.env
+.env.*
+!.env.example
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE specific settings
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary files and scratch pads
+tmp/
+temp/
+.cache/
+

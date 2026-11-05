@@ -1,0 +1,22 @@
+{
+  "name": "formal-agent-engine",
+  "version": "1.0.0",
+  "description": "Implementazione formale fortemente tipizzata dell'architettura agentica a 3 livelli",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx examples/run-walkthrough-demo.ts"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
+
