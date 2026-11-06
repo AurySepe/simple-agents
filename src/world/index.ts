@@ -1,4 +1,4 @@
-import { ToolDefinition, WorldTool } from '../types/index.js';
+import { DataRecord, ToolDefinition, ToolResult, WorldTool } from '../types/index.js';
 
 /**
  * ============================================================================
@@ -17,7 +17,7 @@ export interface WorldRegistry {
    * Valida automaticamente lo schema Zod e inoltra i parametri validati al tool.
    * Rispetta il Teorema di Non-Invasività: non riceve lo stato dell'agente.
    */
-  executeTool(toolId: string, args: unknown): Promise<unknown>;
+  executeTool(toolId: string, args: DataRecord): Promise<ToolResult>;
 
   /**
    * Elenco completo dei tool disponibili nel Mondo W.
@@ -86,7 +86,7 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       }));
     },
 
-    async executeTool(toolId: string, rawArgs: unknown): Promise<unknown> {
+    async executeTool(toolId: string, rawArgs: DataRecord): Promise<ToolResult> {
       const tool = toolsMap.get(toolId);
       if (!tool) {
         throw new WorldToolError(
@@ -110,11 +110,12 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       // Esecuzione protetta con inoltro dei parametri validati e tipizzati
       try {
         return await tool.execute(parseResult.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         throw new WorldToolError(
           toolId,
           'execution_failed',
-          `Errore durante l'esecuzione del tool '${toolId}': ${err?.message ?? String(err)}`,
+          `Errore durante l'esecuzione del tool '${toolId}': ${message}`,
           err
         );
       }

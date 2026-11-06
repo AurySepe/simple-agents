@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { z } from 'zod';
 import {
   AgentEvent,
   CognitiveActionEvent,
@@ -10,22 +11,12 @@ import {
   YieldEvent
 } from '../events.js';
 import { InMemoryTelemetryCollector } from '../collectors/in-memory-collector.js';
-import { ToolDefinition } from '../../types/index.js';
+import { DataRecord, Message, ToolDefinition, ToolResult } from '../../types/index.js';
 
 function serializeZodSchema(schema: unknown): unknown {
   try {
-    if (schema && typeof schema === 'object' && '_def' in schema) {
-      const def = (schema as Record<string, unknown>)._def as Record<string, unknown>;
-      if (def?.typeName === 'ZodObject' && typeof def.shape === 'function') {
-        const shape = (def.shape as () => Record<string, unknown>)();
-        const properties: Record<string, string> = {};
-        for (const [key, val] of Object.entries(shape)) {
-          const typeName = (val as { _def?: { typeName?: string } })?._def?.typeName;
-          properties[key] = typeName ? typeName.replace('Zod', '') : 'unknown';
-        }
-        return { type: 'object', properties };
-      }
-      return { type: def?.typeName ?? 'unknown' };
+    if (schema instanceof z.ZodType) {
+      return z.toJSONSchema(schema);
     }
     return String(schema);
   } catch {
@@ -53,6 +44,14 @@ export interface ModularExportOptions {
   generateHtmlDashboard?: boolean;
 }
 
+export interface StateAuditSnapshot {
+  scopo_Ms: string;
+  memoria_Ds: DataRecord;
+  tool_attivi_Ta: string[];
+  policy_attive_Ka: Record<string, { descrizione: string; corpo: string }>;
+  messaggi_in_cronologia: number;
+}
+
 export interface PhaseGroup {
   phaseIndex: number;
   macroCycle: number;
@@ -60,9 +59,9 @@ export interface PhaseGroup {
   phaseLabel: string;
   folderName: string;
   steps: StepAuditData[];
-  initialState: Record<string, unknown>;
-  finalState: Record<string, unknown>;
-  actionsExecuted: Array<{ step: number; tool: string; payload: unknown }>;
+  initialState: StateAuditSnapshot;
+  finalState: StateAuditSnapshot;
+  actionsExecuted: Array<{ step: number; tool: string; payload: DataRecord }>;
 }
 
 export interface StepAuditData {
@@ -79,13 +78,7 @@ export interface StepAuditData {
     targetToolId?: string;
     schemaErrorDetail?: string;
   };
-  statoAgentePrimaDelPasso: {
-    scopo_Ms: string;
-    memoria_Ds: Record<string, unknown>;
-    tool_attivi_Ta: string[];
-    policy_attive_Ka: Record<string, { descrizione: string; corpo: string }>;
-    messaggi_in_cronologia: number;
-  };
+  statoAgentePrimaDelPasso: StateAuditSnapshot;
   inputGrezzoPassatoAlModello: {
     systemFrame: string;
     messagesHistory: Array<{
@@ -94,7 +87,7 @@ export interface StepAuditData {
       role: string;
       channel: string;
       callId?: string;
-      content: unknown;
+      content: Message['content'];
     }>;
     visibleToolsMask: Array<{
       id: string;
@@ -108,18 +101,18 @@ export interface StepAuditData {
     calls: Array<{
       id: string;
       name: string;
-      payload: unknown;
+      payload: DataRecord;
     }>;
   };
   operazioniCognitiveEseguite: Array<{
     toolName: string;
-    args: unknown;
-    result: unknown;
+    args: DataRecord;
+    result: ToolResult;
   }>;
   esitoEsecuzioneNelMondo: Array<{
     toolId: string;
-    parametriInviati: unknown;
-    risultatoRicevuto: unknown;
+    parametriInviati: DataRecord;
+    risultatoRicevuto?: ToolResult;
     errore?: unknown;
     durataMs: number;
   }>;
@@ -127,14 +120,9 @@ export interface StepAuditData {
     from: string;
     to: string;
     motivoCodice: string;
-    context?: Record<string, unknown>;
+    context?: DataRecord;
   };
-  statoAgenteDopoIlPasso: {
-    scopo_Ms: string;
-    memoria_Ds: Record<string, unknown>;
-    tool_attivi_Ta: string[];
-    policy_attive_Ka: Record<string, { descrizione: string; corpo: string }>;
-  };
+  statoAgenteDopoIlPasso: StateAuditSnapshot;
 }
 
 /**
@@ -219,8 +207,8 @@ export class ModularAuditExporter {
         direttivaReale: {
           type: inf.directive.type,
           prompt: inf.directive.prompt,
-          targetToolId: (inf.directive as { targetToolId?: string }).targetToolId,
-          schemaErrorDetail: (inf.directive as { schemaErrorDetail?: string }).schemaErrorDetail
+          targetToolId: inf.directive.type === 'err_schema' ? inf.directive.targetToolId : undefined,
+          schemaErrorDetail: inf.directive.type === 'err_schema' ? inf.directive.schemaErrorDetail : undefined
         },
         statoAgentePrimaDelPasso: {
           scopo_Ms: inf.stateSnapshot.Ms,
@@ -281,7 +269,8 @@ export class ModularAuditExporter {
           scopo_Ms: afterSnapshot.Ms,
           memoria_Ds: { ...afterSnapshot.Ds },
           tool_attivi_Ta: Array.from(afterSnapshot.Ta),
-          policy_attive_Ka: serializeKa(afterSnapshot.Ka)
+          policy_attive_Ka: serializeKa(afterSnapshot.Ka),
+          messaggi_in_cronologia: afterSnapshot.Ep.length
         }
       };
     });
@@ -300,7 +289,7 @@ export class ModularAuditExporter {
         const padIndex = String(phaseCounter).padStart(2, '0');
         const phaseFolderName: string = `${padIndex}_cycle${cycle}_${state}`;
 
-        currentPhase = {
+        const newPhase: PhaseGroup = {
           phaseIndex: phaseCounter,
           macroCycle: cycle,
           fsmControlState: state,
@@ -311,7 +300,8 @@ export class ModularAuditExporter {
           finalState: stepData.statoAgenteDopoIlPasso,
           actionsExecuted: []
         };
-        phaseGroups.push(currentPhase);
+        phaseGroups.push(newPhase);
+        currentPhase = newPhase;
       }
 
       currentPhase.steps.push(stepData);
@@ -356,12 +346,10 @@ export class ModularAuditExporter {
         statoInizialeFase: phase.initialState,
         statoFinaleFase: phase.finalState,
         deltaStato: {
-          scopoModificato:
-            (phase.initialState as { scopo_Ms?: string }).scopo_Ms !==
-            (phase.finalState as { scopo_Ms?: string }).scopo_Ms,
-          scopoFinale: (phase.finalState as { scopo_Ms?: string }).scopo_Ms,
-          toolFinaliInTa: (phase.finalState as { tool_attivi_Ta?: string[] }).tool_attivi_Ta,
-          datiFinaliInDs: (phase.finalState as { memoria_Ds?: unknown }).memoria_Ds
+          scopoModificato: phase.initialState.scopo_Ms !== phase.finalState.scopo_Ms,
+          scopoFinale: phase.finalState.scopo_Ms,
+          toolFinaliInTa: phase.finalState.tool_attivi_Ta,
+          datiFinaliInDs: phase.finalState.memoria_Ds
         },
         azioniEseguite: phase.actionsExecuted
       };
@@ -397,8 +385,8 @@ export class ModularAuditExporter {
         fileRiepilogo: `phases/${p.folderName}/phase_summary.json`,
         filePassi: p.steps.map((s) => `phases/${p.folderName}/step_${String(s.coordinate.stepNumber).padStart(2, '0')}.json`),
         deltaStato: {
-          scopo: (p.finalState as { scopo_Ms?: string }).scopo_Ms,
-          toolMontati: (p.finalState as { tool_attivi_Ta?: string[] }).tool_attivi_Ta
+          scopo: p.finalState.scopo_Ms,
+          toolMontati: p.finalState.tool_attivi_Ta
         },
         azioniEseguite: p.actionsExecuted.map((a) => `${a.tool}`)
       }))

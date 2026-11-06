@@ -14,3 +14,12 @@ export interface LanguageModelAdapter {
   infer(context: InferenceTriple): Promise<ModelOutput>;
 }
 
+// 1. Client e Tipi di Trasporto Ollama
+export * from './ollama/types.js';
+export * from './ollama/client.js';
+
+// 2. Strategie di Famiglia
+export * from './ollama/strategies/qwen-strategy.js';
+
+// 3. Adapter Composito
+export * from './ollama/ollama-adapter.js';

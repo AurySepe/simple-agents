@@ -20,8 +20,12 @@ export const defaultEnglishPolicy: OrchestratorPolicy = {
     return `An error occurred in parameters for '${targetToolId}': ${errorDetail}. Please fix the arguments and call again, or invoke 'a_abort_call' to cancel.`;
   },
 
+  formatSyntaxErrorPrompt: (targetToolId, rawText, errorDetail) => {
+    return `JSON syntax error in arguments for action '${targetToolId}': ${errorDetail}. Unparseable text received: "${rawText}". Please correct the JSON format and retry the call, or invoke 'a_abort_call' to cancel.`;
+  },
+
   formatDirectiveMessageContent: (directive) => {
-    return `[DIRECTIVE: ${directive.type.toUpperCase()}] ${directive.prompt}`;
+    return directive.prompt;
   },
 
   formatAbortResultContent: (targetToolId) => {
@@ -43,16 +47,12 @@ export const defaultEnglishPolicy: OrchestratorPolicy = {
 
   formatInternalErrorDetail: (kind, context) => {
     switch (kind) {
-      case 'no_action_in_intro':
-        return "No action selected: update your internal memory or call 'a_concludi_intro' to proceed.";
       case 'xor_concludi_violation':
         return "'a_concludi_intro' is solely meant to conclude preparation: call it by itself, without combining other actions in the same turn.";
       case 'unauthorized_cognitive_action':
         return `The action '${context?.toolId}' is not enabled for this session.`;
       case 'unregistered_cognitive_action':
         return `The action '${context?.toolId}' is not recognized by the system.`;
-      case 'no_call_in_exec':
-        return "No action taken: use one of the available tools or send the final response to complete the task.";
       case 'unmounted_world_tool':
         return `The tool '${context?.toolId}' is not currently active. Enable it first using the tool loading action before calling it.`;
       case 'unregistered_world_tool':

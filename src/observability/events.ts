@@ -1,12 +1,15 @@
 import {
   AgentState,
+  DataRecord,
   Directive,
   ExitResult,
   FSMControlState,
   InferenceTriple,
   ModelOutput,
   ToolCall,
-  TransitionReasonCode
+  ToolResult,
+  TransitionReasonCode,
+  UserPayload
 } from '../types/index.js';
 
 /**
@@ -25,8 +28,8 @@ export interface BaseAgentEvent {
 
 export interface MacroCycleStartEvent extends BaseAgentEvent {
   type: 'macro_cycle_start';
-  userContent?: unknown;
-  worldResults?: Array<{ callId: string; result: unknown }>;
+  userContent?: UserPayload;
+  worldResults?: Array<{ callId: string; result: ToolResult }>;
 }
 
 export interface StepStartEvent extends BaseAgentEvent {
@@ -50,16 +53,16 @@ export interface CognitiveActionEvent extends BaseAgentEvent {
   type: 'cognitive_action';
   toolName: string;
   canonicalId: string;
-  args: Record<string, unknown>;
-  result: unknown;
+  args: DataRecord;
+  result: ToolResult;
   stateSnapshot: Readonly<AgentState>;
 }
 
 export interface WorldActionEvent extends BaseAgentEvent {
   type: 'world_action';
   toolId: string;
-  args: unknown;
-  result?: unknown;
+  args: DataRecord;
+  result?: ToolResult;
   error?: unknown;
   durationMs: number;
 }
@@ -69,7 +72,7 @@ export interface StateTransitionEvent extends BaseAgentEvent {
   from: FSMControlState;
   to: FSMControlState;
   reasonCode: TransitionReasonCode;
-  context?: Record<string, unknown>;
+  context?: DataRecord;
 }
 
 export interface SchemaErrorEvent extends BaseAgentEvent {

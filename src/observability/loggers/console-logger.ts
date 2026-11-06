@@ -1,6 +1,6 @@
 import { AgentEvent } from '../events.js';
 import { AgentObserver } from '../observer.js';
-import { AgentState, TransitionReasonCode } from '../../types/index.js';
+import { AgentState, DataRecord, isDataRecord, Message, TransitionReasonCode } from '../../types/index.js';
 
 export type LogLevel = 'verbose' | 'info' | 'warn' | 'error';
 
@@ -63,7 +63,7 @@ function humanizeDirectiveLabel(directive: { type: string; targetToolId?: string
  */
 function humanizeTransitionReason(
   code: TransitionReasonCode,
-  context?: Record<string, unknown>
+  context?: DataRecord
 ): string {
   const toolId = context?.toolId ? `'${context.toolId}'` : '';
   switch (code) {
@@ -129,7 +129,7 @@ function formatMessageContent(content: unknown): string {
  * Estrae e formatta gli ultimi N messaggi dalla cronologia Ep.
  */
 function formatRecentMessages(
-  messages: Array<{ role: string; channel: string; callId?: string; content: unknown }>,
+  messages: Array<Pick<Message, 'role' | 'channel' | 'callId' | 'content'>>,
   maxCount = 3
 ): string[] {
   if (!messages || messages.length === 0) {
@@ -159,7 +159,7 @@ function formatRecentMessages(
  * Formatta in modo compatto o multi-linea una chiamata di tool con i suoi argomenti.
  */
 function formatCall(name: string, payload: unknown): string {
-  if (!payload || (typeof payload === 'object' && Object.keys(payload as object).length === 0)) {
+  if (!payload || (typeof payload === 'object' && Object.keys(payload).length === 0)) {
     return `${name}()`;
   }
   const json = JSON.stringify(payload);
@@ -251,7 +251,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
     if (data === null) return this.dim('null');
     if (typeof data === 'string') return `"${data}"`;
     if (typeof data === 'number' || typeof data === 'boolean') return String(data);
-    if (typeof data === 'object' && Object.keys(data as object).length === 0) {
+    if (typeof data === 'object' && data !== null && Object.keys(data).length === 0) {
       return Array.isArray(data) ? '[]' : '{}';
     }
     try {
@@ -425,17 +425,20 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
       case 'cognitive_action': {
         let detail = '';
-        if (event.toolName === 'imposta_dato' && event.args && typeof event.args === 'object') {
-          const k = (event.args as Record<string, unknown>).chiave;
-          if (k) detail = `: salvato dato '${k}'`;
-        } else if (event.toolName === 'aggiorna_missione') {
-          detail = `: nuovo scopo impostato`;
-        } else if (event.toolName === 'carica_tool' && Array.isArray((event.args as any)?.tool_ids)) {
-          detail = `: montati [${((event.args as any).tool_ids as string[]).join(', ')}]`;
-        } else if (event.toolName === 'carica_concetto' && Array.isArray((event.args as any)?.concetto_ids)) {
-          detail = `: caricate policy [${((event.args as any).concetto_ids as string[]).join(', ')}]`;
-        } else if (event.toolName === 'cerca_tool' || event.toolName === 'cerca_concetti') {
-          detail = `: ricerca '${(event.args as any)?.query ?? ''}'`;
+        if (isDataRecord(event.args)) {
+          if (event.toolName === 'imposta_dato') {
+            const k = event.args.chiave;
+            if (typeof k === 'string') detail = `: salvato dato '${k}'`;
+          } else if (event.toolName === 'aggiorna_missione') {
+            detail = `: nuovo scopo impostato`;
+          } else if (event.toolName === 'carica_tool' && Array.isArray(event.args.tool_ids)) {
+            detail = `: montati [${event.args.tool_ids.join(', ')}]`;
+          } else if (event.toolName === 'carica_concetto' && Array.isArray(event.args.concetto_ids)) {
+            detail = `: caricate policy [${event.args.concetto_ids.join(', ')}]`;
+          } else if (event.toolName === 'cerca_tool' || event.toolName === 'cerca_concetti') {
+            const q = typeof event.args.query === 'string' ? event.args.query : '';
+            detail = `: ricerca '${q}'`;
+          }
         }
         this.write(
           pfx + `  ${this.magenta('✓')} ${this.dim('Operazione interna:')} ${this.bold(event.toolName)}${detail}`

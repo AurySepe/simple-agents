@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   AgentEvent,
   AgentEventType,
@@ -6,6 +7,7 @@ import {
   WorldActionEvent
 } from '../events.js';
 import { AgentObserver } from '../observer.js';
+import { DataRecord } from '../../types/index.js';
 
 /**
  * ============================================================================
@@ -83,13 +85,13 @@ export class InMemoryTelemetryCollector implements AgentObserver {
     state: {
       I: string;
       Ms: string;
-      Ds: Record<string, unknown>;
+      Ds: DataRecord;
       Ta: string[];
       Ka: string[];
       messageCount: number;
     };
     thought?: string;
-    calls: Array<{ id: string; name: string; payload: unknown }>;
+    calls: Array<{ id: string; name: string; payload: DataRecord }>;
   }> {
     const inferences = this.filterByType('model_inference');
     return inferences.map((inf, idx) => ({
@@ -136,6 +138,13 @@ export class InMemoryTelemetryCollector implements AgentObserver {
         }
         if (value instanceof Map) {
           return Object.fromEntries(value.entries());
+        }
+        if (value instanceof z.ZodType) {
+          try {
+            return z.toJSONSchema(value, { target: 'openapi-3.0' });
+          } catch {
+            return 'schema';
+          }
         }
         return value;
       },

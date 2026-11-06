@@ -3,10 +3,36 @@ import {
   AgentState,
   CognitiveTool,
   CognitiveValidationMessages,
-  ToolDefinition
+  DataRecord,
+  DataValue,
+  Scalar,
+  ToolDefinition,
+  ToolResult
 } from '../types/index.js';
 
 export type { CognitiveTool };
+
+/**
+ * ============================================================================
+ * SCHEMI DI VALIDAZIONE PER L'ALBERO DISCRETO DEI DATI
+ * ============================================================================
+ */
+export const scalarSchema: z.ZodType<Scalar> = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null()
+]);
+
+export const dataValueSchema: z.ZodType<DataValue> = z.lazy(() =>
+  z.union([
+    scalarSchema,
+    z.array(dataValueSchema),
+    z.record(z.string(), dataValueSchema)
+  ])
+);
+
+export const dataRecordSchema: z.ZodType<DataRecord> = z.record(z.string(), dataValueSchema);
 
 /**
  * ============================================================================
@@ -25,7 +51,7 @@ export function createAggiornaMissioneSchema(message?: string) {
 export function createImpostaDatoSchema(message?: string) {
   return z.object({
     chiave: z.string().min(1, message),
-    valore: z.unknown()
+    valore: dataValueSchema
   });
 }
 
@@ -141,7 +167,7 @@ export function createControlActions(
  * ============================================================================
  */
 export type CognitiveExecutionResult =
-  | { success: true; result: unknown }
+  | { success: true; result: ToolResult }
   | { success: false; errorDetail: string };
 
 /**
@@ -153,7 +179,7 @@ export type CognitiveExecutionResult =
  */
 export async function executeCognitiveTool(
   tool: CognitiveTool,
-  rawPayload: unknown,
+  rawPayload: DataRecord,
   state: AgentState
 ): Promise<CognitiveExecutionResult> {
   // 1. Validazione Formale di Tipo: payload ⊨ σ_in
@@ -166,11 +192,6 @@ export async function executeCognitiveTool(
   }
 
   // 2. Esecuzione polimorfica diretta del gestore
-  try {
-    const result = await tool.execute(parsed.data, state);
-    return { success: true, result };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, errorDetail: errorMsg };
-  }
+  const result = await tool.execute(parsed.data, state);
+  return { success: true, result };
 }

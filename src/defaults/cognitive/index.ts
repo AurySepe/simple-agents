@@ -1,10 +1,14 @@
 import { createCognitiveSchemas } from '../../engine/introspective-universe.js';
 import {
+  AgentState,
   CanonicalCognitiveActionId,
+  CognitiveActionArgsMap,
   CognitiveMetadataMap,
   CognitiveTool,
   CognitiveToolkit,
-  CognitiveValidationMessages
+  CognitiveValidationMessages,
+  ToolDefinition,
+  ToolResult
 } from '../../types/index.js';
 import { inMemoryCognitiveHandlers } from './handlers.js';
 
@@ -26,11 +30,11 @@ export function createDefaultCognitiveToolkit(
   const schemas = createCognitiveSchemas(options?.validationMessages);
   const handlers = inMemoryCognitiveHandlers;
 
-  const defaultTool = (
-    id: CanonicalCognitiveActionId,
-    parameters: any,
+  const defaultTool = <K extends CanonicalCognitiveActionId>(
+    id: K,
+    parameters: ToolDefinition<CognitiveActionArgsMap[K]>['parameters'],
     defaultDesc: string
-  ): CognitiveTool => ({
+  ): CognitiveTool<CognitiveActionArgsMap[K]> => ({
     id,
     description: options?.metadata?.[id]?.description ?? defaultDesc,
     parameters,

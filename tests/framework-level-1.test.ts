@@ -193,6 +193,9 @@ describe('Livello 1: Istanziazione del FrameworkEngine Immutabile', () => {
       formatSchemaErrorPrompt: (targetToolId, errorDetail) => {
         return `Errore di schema sull'azione '${targetToolId}': ${errorDetail}. Correggi i parametri o rinuncia con a_abort_call.`;
       },
+      formatSyntaxErrorPrompt: (targetToolId, rawText, errorDetail) => {
+        return `Errore di sintassi JSON sull'azione '${targetToolId}': ${errorDetail}. Testo non parsabile: "${rawText}".`;
+      },
       formatDirectiveMessageContent: (directive) => {
         return `[DIRETTIVA: ${directive.type.toUpperCase()}] ${directive.prompt}`;
       },

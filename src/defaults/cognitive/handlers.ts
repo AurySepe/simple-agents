@@ -1,4 +1,12 @@
-import { AgentState, CanonicalCognitiveActionId } from '../../types/index.js';
+import {
+  AgentState,
+  CanonicalCognitiveActionId,
+  CognitiveActionArgsMap,
+  DataValue,
+  ToolResult
+} from '../../types/index.js';
+
+export type { CognitiveActionArgsMap };
 
 /**
  * ============================================================================
@@ -7,26 +15,25 @@ import { AgentState, CanonicalCognitiveActionId } from '../../types/index.js';
  * Le logiche di mutazione dello stato S sono scritte UNA SOLA VOLTA e sono
  * completamente agnostiche rispetto alla lingua, ai nomi esposti all'LLM e alle descrizioni.
  */
-export const inMemoryCognitiveHandlers: Record<
-  CanonicalCognitiveActionId,
-  (args: any, state: AgentState) => Promise<unknown> | unknown
-> = {
-  aggiorna_missione: (args: { nuovo_scopo: string }, state: AgentState) => {
+export const inMemoryCognitiveHandlers: {
+  [K in CanonicalCognitiveActionId]: (
+    args: CognitiveActionArgsMap[K],
+    state: AgentState
+  ) => Promise<ToolResult> | ToolResult;
+} = {
+  aggiorna_missione: (args, state) => {
     state.Ms = args.nuovo_scopo;
   },
 
-  imposta_dato: (args: { chiave: string; valore: unknown }, state: AgentState) => {
+  imposta_dato: (args, state) => {
     state.Ds[args.chiave] = args.valore;
   },
 
-  elimina_dato: (args: { chiave: string }, state: AgentState) => {
+  elimina_dato: (args, state) => {
     delete state.Ds[args.chiave];
   },
 
-  compatta_memoria: (
-    args: { start_idx: number; end_idx: number; sintesi: string },
-    state: AgentState
-  ) => {
+  compatta_memoria: (args, state) => {
     if (args.start_idx < 0 || args.end_idx >= state.Ep.length || args.start_idx > args.end_idx) {
       throw new Error(
         `Intervallo [${args.start_idx}, ${args.end_idx}] non valido per la cronologia Ep (lunghezza attuale: ${state.Ep.length})`
@@ -44,33 +51,33 @@ export const inMemoryCognitiveHandlers: Record<
     }
   },
 
-  cerca_tool: (args: { query: string }) => {
+  cerca_tool: (args) => {
     return {
       query: args.query,
       results: []
     };
   },
 
-  carica_tool: (args: { tool_ids: string[] }, state: AgentState) => {
+  carica_tool: (args, state) => {
     for (const toolId of args.tool_ids) {
       state.Ta.add(toolId);
     }
   },
 
-  scarica_tool: (args: { tool_ids: string[] }, state: AgentState) => {
+  scarica_tool: (args, state) => {
     for (const toolId of args.tool_ids) {
       state.Ta.delete(toolId);
     }
   },
 
-  cerca_concetti: (args: { query: string }) => {
+  cerca_concetti: (args) => {
     return {
       query: args.query,
       results: []
     };
   },
 
-  carica_concetto: (args: { concetto_ids: string[] }, state: AgentState) => {
+  carica_concetto: (args, state) => {
     for (const id of args.concetto_ids) {
       if (!state.Ka.has(id)) {
         state.Ka.set(id, {
@@ -82,7 +89,7 @@ export const inMemoryCognitiveHandlers: Record<
     }
   },
 
-  scarica_concetto: (args: { concetto_ids: string[] }, state: AgentState) => {
+  scarica_concetto: (args, state) => {
     for (const id of args.concetto_ids) {
       state.Ka.delete(id);
     }

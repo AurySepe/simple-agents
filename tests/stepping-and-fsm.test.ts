@@ -51,6 +51,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume)', () => {
   const policy: OrchestratorPolicy = {
     formatDirectivePrompt: (type) => `DIR:${type}`,
     formatSchemaErrorPrompt: (tool, err) => `ERR:${tool}:${err}`,
+    formatSyntaxErrorPrompt: (tool, raw, err) => `ERR_SYNTAX:${tool}:${raw}:${err}`,
     formatDirectiveMessageContent: (dir) => `[DIRECTIVE:${dir.type}]`,
     formatAbortResultContent: (tool) => `[ABORTED:${tool}]`,
     formatVoidResultContent: () => 'OK',
@@ -300,5 +301,59 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume)', () => {
     const step4 = await agent.step();
     expect(step4.status).toBe('halt');
     expect(agent.getControlState()).toBe('q_halt');
+  });
+
+  it('dovrebbe gestire la transizione a q_repair in presenza di un syntax_error negli argomenti del tool', async () => {
+    const responses: ModelOutput[] = [
+      // Passo 1: Chiama concludi ma con errore di sintassi
+      {
+        calls: [
+          {
+            status: 'syntax_error',
+            id: 'err_call_1',
+            name: 'a_concludi_intro',
+            rawText: '{"incompleto":',
+            errorDetail: 'Unexpected end of JSON',
+            payload: { raw: '{"incompleto":' }
+          }
+        ]
+      },
+      // Passo 2: In q_repair, l'agente recupera ed emette chiamata valida
+      {
+        calls: [
+          { id: 'c_valid', name: 'a_concludi_intro', payload: {} }
+        ]
+      },
+      // Passo 3: In q_exec, termina
+      {
+        calls: [
+          { id: 'c_term', name: 'rispondi_e_termina', payload: { messaggio: 'Recuperato da errore sintassi.' } }
+        ]
+      }
+    ];
+
+    let callIndex = 0;
+    const model: LanguageModelAdapter = {
+      infer: async () => responses[callIndex++]
+    };
+
+    const agent = runtime.spawnAgent(manifest, model);
+    agent.feedPayload({ userContent: 'Test syntax error.' });
+
+    // Step 1: invia chiamata con syntax_error -> transita in q_repair con err_syntax
+    const step1 = await agent.step();
+    expect(step1.status).toBe('running');
+    expect(agent.getControlState()).toBe('q_repair');
+    const directive = agent.getCurrentDirective();
+    expect(directive?.type).toBe('err_syntax');
+    if (directive?.type === 'err_syntax') {
+      expect(directive.rawText).toBe('{"incompleto":');
+      expect(directive.targetToolId).toBe('a_concludi_intro');
+    }
+
+    // Step 2: retry valido -> transita a q_intro
+    const step2 = await agent.step();
+    expect(step2.status).toBe('running');
+    expect(agent.getControlState()).toBe('q_intro');
   });
 });

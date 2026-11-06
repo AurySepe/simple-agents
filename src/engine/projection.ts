@@ -2,7 +2,10 @@ import {
   AgentManifest,
   AgentState,
   CanonicalCognitiveActionId,
+  DataValue,
   Directive,
+  isCanonicalCognitiveActionId,
+  TerminationContract,
   ToolDefinition
 } from '../types/index.js';
 import { OrchestratorPolicy } from './orchestrator.js';
@@ -20,7 +23,7 @@ import { EmptyControlSchema } from './introspective-universe.js';
 export function computeVisibleTools(
   directive: Directive,
   state: AgentState,
-  manifest: AgentManifest,
+  manifest: AgentManifest<string, DataValue>,
   availableCognitiveTools: Map<string, ToolDefinition> | Record<string, ToolDefinition>,
   availableWorldTools: Map<string, ToolDefinition>,
   policy: OrchestratorPolicy
@@ -52,10 +55,12 @@ export function computeVisibleTools(
       for (const canonicalId of manifest.A_int) {
         const def = getCognitiveDef(canonicalId);
         if (def) {
-          const meta = policy.cognitiveMetadata?.[canonicalId as CanonicalCognitiveActionId];
+          const meta = isCanonicalCognitiveActionId(canonicalId)
+            ? policy.cognitiveMetadata[canonicalId]
+            : undefined;
           visible.push({
-            id: meta?.toolName ?? def.id,
-            description: meta?.description ?? def.description,
+            id: meta ? meta.toolName : def.id,
+            description: meta ? meta.description : def.description,
             parameters: def.parameters
           });
         }
@@ -88,17 +93,15 @@ export function computeVisibleTools(
       return visible;
     }
 
-    case 'err_schema': {
+    case 'err_schema':
+    case 'err_syntax': {
       // Isolamento rigido: visibile SOLO l'azione fallita da riparare + l'azione atomica di aborto
       const visible: ToolDefinition[] = [];
 
-      let targetDef:
-        | ToolDefinition
-        | { id: string; description: string; schema: any }
-        | undefined;
+      let targetDef: ToolDefinition | TerminationContract | undefined;
 
       // Cerca nei cognitivi (con supporto alla traduzione simbolica)
-      for (const [canonicalId, meta] of Object.entries(policy.cognitiveMetadata ?? {})) {
+      for (const [canonicalId, meta] of Object.entries(policy.cognitiveMetadata)) {
         if (meta.toolName === directive.targetToolId || canonicalId === directive.targetToolId) {
           const rawDef = getCognitiveDef(canonicalId);
           if (rawDef) {

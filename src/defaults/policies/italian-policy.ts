@@ -21,8 +21,12 @@ export const defaultItalianPolicy: OrchestratorPolicy = {
     return `Si è verificato un errore nei parametri per l'azione '${targetToolId}': ${errorDetail}. Correggi i parametri ed effettua nuovamente la chiamata, oppure invoca 'a_abort_call' per annullarla.`;
   },
 
+  formatSyntaxErrorPrompt: (targetToolId, rawText, errorDetail) => {
+    return `Errore di sintassi JSON negli argomenti per l'azione '${targetToolId}': ${errorDetail}. Testo non parsabile ricevuto: "${rawText}". Correggi la formattazione JSON ed effettua nuovamente la chiamata, oppure invoca 'a_abort_call' per annullarla.`;
+  },
+
   formatDirectiveMessageContent: (directive) => {
-    return `[DIRETTIVA: ${directive.type.toUpperCase()}] ${directive.prompt}`;
+    return directive.prompt;
   },
 
   formatAbortResultContent: (targetToolId) => {
@@ -44,16 +48,12 @@ export const defaultItalianPolicy: OrchestratorPolicy = {
 
   formatInternalErrorDetail: (kind, context) => {
     switch (kind) {
-      case 'no_action_in_intro':
-        return "Nessuna azione selezionata: aggiorna la tua memoria interna oppure chiama 'a_concludi_intro' per procedere.";
       case 'xor_concludi_violation':
         return "'a_concludi_intro' serve esclusivamente a chiudere la preparazione: invocala da sola, senza combinare altre azioni nello stesso messaggio.";
       case 'unauthorized_cognitive_action':
         return `L'azione '${context?.toolId}' non è abilitata per questa sessione di lavoro.`;
       case 'unregistered_cognitive_action':
         return `L'azione '${context?.toolId}' non è riconosciuta dal sistema.`;
-      case 'no_call_in_exec':
-        return "Nessuna azione intrapresa: usa uno degli strumenti disponibili oppure invia la risposta finale per completare il compito.";
       case 'unmounted_world_tool':
         return `Lo strumento '${context?.toolId}' non è al momento abilitato. Attivalo tramite lo strumento di caricamento prima di chiamarlo.`;
       case 'unregistered_world_tool':

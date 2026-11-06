@@ -84,8 +84,8 @@ describe('Standard Library / Defaults di Livello 1', () => {
       state.Ep = [
         { index: 0, role: 'user', channel: 'payload', content: 'Msg 0' },
         { index: 1, role: 'agent', channel: 'thought', content: 'Msg 1' },
-        { index: 2, role: 'agent', channel: 'call', content: 'Msg 2' },
-        { index: 3, role: 'world', channel: 'result', content: 'Msg 3' },
+        { index: 2, role: 'agent', channel: 'call', callId: 'call_test', content: { name: 'test_tool', payload: {} } },
+        { index: 3, role: 'world', channel: 'result', callId: 'call_test', content: 'Msg 3' },
         { index: 4, role: 'user', channel: 'payload', content: 'Msg 4' }
       ];
 

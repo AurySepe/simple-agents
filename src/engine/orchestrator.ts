@@ -3,20 +3,30 @@ import { AgentEvent, AgentObserver, CompositeObserver } from '../observability/i
 import {
   AgentManifest,
   AgentState,
+  CANONICAL_COGNITIVE_ACTION_IDS,
   CanonicalCognitiveActionId,
   CognitiveMetadataMap,
   CognitiveTool,
   CognitiveToolkit,
   CognitiveValidationMessages,
+  DataRecord,
+  DataValue,
   Directive,
+  DirectiveContent,
   ExitResult,
   FSMControlState,
   InferenceTriple,
+  isCanonicalCognitiveActionId,
+  isDataRecord,
+  isDataValue,
   Message,
+  MessageInput,
   SchemaErrorKind,
   ToolCall,
   ToolDefinition,
-  TransitionReasonCode
+  ToolResult,
+  TransitionReasonCode,
+  UserPayload
 } from '../types/index.js';
 import { WorldRegistry } from '../world/index.js';
 import { executeCognitiveTool } from './introspective-universe.js';
@@ -28,8 +38,8 @@ import { computeVisibleTools, SystemFrameProjector } from './projection.js';
  * ============================================================================
  */
 export interface WakeupPayload {
-  userContent?: unknown;
-  worldResults?: Array<{ callId: string; result: unknown }>;
+  userContent?: UserPayload;
+  worldResults?: Array<{ callId: string; result: ToolResult }>;
 }
 
 export type { FSMControlState, TransitionReasonCode } from '../types/index.js';
@@ -55,32 +65,32 @@ export type YieldStepOutcome = {
   state: AgentState;
 };
 
-export type HaltStepOutcome = {
+export type HaltStepOutcome<T = DataValue> = {
   status: 'halt';
   macroCycle: number;
   tick: number;
-  result: ExitResult;
+  result: ExitResult<T>;
   state: AgentState;
 };
 
 /**
  * Esito di una singola micro-transizione (step)
  */
-export type StepOutcome = RunningStepOutcome | YieldStepOutcome | HaltStepOutcome;
+export type StepOutcome<T = DataValue> = RunningStepOutcome | YieldStepOutcome | HaltStepOutcome<T>;
 
 /**
  * Esito di una sequenza continuativa fino al rilascio del controllo (yield o halt)
  */
-export type ExecutionOutcome = YieldStepOutcome | HaltStepOutcome;
+export type ExecutionOutcome<T = DataValue> = YieldStepOutcome | HaltStepOutcome<T>;
 
 /**
  * Opzioni di configurazione per l'esecuzione autonoma end-to-end (run)
  */
-export interface RunOptions {
+export interface RunOptions<T = DataValue> {
   /**
    * Messaggio o contenuto esogeno iniziale dell'utente (se non già inviato)
    */
-  userContent?: unknown;
+  userContent?: UserPayload;
 
   /**
    * Limite massimo di macro-cicli c consentiti prima di interrompere (default: 50).
@@ -101,23 +111,23 @@ export interface RunOptions {
   /**
    * Hook opzionale eseguito al completamento di ogni macro-ciclo c (quando cede il controllo per yield o termina in halt)
    */
-  onMacroCycle?: (macroCycle: number, outcome: ExecutionOutcome) => void | Promise<void>;
+  onMacroCycle?: (macroCycle: number, outcome: ExecutionOutcome<T>) => void | Promise<void>;
 
   /**
    * Hook opzionale eseguito prima dell'invocazione di ciascun tool fisico verso il Mondo W
    */
-  beforeToolExecution?: (toolId: string, args: unknown) => void | Promise<void>;
+  beforeToolExecution?: (toolId: string, args: DataRecord) => void | Promise<void>;
 
   /**
    * Hook opzionale eseguito dopo che un tool fisico del Mondo W ha restituito il proprio esito
    */
-  afterToolExecution?: (toolId: string, args: unknown, result: unknown) => void | Promise<void>;
+  afterToolExecution?: (toolId: string, args: DataRecord, result: ToolResult) => void | Promise<void>;
 }
 
 /**
  * Risultato finale dell'esecuzione autonoma end-to-end (fino all'arresto q_halt)
  */
-export interface RunResult<T = any> {
+export interface RunResult<T = DataValue> {
   result: ExitResult<T>;
   macroCycles: number;
   ticks: number;
@@ -132,9 +142,10 @@ export interface RunResult<T = any> {
 export interface OrchestratorPolicy {
   formatDirectivePrompt(type: 'start_intro' | 'loop_intro' | 'start_exec'): string;
   formatSchemaErrorPrompt(targetToolId: string, errorDetail: string): string;
-  formatDirectiveMessageContent(directive: Directive): string | Record<string, unknown>;
-  formatAbortResultContent(targetToolId: string): unknown;
-  formatVoidResultContent(): unknown;
+  formatSyntaxErrorPrompt(targetToolId: string, rawText: string, errorDetail: string): string;
+  formatDirectiveMessageContent(directive: Directive): DirectiveContent;
+  formatAbortResultContent(targetToolId: string): ToolResult;
+  formatVoidResultContent(): ToolResult;
   formatControlActionDescription(action: 'a_concludi_intro' | 'a_abort_call'): string;
   formatInternalErrorDetail(kind: SchemaErrorKind, context?: { toolId?: string }): string;
   validationMessages: CognitiveValidationMessages;
@@ -196,8 +207,11 @@ export class BoundRuntime {
   /**
    * ISTANZIAZIONE DI LIVELLO 3: Spawna una singola sessione agente dal Manifesto.
    */
-  public spawnAgent(manifest: AgentManifest, model: LanguageModelAdapter): AgentInstance {
-    const agent = new AgentInstance(this.frameworkConfig, this.world, manifest, model);
+  public spawnAgent<T extends DataValue = DataValue>(
+    manifest: AgentManifest<CanonicalCognitiveActionId, T>,
+    model: LanguageModelAdapter
+  ): AgentInstance<T> {
+    const agent = new AgentInstance<T>(this.frameworkConfig, this.world, manifest, model);
     for (const obs of this.observers) {
       agent.addObserver(obs);
     }
@@ -209,13 +223,13 @@ export class BoundRuntime {
    * Spawna l'agente ed esegue il loop completo consumando autonomamente le chiamate
    * al Mondo W fino all'arresto formale q_halt.
    */
-  public async runAgent<T = any>(
-    manifest: AgentManifest,
+  public async runAgent<T extends DataValue = DataValue>(
+    manifest: AgentManifest<CanonicalCognitiveActionId, T>,
     model: LanguageModelAdapter,
-    options?: RunOptions
+    options?: RunOptions<T>
   ): Promise<RunResult<T>> {
-    const agent = this.spawnAgent(manifest, model);
-    return await agent.run<T>(options);
+    const agent = this.spawnAgent<T>(manifest, model);
+    return await agent.run(options);
   }
 }
 
@@ -224,7 +238,7 @@ export class BoundRuntime {
  * CLASSE LIVELLO 3: AgentInstance (Sessione Attiva dell'Automa FSM M_FSM)
  * ============================================================================
  */
-export class AgentInstance {
+export class AgentInstance<T extends DataValue = DataValue> {
   private state: AgentState;
   private c: number = 0; // Macro-Ciclo del Mondo
   private t: number = 0; // Tick decisionale di inferenza
@@ -233,7 +247,7 @@ export class AgentInstance {
   private controlState: FSMControlState = 'q_sleep';
   private currentDirective: Directive | null = null;
   private repairPhase: 'intro' | 'exec' | null = null;
-  private lastHaltResult: ExitResult | null = null;
+  private lastHaltResult: ExitResult<T> | null = null;
 
   // Mappe bidirezionali di traduzione simbolica (Manifesto <-> LLM-facing)
   private toolNameToCanonical: Map<string, CanonicalCognitiveActionId> = new Map();
@@ -244,7 +258,7 @@ export class AgentInstance {
   constructor(
     private readonly framework: FrameworkConfig,
     private readonly world: WorldRegistry,
-    private readonly manifest: AgentManifest,
+    private readonly manifest: AgentManifest<CanonicalCognitiveActionId, T>,
     private readonly model: LanguageModelAdapter
   ) {
     this.normalizedAInt =
@@ -260,9 +274,12 @@ export class AgentInstance {
     }
 
     // Inizializzazione delle mappe di traduzione simbolica
-    for (const [canonicalId, meta] of Object.entries(this.framework.policy.cognitiveMetadata ?? {})) {
-      this.toolNameToCanonical.set(meta.toolName, canonicalId as CanonicalCognitiveActionId);
-      this.canonicalToToolName.set(canonicalId as CanonicalCognitiveActionId, meta.toolName);
+    for (const canonicalId of CANONICAL_COGNITIVE_ACTION_IDS) {
+      const meta = this.framework.policy.cognitiveMetadata[canonicalId];
+      if (meta) {
+        this.toolNameToCanonical.set(meta.toolName, canonicalId);
+        this.canonicalToToolName.set(canonicalId, meta.toolName);
+      }
     }
 
     // Inizializzazione dello Stato S_0 a partire dal Manifesto
@@ -306,7 +323,7 @@ export class AgentInstance {
   private transitionTo(
     newState: FSMControlState,
     reasonCode: TransitionReasonCode,
-    context?: Record<string, unknown>
+    context?: DataRecord
   ): void {
     if (this.controlState !== newState) {
       const from = this.controlState;
@@ -422,7 +439,7 @@ export class AgentInstance {
    * Risveglio rapido end-to-end:
    * Accoda il payload ed esegue l'automa fino alla sospensione (yield) o arresto (halt).
    */
-  public async wakeup(payload: WakeupPayload): Promise<ExecutionOutcome> {
+  public async wakeup(payload: WakeupPayload): Promise<ExecutionOutcome<T>> {
     this.feedPayload(payload);
     return await this.resume();
   }
@@ -431,7 +448,7 @@ export class AgentInstance {
    * Esegue la computazione in continuo fino a quando l'agente non cede il controllo
    * (status === 'yield') o termina definitivamente (status === 'halt').
    */
-  public async resume(): Promise<ExecutionOutcome> {
+  public async resume(): Promise<ExecutionOutcome<T>> {
     while (true) {
       const outcome = await this.step();
       if (outcome.status === 'yield' || outcome.status === 'halt') {
@@ -446,10 +463,7 @@ export class AgentInstance {
    * verso il Mondo W (yield), le esegue automaticamente contro il WorldRegistry,
    * ne raccoglie i risultati e risveglia l'agente (wakeup) fino al raggiungimento di q_halt.
    */
-  public async run<T = any>(options?: RunOptions): Promise<RunResult<T>> {
-    const maxMacroCycles = options?.maxMacroCycles ?? 50;
-    const maxTicks = options?.maxTicks ?? 250;
-
+  public async run(options?: RunOptions<T>): Promise<RunResult<T>> {
     // Registrazione osservatori specifici di questa corsa
     if (options?.observers) {
       for (const obs of options.observers) {
@@ -468,14 +482,14 @@ export class AgentInstance {
 
       // 2. Loop autonomo multi-ciclo
       while (true) {
-        if (this.c > maxMacroCycles) {
+        if (options?.maxMacroCycles !== undefined && this.c > options.maxMacroCycles) {
           throw new Error(
-            `Raggiunto il limite massimo di ${maxMacroCycles} macro-cicli del Mondo senza arresto (q_halt). Possibile loop infinito.`
+            `Raggiunto il limite massimo configurato di ${options.maxMacroCycles} macro-cicli del Mondo senza arresto (q_halt). Possibile loop infinito.`
           );
         }
-        if (this.t > maxTicks) {
+        if (options?.maxTicks !== undefined && this.t > options.maxTicks) {
           throw new Error(
-            `Raggiunto il limite massimo di ${maxTicks} passi decisionali (tick) senza arresto (q_halt).`
+            `Raggiunto il limite massimo configurato di ${options.maxTicks} passi decisionali (tick) senza arresto (q_halt).`
           );
         }
 
@@ -488,7 +502,7 @@ export class AgentInstance {
         // Se l'agente ha terminato con un contratto A_term
         if (outcome.status === 'halt') {
           return {
-            result: outcome.result as ExitResult<T>,
+            result: outcome.result,
             macroCycles: this.c,
             ticks: this.t,
             state: this.state
@@ -502,49 +516,24 @@ export class AgentInstance {
               await options.beforeToolExecution(call.name, call.payload);
             }
             const startTime = Date.now();
-            try {
-              const res = await this.world.executeTool(call.name, call.payload);
-              const durationMs = Date.now() - startTime;
+            const res = await this.world.executeTool(call.name, call.payload);
+            const durationMs = Date.now() - startTime;
 
-              void this.emitEvent({
-                type: 'world_action',
-                timestamp: new Date(),
-                macroCycle: this.c,
-                tick: this.t,
-                toolId: call.name,
-                args: call.payload,
-                result: res,
-                durationMs
-              });
+            void this.emitEvent({
+              type: 'world_action',
+              timestamp: new Date(),
+              macroCycle: this.c,
+              tick: this.t,
+              toolId: call.name,
+              args: call.payload,
+              result: res,
+              durationMs
+            });
 
-              if (options?.afterToolExecution) {
-                await options.afterToolExecution(call.name, call.payload, res);
-              }
-              return { callId: call.id, result: res };
-            } catch (err: any) {
-              const durationMs = Date.now() - startTime;
-              const errorResult = {
-                error: true,
-                message: err?.message ?? String(err),
-                details: err?.details
-              };
-
-              void this.emitEvent({
-                type: 'world_action',
-                timestamp: new Date(),
-                macroCycle: this.c,
-                tick: this.t,
-                toolId: call.name,
-                args: call.payload,
-                error: errorResult,
-                durationMs
-              });
-
-              if (options?.afterToolExecution) {
-                await options.afterToolExecution(call.name, call.payload, errorResult);
-              }
-              return { callId: call.id, result: errorResult };
+            if (options?.afterToolExecution) {
+              await options.afterToolExecution(call.name, call.payload, res);
             }
+            return { callId: call.id, result: res };
           })
         );
 
@@ -564,7 +553,7 @@ export class AgentInstance {
    * Avanza la computazione di esattamente UN singolo passo decisionale (tick t).
    * Rispetta rigorosamente la funzione di transizione globale Δ_trans.
    */
-  public async step(): Promise<StepOutcome> {
+  public async step(): Promise<StepOutcome<T>> {
     if (this.currentDirective) {
       void this.emitEvent({
         type: 'step_start',
@@ -585,11 +574,14 @@ export class AgentInstance {
       }
 
       case 'q_halt': {
+        if (!this.lastHaltResult) {
+          throw new Error("Stato inconsistente: l'agente è in 'q_halt' ma non è presente un risultato di arresto.");
+        }
         return {
           status: 'halt',
           macroCycle: this.c,
           tick: this.t,
-          result: this.lastHaltResult!,
+          result: this.lastHaltResult,
           state: this.state
         };
       }
@@ -619,7 +611,7 @@ export class AgentInstance {
   /**
    * Micro-passo nel Loop Introspettivo (Φ_intro)
    */
-  private async stepIntro(): Promise<StepOutcome> {
+  private async stepIntro(): Promise<StepOutcome<T>> {
     if (!this.currentDirective) {
       this.currentDirective = {
         type: 'start_intro',
@@ -657,16 +649,29 @@ export class AgentInstance {
 
     const calls = output.calls;
 
-    // Violazione: nessuna azione emessa in intro
-    if (calls.length === 0) {
-      const detail = this.framework.policy.formatInternalErrorDetail('no_action_in_intro');
+    // Sottocaso preliminare: Errore di sintassi JSON negli argomenti del tool
+    const syntaxErrCall = calls.find((c) => c.status === 'syntax_error');
+    if (syntaxErrCall && syntaxErrCall.status === 'syntax_error') {
+      this.appendMessage({
+        role: 'agent',
+        channel: 'call',
+        callId: syntaxErrCall.id,
+        content: { name: syntaxErrCall.name, payload: { raw: syntaxErrCall.rawText } }
+      });
+
       this.currentDirective = {
-        type: 'err_schema',
-        targetToolId: 'a_concludi_intro',
-        schemaErrorDetail: detail,
-        prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail)
+        type: 'err_syntax',
+        targetToolId: syntaxErrCall.name,
+        rawText: syntaxErrCall.rawText,
+        syntaxErrorDetail: syntaxErrCall.errorDetail,
+        prompt: this.framework.policy.formatSyntaxErrorPrompt(
+          syntaxErrCall.name,
+          syntaxErrCall.rawText,
+          syntaxErrCall.errorDetail
+        ),
+        callId: syntaxErrCall.id
       };
-      this.transitionTo('q_repair', 'intro_empty_action');
+      this.transitionTo('q_repair', 'intro_json_syntax_error', { toolId: syntaxErrCall.name });
       this.repairPhase = 'intro';
       this.t++;
       void this.emitEvent({
@@ -674,8 +679,8 @@ export class AgentInstance {
         timestamp: new Date(),
         macroCycle: this.c,
         tick: this.t,
-        targetToolId: 'a_concludi_intro',
-        errorDetail: detail,
+        targetToolId: syntaxErrCall.name,
+        errorDetail: syntaxErrCall.errorDetail,
         recoveryDirective: this.currentDirective
       });
       return {
@@ -692,12 +697,24 @@ export class AgentInstance {
 
     // Violazione XOR
     if (hasConcludi && hasOtherCalls) {
+      for (const call of calls) {
+        this.appendMessage({
+          role: 'agent',
+          channel: 'call',
+          callId: call.id,
+          content: {
+            name: call.name,
+            payload: isDataRecord(call.payload) ? call.payload : { value: String(call.payload) }
+          }
+        });
+      }
       const detail = this.framework.policy.formatInternalErrorDetail('xor_concludi_violation');
       this.currentDirective = {
         type: 'err_schema',
         targetToolId: 'a_concludi_intro',
         schemaErrorDetail: detail,
-        prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail)
+        prompt: this.framework.policy.formatSchemaErrorPrompt('a_concludi_intro', detail),
+        callId: calls.find((c) => c.name === 'a_concludi_intro')?.id
       };
       this.transitionTo('q_repair', 'intro_xor_violation');
       this.repairPhase = 'intro';
@@ -726,7 +743,7 @@ export class AgentInstance {
         role: 'agent',
         channel: 'call',
         callId: calls[0].id,
-        content: 'a_concludi_intro()'
+        content: { name: 'a_concludi_intro', payload: {} }
       });
 
       this.t++;
@@ -746,13 +763,26 @@ export class AgentInstance {
     }
 
     // SOTTOCASO 1: Continuazione Introspettiva (X_k ⊆ A_int)
+    const validIntroCalls: Array<{
+      call: ToolCall;
+      canonicalId: CanonicalCognitiveActionId;
+      tool: NonNullable<CognitiveToolkit[CanonicalCognitiveActionId]>;
+    }> = [];
+
     for (const call of calls) {
       // Risoluzione della chiamata dall'identificatore LLM-facing alla costante simbolica del Manifesto
-      const canonicalId =
-        this.toolNameToCanonical.get(call.name) ??
-        (call.name as CanonicalCognitiveActionId);
+      const canonicalId = this.resolveCanonicalId(call.name);
 
-      if (!this.normalizedAInt.has(canonicalId)) {
+      if (!canonicalId || !this.normalizedAInt.has(canonicalId)) {
+        this.appendMessage({
+          role: 'agent',
+          channel: 'call',
+          callId: call.id,
+          content: {
+            name: call.name,
+            payload: isDataRecord(call.payload) ? call.payload : { value: String(call.payload) }
+          }
+        });
         const detail = this.framework.policy.formatInternalErrorDetail(
           'unauthorized_cognitive_action',
           { toolId: call.name }
@@ -761,7 +791,8 @@ export class AgentInstance {
           type: 'err_schema',
           targetToolId: call.name,
           schemaErrorDetail: detail,
-          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
+          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail),
+          callId: call.id
         };
         this.transitionTo('q_repair', 'intro_unauthorized_action', { toolId: call.name });
         this.repairPhase = 'intro';
@@ -786,6 +817,15 @@ export class AgentInstance {
 
       const tool = this.framework.cognitiveTools[canonicalId];
       if (!tool) {
+        this.appendMessage({
+          role: 'agent',
+          channel: 'call',
+          callId: call.id,
+          content: {
+            name: call.name,
+            payload: isDataRecord(call.payload) ? call.payload : { value: String(call.payload) }
+          }
+        });
         const detail = this.framework.policy.formatInternalErrorDetail(
           'unregistered_cognitive_action',
           { toolId: call.name }
@@ -794,7 +834,8 @@ export class AgentInstance {
           type: 'err_schema',
           targetToolId: call.name,
           schemaErrorDetail: detail,
-          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
+          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail),
+          callId: call.id
         };
         this.transitionTo('q_repair', 'intro_unregistered_action', { toolId: call.name });
         this.repairPhase = 'intro';
@@ -817,23 +858,32 @@ export class AgentInstance {
         };
       }
 
+      validIntroCalls.push({ call, canonicalId, tool });
+    }
+
+    // Accodamento di tutte le chiamate agent nel canale 'call'
+    for (const item of validIntroCalls) {
       this.appendMessage({
         role: 'agent',
         channel: 'call',
-        callId: call.id,
-        content: call.payload
+        callId: item.call.id,
+        content: { name: item.call.name, payload: item.call.payload }
       });
+    }
 
-      const execResult = await executeCognitiveTool(tool, call.payload, this.state);
+    // Esecuzione sequenziale delle azioni cognitive e accodamento dei risultati corrispondenti
+    for (const item of validIntroCalls) {
+      const execResult = await executeCognitiveTool(item.tool, item.call.payload, this.state);
 
       if (!execResult.success) {
         this.currentDirective = {
           type: 'err_schema',
-          targetToolId: call.name,
+          targetToolId: item.call.name,
           schemaErrorDetail: execResult.errorDetail,
-          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, execResult.errorDetail)
+          prompt: this.framework.policy.formatSchemaErrorPrompt(item.call.name, execResult.errorDetail),
+          callId: item.call.id
         };
-        this.transitionTo('q_repair', 'intro_action_execution_error', { toolId: call.name });
+        this.transitionTo('q_repair', 'intro_action_execution_error', { toolId: item.call.name });
         this.repairPhase = 'intro';
         this.t++;
         void this.emitEvent({
@@ -841,7 +891,7 @@ export class AgentInstance {
           timestamp: new Date(),
           macroCycle: this.c,
           tick: this.t,
-          targetToolId: call.name,
+          targetToolId: item.call.name,
           errorDetail: execResult.errorDetail,
           recoveryDirective: this.currentDirective
         });
@@ -862,7 +912,7 @@ export class AgentInstance {
       this.appendMessage({
         role: 'orchestrator',
         channel: 'result',
-        callId: call.id,
+        callId: item.call.id,
         content
       });
 
@@ -871,9 +921,9 @@ export class AgentInstance {
         timestamp: new Date(),
         macroCycle: this.c,
         tick: this.t,
-        toolName: call.name,
-        canonicalId,
-        args: call.payload,
+        toolName: item.call.name,
+        canonicalId: item.canonicalId,
+        args: item.call.payload,
         result: content,
         stateSnapshot: { ...this.state, Ds: { ...this.state.Ds } }
       });
@@ -897,7 +947,7 @@ export class AgentInstance {
   /**
    * Micro-passo nel Loop Esecutivo (Φ_exec)
    */
-  private async stepExec(): Promise<StepOutcome> {
+  private async stepExec(): Promise<StepOutcome<T>> {
     if (!this.currentDirective) {
       this.currentDirective = {
         type: 'start_exec',
@@ -934,15 +984,30 @@ export class AgentInstance {
     }
 
     const calls = output.calls;
-    if (calls.length === 0) {
-      const detail = this.framework.policy.formatInternalErrorDetail('no_call_in_exec');
+
+    // Sottocaso preliminare: Errore di sintassi JSON negli argomenti del tool
+    const syntaxErrCall = calls.find((c) => c.status === 'syntax_error');
+    if (syntaxErrCall && syntaxErrCall.status === 'syntax_error') {
+      this.appendMessage({
+        role: 'agent',
+        channel: 'call',
+        callId: syntaxErrCall.id,
+        content: { name: syntaxErrCall.name, payload: { raw: syntaxErrCall.rawText } }
+      });
+
       this.currentDirective = {
-        type: 'err_schema',
-        targetToolId: 'exec',
-        schemaErrorDetail: detail,
-        prompt: this.framework.policy.formatSchemaErrorPrompt('exec', detail)
+        type: 'err_syntax',
+        targetToolId: syntaxErrCall.name,
+        rawText: syntaxErrCall.rawText,
+        syntaxErrorDetail: syntaxErrCall.errorDetail,
+        prompt: this.framework.policy.formatSyntaxErrorPrompt(
+          syntaxErrCall.name,
+          syntaxErrCall.rawText,
+          syntaxErrCall.errorDetail
+        ),
+        callId: syntaxErrCall.id
       };
-      this.transitionTo('q_repair', 'exec_empty_calls');
+      this.transitionTo('q_repair', 'exec_json_syntax_error', { toolId: syntaxErrCall.name });
       this.repairPhase = 'exec';
       this.t++;
       void this.emitEvent({
@@ -950,8 +1015,8 @@ export class AgentInstance {
         timestamp: new Date(),
         macroCycle: this.c,
         tick: this.t,
-        targetToolId: 'exec',
-        errorDetail: detail,
+        targetToolId: syntaxErrCall.name,
+        errorDetail: syntaxErrCall.errorDetail,
         recoveryDirective: this.currentDirective
       });
       return {
@@ -973,12 +1038,25 @@ export class AgentInstance {
       const parsed = termContract.schema.safeParse(termCall.payload);
 
       if (!parsed.success) {
+        const rawTermValue = isDataValue(termCall.payload) ? termCall.payload : String(termCall.payload);
+        const termPayload: DataRecord = isDataRecord(rawTermValue)
+          ? rawTermValue
+          : { value: rawTermValue };
+
+        this.appendMessage({
+          role: 'agent',
+          channel: 'call',
+          callId: termCall.id,
+          content: { name: termCall.name, payload: termPayload }
+        });
+
         const detail = JSON.stringify(parsed.error.format());
         this.currentDirective = {
           type: 'err_schema',
           targetToolId: termCall.name,
           schemaErrorDetail: detail,
-          prompt: this.framework.policy.formatSchemaErrorPrompt(termCall.name, detail)
+          prompt: this.framework.policy.formatSchemaErrorPrompt(termCall.name, detail),
+          callId: termCall.id
         };
         this.transitionTo('q_repair', 'exec_term_schema_error', { toolId: termCall.name });
         this.repairPhase = 'exec';
@@ -1001,11 +1079,16 @@ export class AgentInstance {
         };
       }
 
+      const rawTermValue = isDataValue(parsed.data) ? parsed.data : String(parsed.data);
+      const termPayload: DataRecord = isDataRecord(rawTermValue)
+        ? rawTermValue
+        : { value: rawTermValue };
+
       this.appendMessage({
         role: 'agent',
         channel: 'call',
         callId: termCall.id,
-        content: parsed.data
+        content: { name: termCall.name, payload: termPayload }
       });
 
       this.t++;
@@ -1038,6 +1121,18 @@ export class AgentInstance {
 
     for (const call of calls) {
       if (!this.state.Ta.has(call.name)) {
+        const rawPayload = isDataValue(call.payload) ? call.payload : String(call.payload);
+        const worldPayload: DataRecord = isDataRecord(rawPayload)
+          ? rawPayload
+          : { value: rawPayload };
+
+        this.appendMessage({
+          role: 'agent',
+          channel: 'call',
+          callId: call.id,
+          content: { name: call.name, payload: worldPayload }
+        });
+
         const detail = this.framework.policy.formatInternalErrorDetail('unmounted_world_tool', {
           toolId: call.name
         });
@@ -1045,7 +1140,8 @@ export class AgentInstance {
           type: 'err_schema',
           targetToolId: call.name,
           schemaErrorDetail: detail,
-          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
+          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail),
+          callId: call.id
         };
         this.transitionTo('q_repair', 'exec_world_unmounted_tool', { toolId: call.name });
         this.repairPhase = 'exec';
@@ -1075,12 +1171,25 @@ export class AgentInstance {
 
       const parsed = worldDef.parameters.safeParse(call.payload);
       if (!parsed.success) {
+        const rawPayload = isDataValue(call.payload) ? call.payload : String(call.payload);
+        const worldPayload: DataRecord = isDataRecord(rawPayload)
+          ? rawPayload
+          : { value: rawPayload };
+
+        this.appendMessage({
+          role: 'agent',
+          channel: 'call',
+          callId: call.id,
+          content: { name: call.name, payload: worldPayload }
+        });
+
         const detail = JSON.stringify(parsed.error.format());
         this.currentDirective = {
           type: 'err_schema',
           targetToolId: call.name,
           schemaErrorDetail: detail,
-          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail)
+          prompt: this.framework.policy.formatSchemaErrorPrompt(call.name, detail),
+          callId: call.id
         };
         this.transitionTo('q_repair', 'exec_world_schema_error', { toolId: call.name });
         this.repairPhase = 'exec';
@@ -1103,17 +1212,22 @@ export class AgentInstance {
         };
       }
 
+      const rawWorldValue = isDataValue(parsed.data) ? parsed.data : String(parsed.data);
+      const worldPayload: DataRecord = isDataRecord(rawWorldValue)
+        ? rawWorldValue
+        : { value: rawWorldValue };
+
       this.appendMessage({
         role: 'agent',
         channel: 'call',
         callId: call.id,
-        content: parsed.data
+        content: { name: call.name, payload: worldPayload }
       });
 
       validWorldCalls.push({
         id: call.id,
         name: call.name,
-        payload: parsed.data
+        payload: worldPayload
       });
     }
 
@@ -1142,9 +1256,12 @@ export class AgentInstance {
   /**
    * Micro-passo nello Stato di Riparazione (q_repair)
    */
-  private async stepRepair(): Promise<StepOutcome> {
-    if (!this.currentDirective) {
-      throw new Error("Impossibile eseguire stepRepair senza una direttiva d'errore attiva.");
+  private async stepRepair(): Promise<StepOutcome<T>> {
+    if (
+      !this.currentDirective ||
+      (this.currentDirective.type !== 'err_schema' && this.currentDirective.type !== 'err_syntax')
+    ) {
+      throw new Error("Impossibile eseguire stepRepair senza una direttiva d'errore attiva (err_schema o err_syntax).");
     }
 
     this.appendDirectiveMessage(this.currentDirective);
@@ -1179,16 +1296,13 @@ export class AgentInstance {
 
     // Sottocaso 1: Abort esplicito (a_abort_call)
     if (call && call.name === 'a_abort_call') {
-      const targetId =
-        this.currentDirective.type === 'err_schema'
-          ? this.currentDirective.targetToolId
-          : 'unknown';
+      const targetId = this.currentDirective.targetToolId;
 
       this.appendMessage({
         role: 'agent',
         channel: 'call',
         callId: call.id,
-        content: 'a_abort_call()'
+        content: { name: 'a_abort_call', payload: {} }
       });
 
       this.appendMessage({
@@ -1290,20 +1404,53 @@ export class AgentInstance {
     };
   }
 
-  private appendMessage(msg: Omit<Message, 'index' | 'tau'>): void {
+  private appendMessage(msg: MessageInput): void {
     const fullMessage: Message = {
+      ...msg,
       index: this.state.Ep.length,
-      tau: { c: this.c, t: this.t },
-      ...msg
+      tau: { c: this.c, t: this.t }
     };
     this.state.Ep.push(fullMessage);
   }
 
   private appendDirectiveMessage(directive: Directive): void {
-    this.appendMessage({
-      role: 'orchestrator',
-      channel: 'directive',
-      content: this.framework.policy.formatDirectiveMessageContent(directive)
-    });
+    if (directive.type === 'err_schema') {
+      this.appendMessage({
+        role: 'orchestrator',
+        channel: 'directive',
+        content: this.framework.policy.formatDirectiveMessageContent(directive),
+        directiveType: 'err_schema',
+        targetToolId: directive.targetToolId,
+        schemaErrorDetail: directive.schemaErrorDetail,
+        callId: directive.callId
+      });
+    } else if (directive.type === 'err_syntax') {
+      this.appendMessage({
+        role: 'orchestrator',
+        channel: 'directive',
+        content: this.framework.policy.formatDirectiveMessageContent(directive),
+        directiveType: 'err_syntax',
+        targetToolId: directive.targetToolId,
+        rawText: directive.rawText,
+        syntaxErrorDetail: directive.syntaxErrorDetail,
+        callId: directive.callId
+      });
+    } else {
+      this.appendMessage({
+        role: 'orchestrator',
+        channel: 'directive',
+        content: this.framework.policy.formatDirectiveMessageContent(directive),
+        directiveType: directive.type
+      });
+    }
+  }
+
+  private resolveCanonicalId(toolName: string): CanonicalCognitiveActionId | undefined {
+    const fromMap = this.toolNameToCanonical.get(toolName);
+    if (fromMap) return fromMap;
+    if (isCanonicalCognitiveActionId(toolName) && this.canonicalToToolName.has(toolName)) {
+      return toolName;
+    }
+    return undefined;
   }
 }
