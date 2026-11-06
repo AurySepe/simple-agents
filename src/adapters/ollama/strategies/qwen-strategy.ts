@@ -26,6 +26,7 @@ import {
  */
 export class QwenModelStrategy implements ModelFamilyStrategy {
   readonly reasoningFormat: OllamaReasoningFormat;
+  readonly includeHistoricalThinking: boolean;
 
   constructor(options: QwenStrategyOptions) {
     if (!options || !options.reasoningFormat) {
@@ -34,6 +35,7 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
       );
     }
     this.reasoningFormat = options.reasoningFormat;
+    this.includeHistoricalThinking = options.includeHistoricalThinking ?? false;
   }
   formatContext(context: InferenceTriple): {
     messages: OllamaMessage[];
@@ -61,7 +63,9 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
       if (pendingThought !== undefined || pendingCalls.length > 0) {
         const assistantMsg: OllamaMessage = {
           role: 'assistant',
-          content: pendingThought ?? ''
+          content: this.includeHistoricalThinking
+            ? (pendingThought ?? '')
+            : (pendingCalls.length === 0 ? (pendingThought ?? '') : '')
         };
 
         if (pendingCalls.length > 0) {
@@ -217,7 +221,7 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
         );
       }
       throw new Error(
-        `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Contenuto: "${rawMessage.content || thought || ''}"`
+        `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Thinking: "${thought || ''}". Contenuto: "${rawMessage.content || ''}"`
       );
     }
 

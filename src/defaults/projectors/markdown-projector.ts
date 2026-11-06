@@ -21,15 +21,23 @@ export function createMarkdownProjector(options?: MarkdownProjectorOptions): Sys
       sections.push(awareness);
     }
 
-    // 3. Obiettivo Operativo Corrente
+    // 3. Fase Attuale del Ciclo (se fornita dalla policy)
+    const isIntro = directive.type === 'start_intro' || directive.type === 'loop_intro';
+    const isExec = directive.type === 'start_exec';
+    const phaseKey = isIntro ? 'intro' : (isExec ? 'exec' : undefined);
+    if (phaseKey && policy?.formatPhaseNotice) {
+      sections.push(`## FASE ATTUALE DELL'AUTOMA:\n${policy.formatPhaseNotice(phaseKey)}`);
+    }
+
+    // 4. Obiettivo Operativo Corrente
     sections.push(`## OBIETTIVO CORRENTE:\n${state.Ms}`);
 
-    // 4. Dati in Memoria di Lavoro
+    // 5. Dati in Memoria di Lavoro
     if (Object.keys(state.Ds).length > 0) {
       sections.push(`## DATI IN MEMORIA DI LAVORO:\n\`\`\`json\n${JSON.stringify(state.Ds, null, 2)}\n\`\`\``);
     }
 
-    // 5. Conoscenza e Linee Guida Attive
+    // 6. Conoscenza e Linee Guida Attive
     if (state.Ka.size > 0) {
       const conceptEntries: string[] = [];
       for (const [id, concept] of state.Ka.entries()) {
@@ -38,12 +46,11 @@ export function createMarkdownProjector(options?: MarkdownProjectorOptions): Sys
       sections.push(`## LINEE GUIDA E DOCUMENTI ATTIVI:\n${conceptEntries.join('\n\n')}`);
     }
 
-    // 6. Strumenti del Mondo in Dotazione
+    // 7. Strumenti del Mondo in Dotazione
     if (state.Ta.size > 0) {
-      const isIntro = directive.type === 'start_intro' || directive.type === 'loop_intro';
       if (isIntro) {
         sections.push(
-          `## STRUMENTI DEL MONDO ESTERNO (ATTIVI SOLO IN FASE OPERATIVA):\n${Array.from(state.Ta).map((t) => `- \`${t}\``).join('\n')}`
+          `## STRUMENTI DEL MONDO IN DOTAZIONE:\n${Array.from(state.Ta).map((t) => `- \`${t}\``).join('\n')}`
         );
       } else {
         sections.push(
@@ -52,7 +59,7 @@ export function createMarkdownProjector(options?: MarkdownProjectorOptions): Sys
       }
     }
 
-    // 7. Richiesta di Correzione Parametri
+    // 8. Richiesta di Correzione Parametri
     if (directive.type === 'err_schema') {
       sections.push(
         `> [!IMPORTANT]\n> **RICHIESTA DI CORREZIONE PARAMETRI**:\n> La chiamata per l'azione \`${directive.targetToolId}\` non è valida.\n> Dettaglio dell'errore: ${directive.schemaErrorDetail}\n> Correggi i parametri per \`${directive.targetToolId}\` ed effettua nuovamente la chiamata, oppure emetti \`a_abort_call\` per annullarla.`

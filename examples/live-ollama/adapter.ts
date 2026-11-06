@@ -19,6 +19,7 @@ export interface CreateOllamaAdapterOptions {
   temperature?: number;
   numCtx?: number;
   timeoutMs?: number;
+  includeHistoricalThinking?: boolean;
 }
 
 export function createOllamaQwenAdapter(options?: CreateOllamaAdapterOptions): LanguageModelAdapter {
@@ -27,6 +28,7 @@ export function createOllamaQwenAdapter(options?: CreateOllamaAdapterOptions): L
   const temperature = options?.temperature ?? 0;
   const numCtx = options?.numCtx ?? 16384;
   const timeoutMs = options?.timeoutMs ?? 120000;
+  const includeHistoricalThinking = options?.includeHistoricalThinking ?? false;
 
   // 1. Client HTTP di trasporto
   const client = new OllamaClient({
@@ -36,7 +38,8 @@ export function createOllamaQwenAdapter(options?: CreateOllamaAdapterOptions): L
 
   // 2. Strategia di famiglia Qwen (estrazione deterministica del pensiero dal campo native message.thinking)
   const strategy = new QwenModelStrategy({
-    reasoningFormat: 'native_field'
+    reasoningFormat: 'native_field',
+    includeHistoricalThinking
   });
 
   // 3. Adapter composito

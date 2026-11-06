@@ -141,6 +141,7 @@ export interface RunResult<T = DataValue> {
  */
 export interface OrchestratorPolicy {
   systemAwarenessPrompt?: string;
+  formatPhaseNotice?(phase: 'intro' | 'exec'): string;
   formatDirectivePrompt(type: 'start_intro' | 'loop_intro' | 'start_exec'): string;
   formatSchemaErrorPrompt(targetToolId: string, errorDetail: string): string;
   formatSyntaxErrorPrompt(targetToolId: string, rawText: string, errorDetail: string): string;

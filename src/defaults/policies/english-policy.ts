@@ -8,27 +8,33 @@ export const defaultEnglishPolicy: OrchestratorPolicy = {
   systemAwarenessPrompt: `## EXECUTION PROTOCOL (TWO-PHASE CYCLE):
 System operation is governed by a recurring two-phase architecture:
 1. **Internal Reflection Phase (Introspection)**:
-   - Active at session start and upon receiving new data or results from the external World.
-   - In this phase, analyze the available information within your thinking process and plan upcoming actions.
-   - You may use any enabled cognitive tools to manage your internal state or working memory.
-   - When internal deliberation is complete and you are ready to act in the World or conclude the task, invoke 'a_concludi_intro'.
-2. **Operational Phase (Action in the World or Termination)**:
-   - Both external World tools and any designated formal termination action for completing the task are active.
-   - Use external World tools to interact with the environment, or, if operations and verifications are complete, invoke the formal termination action to submit the final output and conclude.
-   - Upon completion of World actions, the system returns results and brings you back to the reflection phase to examine them.
+   - Active at session start and upon receiving new data or results from the external environment.
+   - Dedicated solely to internal processing: examine information, understand concepts, and update internal state or working memory via enabled cognitive tools.
+   - In this phase you do NOT interact with the environment or conclude the task: detailed planning of operational actions or final replies is not required or intended here, as that will be addressed directly in the subsequent operational phase.
+   - When internal deliberation is complete, the designated action to proceed is solely 'a_concludi_intro'.
+2. **Operational Phase (Action in Environment or Termination)**:
+   - In this phase, all external environment tools and all formal termination actions for task completion become fully accessible.
+   - Use available tools to execute required actions or, when the task is complete, invoke the formal termination action to submit the final result.
+   - Upon completion of environment actions, the system returns results and brings you back to the reflection phase to assimilate them.
 3. **Fundamental Response Rule**:
    - At any point, the ONLY tools you may invoke are strictly those provided in the active tools list for this specific turn.
-   - During the Internal Reflection Phase, external World tools and termination actions are temporarily locked.
-   - NEVER reply with plain text lacking a tool call to conclude the task: if a termination action is defined, the final outcome must be delivered by invoking that action. If you are in the Internal Reflection Phase, invoke 'a_concludi_intro' first to transition to the Operational Phase and unlock the termination action.`,
+   - During the Internal Reflection Phase, operational and termination tools are not active: do not attempt to invoke them or respond with plain text. When you intend to act or conclude, invoke 'a_concludi_intro' to enter the Operational Phase where those actions will be available.`,
+
+  formatPhaseNotice: (phase) => {
+    if (phase === 'intro') {
+      return `▶ **Internal Reflection Phase (Introspection)**\nIn this turn you are in internal reflection to examine data and update state. Operational tools and termination actions are not active in this micro-step: do not plan the operational action or final reply right now. When you have examined information, invoke 'a_concludi_intro' to access the operational phase where you can act or conclude.`;
+    }
+    return `▶ **Operational Phase (Action in Environment or Termination)**\nIn this turn you are in the operational phase. All tools for interacting with the environment and termination actions for submitting the final result and concluding the task are active.`;
+  },
 
   formatDirectivePrompt: (type) => {
     switch (type) {
       case 'start_intro':
-        return "Internal reflection phase. You may examine available information and update your internal state or goal using enabled cognitive tools. External World tools and termination actions are not callable in this turn: the designated action to complete reflection and access the operational phase (to act on the World or conclude the task) is 'a_concludi_intro'.";
+        return "Internal reflection phase to examine data and update internal state via enabled cognitive tools. All operational actions (interacting with the environment or formal task termination) will be accessible in the subsequent operational phase once reflection is concluded via 'a_concludi_intro'.";
       case 'loop_intro':
-        return "Internal state updated. You may perform further cognitive adjustments or, when reflection is complete, proceed to the operational phase via 'a_concludi_intro'.";
+        return "Internal state updated. You may perform further cognitive adjustments or proceed to the operational phase via 'a_concludi_intro'.";
       case 'start_exec':
-        return "Operational phase active. You can now use your available tools to interact with the environment, or invoke the termination action to provide the final response and conclude the task.";
+        return "Operational phase active. You can now use available tools to interact with the environment, or invoke the termination action to submit the final result and conclude the task.";
     }
   },
 

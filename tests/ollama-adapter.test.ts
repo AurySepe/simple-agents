@@ -184,10 +184,10 @@ describe('Ollama Transport & Qwen Strategy', () => {
         content: 'Fase di introspezione'
       });
 
-      // 4. Agent thought + call raggruppati in un unico messaggio assistant
+      // 4. Agent thought + call raggruppati in un unico messaggio assistant (con thinking effimero di default)
       expect(messages[3]).toEqual({
         role: 'assistant',
-        content: 'Sto per controllare il database',
+        content: '',
         tool_calls: [
           {
             id: 'call_init',
@@ -211,6 +211,28 @@ describe('Ollama Transport & Qwen Strategy', () => {
       expect(tools).toHaveLength(1);
       expect(tools![0].function.name).toBe('w_db_ordini');
       expect(tools![0].function.parameters.type).toBe('object');
+    });
+
+    it('deve includere il thinking pregresso quando includeHistoricalThinking è true', () => {
+      const strategy = new QwenModelStrategy({
+        reasoningFormat: 'native_field',
+        includeHistoricalThinking: true
+      });
+      const { messages } = strategy.formatContext(sampleTriple);
+      expect(messages[3]).toEqual({
+        role: 'assistant',
+        content: 'Sto per controllare il database',
+        tool_calls: [
+          {
+            id: 'call_init',
+            type: 'function',
+            function: {
+              name: 'w_db_ordini',
+              arguments: { cliente_id: 55 }
+            }
+          }
+        ]
+      });
     });
 
     it('deve mappare i risultati delle azioni cognitive (role: orchestrator, channel: result) a role: tool con tool_call_id', () => {
@@ -302,10 +324,10 @@ describe('Ollama Transport & Qwen Strategy', () => {
         content: 'Esegui operazione con parametro'
       });
 
-      // 3. Assistant con thought e tool_calls
+      // 3. Assistant con tool_calls (senza thinking pregresso per risparmio contesto)
       expect(messages[2]).toEqual({
         role: 'assistant',
-        content: 'Provo a chiamare il tool',
+        content: '',
         tool_calls: [
           {
             id: 'call_err_42',

@@ -9,27 +9,33 @@ export const defaultItalianPolicy: OrchestratorPolicy = {
   systemAwarenessPrompt: `## PROTOCOLLO DI ESECUZIONE (CICLO A DUE FASI):
 Il funzionamento del sistema è governato da un'architettura a due fasi ricorrenti:
 1. **Fase di Riflessione Interna (Introspezione)**:
-   - È attiva all'avvio della sessione e ad ogni ricezione di nuovi dati o esiti dal Mondo esterno.
-   - In questa fase analizzi nel tuo pensiero (thinking) le informazioni disponibili e pianifichi le prossime azioni.
-   - Puoi utilizzare eventuali strumenti cognitivi abilitati per gestire il tuo stato interno o la tua memoria.
-   - Quando ritieni di aver completato le valutazioni interne e sei pronto ad agire nel Mondo o a terminare il compito, invoca l'azione 'a_concludi_intro'.
-2. **Fase Operativa (Azione nel Mondo o Terminazione)**:
-   - Sono attivi sia gli strumenti del Mondo esterno a tua disposizione, sia l'eventuale azione formale di terminazione prevista per la chiusura del compito.
-   - Utilizzi gli strumenti del Mondo esterno per interagire con l'ambiente, oppure, se le operazioni o verifiche sono concluse, invochi l'azione formale di terminazione per trasmettere l'esito finale e chiudere.
-   - Al termine dell'esecuzione di azioni nel Mondo, il sistema restituirà i risultati e ti ricondurrà nella fase di riflessione per esaminarli.
+   - È attiva all'avvio della sessione e ad ogni ricezione di nuovi dati o esiti dall'ambiente esterno.
+   - Serve esclusivamente all'elaborazione interna: esaminare le informazioni, comprendere i concetti ed eventualmente aggiornare il proprio stato interiore o memoria di lavoro mediante gli strumenti cognitivi abilitati.
+   - In questa fase NON si interagisce con l'ambiente né si conclude il compito: non è necessario né opportuno pianificare in dettaglio l'azione operativa o la risposta finale, poiché tale valutazione avverrà direttamente nella successiva fase operativa.
+   - Quando la riflessione interiore è conclusa, l'azione designata per procedere è unicamente 'a_concludi_intro'.
+2. **Fase Operativa (Azione nell'Ambiente o Terminazione)**:
+   - In questa fase diventano pienamente accessibili tutti gli strumenti per interagire con l'ambiente esterno e tutte le azioni contrattuali di terminazione per la chiusura del compito.
+   - Utilizzi gli strumenti disponibili per effettuare le operazioni necessarie oppure, quando il compito è completato, invochi l'azione contrattuale di terminazione per trasmettere l'esito finale.
+   - Al termine dell'esecuzione di azioni nell'ambiente, il sistema restituirà i risultati e ti ricondurrà nella fase di riflessione per assimilarli.
 3. **Regola Fondamentale di Risposta**:
    - In qualsiasi momento, gli UNICI strumenti che puoi invocare sono rigorosamente quelli definiti nella lista dei tool attivi per questo specifico turno.
-   - Durante la Fase di Riflessione Interna gli strumenti del Mondo esterno e le azioni di terminazione sono temporaneamente bloccati.
-   - Non rispondere MAI con semplice testo libero privo di tool call per concludere il compito: se è presente un'azione di terminazione, l'esito finale deve essere obbligatoriamente comunicato tramite tale azione formale. Se ti trovi nella Fase di Riflessione Interna, invoca prima 'a_concludi_intro' per passare alla Fase Operativa e sbloccare l'azione di terminazione.`,
+   - Durante la Fase di Riflessione Interna gli strumenti operativi e di terminazione non sono attivi: non cercare di chiamarli né rispondere con testo libero. Se intendi agire o concludere, invoca 'a_concludi_intro' per entrare nella Fase Operativa dove tali azioni saranno disponibili.`,
+
+  formatPhaseNotice: (phase) => {
+    if (phase === 'intro') {
+      return `▶ **Fase di Riflessione Interna (Introspezione)**\nIn questo turno sei nella riflessione interiore per esaminare i dati e aggiornare lo stato. Gli strumenti operativi e le azioni di terminazione non sono attivi in questo micro-passo: non pianificare l'azione o la risposta finale adesso. Quando hai esaminato le informazioni, invoca 'a_concludi_intro' per accedere alla fase operativa dove potrai agire o concludere.`;
+    }
+    return `▶ **Fase Operativa (Azione nell'Ambiente o Terminazione)**\nIn questo turno sei nella fase operativa. Sono attivi tutti gli strumenti per interagire con l'ambiente e le azioni di terminazione per trasmettere l'esito finale e concludere il compito.`;
+  },
 
   formatDirectivePrompt: (type) => {
     switch (type) {
       case 'start_intro':
-        return "Fase di riflessione interna. Puoi esaminare le informazioni disponibili e aggiornare il tuo stato o scopo interiore mediante gli strumenti cognitivi abilitati. Gli strumenti del Mondo esterno e di terminazione non sono invocabili in questo micro-passo: l'azione designata per terminare la riflessione e accedere alla fase operativa (per agire sul Mondo o per concludere il compito) è 'a_concludi_intro'.";
+        return "Fase di riflessione interna per esaminare i dati e aggiornare il proprio stato interiore mediante gli strumenti cognitivi abilitati. Tutte le azioni operative (verso l'ambiente o per la terminazione formale del compito) saranno accessibili nella successiva fase operativa una volta conclusa la riflessione tramite 'a_concludi_intro'.";
       case 'loop_intro':
-        return "Stato interno aggiornato. Puoi effettuare ulteriori operazioni cognitive oppure, quando riterrai conclusa la riflessione, passare alla fase operativa tramite 'a_concludi_intro'.";
+        return "Stato interiore aggiornato. Puoi effettuare ulteriori regolazioni cognitive oppure procedere alla fase operativa tramite 'a_concludi_intro'.";
       case 'start_exec':
-        return "Fase operativa attiva. Ora puoi utilizzare gli strumenti a tua disposizione per interagire con l'ambiente, oppure invocare l'azione di terminazione per fornire la risposta finale e concludere il compito.";
+        return "Fase operativa attiva. Ora puoi utilizzare gli strumenti disponibili per interagire con l'ambiente, oppure invocare l'azione di terminazione per trasmettere l'esito finale e concludere il compito.";
     }
   },
 

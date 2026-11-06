@@ -100,6 +100,7 @@ export type OllamaReasoningFormat = 'native_field' | 'think_tags' | 'none';
 
 export interface QwenStrategyOptions {
   reasoningFormat: OllamaReasoningFormat;
+  includeHistoricalThinking?: boolean;
 }
 
 /**
