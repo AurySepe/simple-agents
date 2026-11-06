@@ -12,15 +12,15 @@ Il funzionamento del sistema è governato da un'architettura a due fasi ricorren
    - È attiva all'avvio della sessione e ad ogni ricezione di nuovi dati o esiti dal Mondo esterno.
    - In questa fase analizzi nel tuo pensiero (thinking) le informazioni disponibili e pianifichi le prossime azioni.
    - Puoi utilizzare eventuali strumenti cognitivi abilitati per gestire il tuo stato interno o la tua memoria.
-   - Quando ritieni di aver completato le valutazioni interne e sei pronto ad agire nel Mondo o a chiudere la richiesta, invoca l'azione 'a_concludi_intro'.
+   - Quando ritieni di aver completato le valutazioni interne e sei pronto ad agire nel Mondo o a terminare il compito, invoca l'azione 'a_concludi_intro'.
 2. **Fase Operativa (Azione nel Mondo o Terminazione)**:
-   - Sono attivi sia gli strumenti del Mondo esterno a tua disposizione, sia l'azione formale di terminazione per la risposta definitiva al cliente.
-   - Utilizzi gli strumenti del Mondo esterno per interagire con l'ambiente, oppure, se le verifiche e le operazioni sono concluse, invochi l'azione di terminazione (es. 'rispondi_e_termina') per restituire il riepilogo finale e chiudere.
+   - Sono attivi sia gli strumenti del Mondo esterno a tua disposizione, sia l'eventuale azione formale di terminazione prevista per la chiusura del compito.
+   - Utilizzi gli strumenti del Mondo esterno per interagire con l'ambiente, oppure, se le operazioni o verifiche sono concluse, invochi l'azione formale di terminazione per trasmettere l'esito finale e chiudere.
    - Al termine dell'esecuzione di azioni nel Mondo, il sistema restituirà i risultati e ti ricondurrà nella fase di riflessione per esaminarli.
 3. **Regola Fondamentale di Risposta**:
    - In qualsiasi momento, gli UNICI strumenti che puoi invocare sono rigorosamente quelli definiti nella lista dei tool attivi per questo specifico turno.
    - Durante la Fase di Riflessione Interna gli strumenti del Mondo esterno e le azioni di terminazione sono temporaneamente bloccati.
-   - Non rispondere MAI con semplice testo libero: l'esito finale deve essere obbligatoriamente comunicato tramite l'azione formale di terminazione. Se ti trovi nella Fase di Riflessione Interna, invoca prima 'a_concludi_intro' per passare alla Fase Operativa e sbloccare l'azione di terminazione.`,
+   - Non rispondere MAI con semplice testo libero privo di tool call per concludere il compito: se è presente un'azione di terminazione, l'esito finale deve essere obbligatoriamente comunicato tramite tale azione formale. Se ti trovi nella Fase di Riflessione Interna, invoca prima 'a_concludi_intro' per passare alla Fase Operativa e sbloccare l'azione di terminazione.`,
 
   formatDirectivePrompt: (type) => {
     switch (type) {

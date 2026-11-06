@@ -43,7 +43,7 @@ export function createMarkdownProjector(options?: MarkdownProjectorOptions): Sys
       const isIntro = directive.type === 'start_intro' || directive.type === 'loop_intro';
       if (isIntro) {
         sections.push(
-          `## DOTAZIONE STRUMENTI MONDO (ATTIVI SOLO IN FASE OPERATIVA DOPO 'a_concludi_intro'):\n${Array.from(state.Ta).map((t) => `- \`${t}\``).join('\n')}`
+          `## STRUMENTI DEL MONDO ESTERNO (ATTIVI SOLO IN FASE OPERATIVA):\n${Array.from(state.Ta).map((t) => `- \`${t}\``).join('\n')}`
         );
       } else {
         sections.push(

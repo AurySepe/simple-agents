@@ -11,15 +11,15 @@ System operation is governed by a recurring two-phase architecture:
    - Active at session start and upon receiving new data or results from the external World.
    - In this phase, analyze the available information within your thinking process and plan upcoming actions.
    - You may use any enabled cognitive tools to manage your internal state or working memory.
-   - When internal deliberation is complete and you are ready to act in the World or conclude the request, invoke 'a_concludi_intro'.
+   - When internal deliberation is complete and you are ready to act in the World or conclude the task, invoke 'a_concludi_intro'.
 2. **Operational Phase (Action in the World or Termination)**:
-   - Both external World tools and the formal termination action for the final response are active.
-   - Use external World tools to interact with the environment, or, if all operations are complete, invoke the termination action (e.g. 'rispondi_e_termina') with the required data to conclude.
+   - Both external World tools and any designated formal termination action for completing the task are active.
+   - Use external World tools to interact with the environment, or, if operations and verifications are complete, invoke the formal termination action to submit the final output and conclude.
    - Upon completion of World actions, the system returns results and brings you back to the reflection phase to examine them.
 3. **Fundamental Response Rule**:
    - At any point, the ONLY tools you may invoke are strictly those provided in the active tools list for this specific turn.
    - During the Internal Reflection Phase, external World tools and termination actions are temporarily locked.
-   - NEVER reply with plain text to conclude the task: the final response must be delivered through the dedicated termination action. If you are in the Internal Reflection Phase, invoke 'a_concludi_intro' first to transition to the Operational Phase and unlock the termination action.`,
+   - NEVER reply with plain text lacking a tool call to conclude the task: if a termination action is defined, the final outcome must be delivered by invoking that action. If you are in the Internal Reflection Phase, invoke 'a_concludi_intro' first to transition to the Operational Phase and unlock the termination action.`,
 
   formatDirectivePrompt: (type) => {
     switch (type) {
