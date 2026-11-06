@@ -183,6 +183,7 @@ describe('Livello 1: Istanziazione del FrameworkEngine Immutabile', () => {
       formatDirectivePrompt: (type) => {
         switch (type) {
           case 'start_intro':
+          case 'resume_intro':
             return 'Modalità introspettiva attiva. Allinea il tuo stato interno prima di interagire.';
           case 'loop_intro':
             return 'Stato aggiornato. Esegui ulteriori modifiche cognitive o concludi con a_concludi_intro.';

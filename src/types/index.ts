@@ -86,7 +86,7 @@ export interface BaseDirectiveMessage {
 }
 
 export interface OperationalDirectiveMessage extends BaseDirectiveMessage {
-  directiveType?: 'start_intro' | 'loop_intro' | 'start_exec';
+  directiveType?: 'start_intro' | 'resume_intro' | 'loop_intro' | 'start_exec';
   callId?: never;
   targetToolId?: never;
   schemaErrorDetail?: never;
@@ -322,6 +322,11 @@ export interface StartIntroDirective {
   prompt: string;
 }
 
+export interface ResumeIntroDirective {
+  type: 'resume_intro';
+  prompt: string;
+}
+
 export interface LoopIntroDirective {
   type: 'loop_intro';
   prompt: string;
@@ -351,6 +356,7 @@ export interface ErrSyntaxDirective {
 
 export type Directive =
   | StartIntroDirective
+  | ResumeIntroDirective
   | LoopIntroDirective
   | StartExecDirective
   | ErrSchemaDirective

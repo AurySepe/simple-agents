@@ -142,7 +142,7 @@ export interface RunResult<T = DataValue> {
 export interface OrchestratorPolicy {
   systemAwarenessPrompt?: string;
   formatPhaseNotice?(phase: 'intro' | 'exec'): string;
-  formatDirectivePrompt(type: 'start_intro' | 'loop_intro' | 'start_exec'): string;
+  formatDirectivePrompt(type: 'start_intro' | 'resume_intro' | 'loop_intro' | 'start_exec'): string;
   formatSchemaErrorPrompt(targetToolId: string, errorDetail: string): string;
   formatSyntaxErrorPrompt(targetToolId: string, rawText: string, errorDetail: string): string;
   formatDirectiveMessageContent(directive: Directive): DirectiveContent;
@@ -424,9 +424,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
     // 3. Router
     if (this.normalizedAInt.size > 0) {
       this.transitionTo('q_intro', 'router_initial_intro');
+      const isWorldResume = Boolean(payload.worldResults && payload.worldResults.length > 0);
+      const directiveType = isWorldResume ? 'resume_intro' : 'start_intro';
       this.currentDirective = {
-        type: 'start_intro',
-        prompt: this.framework.policy.formatDirectivePrompt('start_intro')
+        type: directiveType,
+        prompt: this.framework.policy.formatDirectivePrompt(directiveType)
       };
     } else {
       this.transitionTo('q_exec', 'router_initial_exec');

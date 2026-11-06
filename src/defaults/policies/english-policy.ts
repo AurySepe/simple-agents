@@ -30,7 +30,9 @@ System operation is governed by a recurring two-phase architecture:
   formatDirectivePrompt: (type) => {
     switch (type) {
       case 'start_intro':
-        return "Internal reflection phase to examine data and update internal state via enabled cognitive tools. All operational actions (interacting with the environment or formal task termination) will be accessible in the subsequent operational phase once reflection is concluded via 'a_concludi_intro'.";
+        return "Initial internal reflection phase to examine the request and update internal state via enabled cognitive tools. All operational actions (interacting with the environment or formal task termination) will be accessible in the subsequent operational phase once reflection is concluded via 'a_concludi_intro'.";
+      case 'resume_intro':
+        return "Results from the external environment received. You have returned to the internal reflection phase to assimilate them and optionally update your internal state. Remember you are in internal reflection (operational and termination tools are not active in this micro-step): to proceed with the next action in the environment or to conclude the task, invoke 'a_concludi_intro'.";
       case 'loop_intro':
         return "Internal state updated. You may perform further cognitive adjustments or proceed to the operational phase via 'a_concludi_intro'.";
       case 'start_exec':
@@ -61,7 +63,7 @@ System operation is governed by a recurring two-phase architecture:
   formatControlActionDescription: (action) => {
     switch (action) {
       case 'a_concludi_intro':
-        return "Finish internal preparation and proceed to the operational execution phase on the task.";
+        return "Conclude current internal reflection and proceed to the operational execution phase on the task.";
       case 'a_abort_call':
         return "Cancel the invalid call and skip the operation to allow execution to proceed.";
     }

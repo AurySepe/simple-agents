@@ -45,6 +45,8 @@ function humanizeDirectiveLabel(directive: { type: string; targetToolId?: string
   switch (directive.type) {
     case 'start_intro':
       return 'Inizio pianificazione (analisi richiesta, ricerca tool e policy)';
+    case 'resume_intro':
+      return 'Rientro in riflessione interna (esame esiti ambiente esterno)';
     case 'loop_intro':
       return 'Affinamento memoria e piano interno';
     case 'start_exec':

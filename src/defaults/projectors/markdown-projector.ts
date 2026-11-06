@@ -22,7 +22,10 @@ export function createMarkdownProjector(options?: MarkdownProjectorOptions): Sys
     }
 
     // 3. Fase Attuale del Ciclo (se fornita dalla policy)
-    const isIntro = directive.type === 'start_intro' || directive.type === 'loop_intro';
+    const isIntro =
+      directive.type === 'start_intro' ||
+      directive.type === 'resume_intro' ||
+      directive.type === 'loop_intro';
     const isExec = directive.type === 'start_exec';
     const phaseKey = isIntro ? 'intro' : (isExec ? 'exec' : undefined);
     if (phaseKey && policy?.formatPhaseNotice) {

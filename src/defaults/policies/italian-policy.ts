@@ -31,7 +31,9 @@ Il funzionamento del sistema è governato da un'architettura a due fasi ricorren
   formatDirectivePrompt: (type) => {
     switch (type) {
       case 'start_intro':
-        return "Fase di riflessione interna per esaminare i dati e aggiornare il proprio stato interiore mediante gli strumenti cognitivi abilitati. Tutte le azioni operative (verso l'ambiente o per la terminazione formale del compito) saranno accessibili nella successiva fase operativa una volta conclusa la riflessione tramite 'a_concludi_intro'.";
+        return "Fase iniziale di riflessione interna per esaminare la richiesta e aggiornare il proprio stato interiore mediante gli strumenti cognitivi abilitati. Tutte le azioni operative (verso l'ambiente o per la terminazione formale del compito) saranno accessibili nella successiva fase operativa una volta conclusa la riflessione tramite 'a_concludi_intro'.";
+      case 'resume_intro':
+        return "Esiti dall'ambiente esterno ricevuti. Sei rientrato nella fase di riflessione interna per assimilarli ed eventualmente aggiornare il tuo stato interiore. Ricorda che ti trovi in riflessione (gli strumenti operativi e di terminazione non sono attivi in questo micro-passo): per procedere con la prossima azione nell'ambiente o per terminare il compito, invoca 'a_concludi_intro'.";
       case 'loop_intro':
         return "Stato interiore aggiornato. Puoi effettuare ulteriori regolazioni cognitive oppure procedere alla fase operativa tramite 'a_concludi_intro'.";
       case 'start_exec':
@@ -62,7 +64,7 @@ Il funzionamento del sistema è governato da un'architettura a due fasi ricorren
   formatControlActionDescription: (action) => {
     switch (action) {
       case 'a_concludi_intro':
-        return "Termina la fase di preparazione interna e avvia la fase operativa di esecuzione sul compito.";
+        return "Conclude la riflessione interna corrente e avvia la fase operativa per agire nell'ambiente o terminare il compito.";
       case 'a_abort_call':
         return "Annulla la chiamata non valida e rinuncia all'operazione per consentire all'esecuzione di proseguire.";
     }

@@ -47,6 +47,7 @@ export function computeVisibleTools(
 
   switch (directive.type) {
     case 'start_intro':
+    case 'resume_intro':
     case 'loop_intro': {
       // Visibili SOLO i tool cognitivi concessi in A_int (tradotti con i metadati della policy)
       // + l'azione atomica di chiusura a_concludi_intro
