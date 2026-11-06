@@ -6,14 +6,30 @@ import { OrchestratorPolicy } from '../../engine/orchestrator.js';
  * formulati per guidare l'LLM con la massima efficacia decisionale.
  */
 export const defaultItalianPolicy: OrchestratorPolicy = {
+  systemAwarenessPrompt: `## PROTOCOLLO DI ESECUZIONE (CICLO A DUE FASI):
+Il funzionamento del sistema è governato da un'architettura a due fasi ricorrenti:
+1. **Fase di Riflessione Interna (Introspezione)**:
+   - È attiva all'avvio della sessione e ad ogni ricezione di nuovi dati o esiti dal Mondo esterno.
+   - In questa fase analizzi nel tuo pensiero (thinking) le informazioni disponibili e pianifichi le prossime azioni.
+   - Puoi utilizzare eventuali strumenti cognitivi abilitati per gestire il tuo stato interno o la tua memoria.
+   - Quando ritieni di aver completato le valutazioni interne e sei pronto ad agire nel Mondo o a chiudere la richiesta, invoca l'azione 'a_concludi_intro'.
+2. **Fase Operativa (Azione nel Mondo o Terminazione)**:
+   - Sono attivi sia gli strumenti del Mondo esterno a tua disposizione, sia l'azione formale di terminazione per la risposta definitiva al cliente.
+   - Utilizzi gli strumenti del Mondo esterno per interagire con l'ambiente, oppure, se le verifiche e le operazioni sono concluse, invochi l'azione di terminazione (es. 'rispondi_e_termina') per restituire il riepilogo finale e chiudere.
+   - Al termine dell'esecuzione di azioni nel Mondo, il sistema restituirà i risultati e ti ricondurrà nella fase di riflessione per esaminarli.
+3. **Regola Fondamentale di Risposta**:
+   - In qualsiasi momento, gli UNICI strumenti che puoi invocare sono rigorosamente quelli definiti nella lista dei tool attivi per questo specifico turno.
+   - Durante la Fase di Riflessione Interna gli strumenti del Mondo esterno e le azioni di terminazione sono temporaneamente bloccati.
+   - Non rispondere MAI con semplice testo libero: l'esito finale deve essere obbligatoriamente comunicato tramite l'azione formale di terminazione. Se ti trovi nella Fase di Riflessione Interna, invoca prima 'a_concludi_intro' per passare alla Fase Operativa e sbloccare l'azione di terminazione.`,
+
   formatDirectivePrompt: (type) => {
     switch (type) {
       case 'start_intro':
-        return "Fase di preparazione interna. Prima di interagire con l'esterno, puoi aggiornare il tuo obiettivo, memorizzare dati utili o attivare gli strumenti e i documenti necessari. Quando hai completato i preparativi e sei pronto ad agire, chiama 'a_concludi_intro'.";
+        return "Fase di riflessione interna. Puoi esaminare le informazioni disponibili e aggiornare il tuo stato o scopo interiore mediante gli strumenti cognitivi abilitati. Gli strumenti del Mondo esterno e di terminazione non sono invocabili in questo micro-passo: l'azione designata per terminare la riflessione e accedere alla fase operativa (per agire sul Mondo o per concludere il compito) è 'a_concludi_intro'.";
       case 'loop_intro':
-        return "Memoria interna aggiornata. Puoi effettuare ulteriori modifiche o chiamare 'a_concludi_intro' per passare all'azione.";
+        return "Stato interno aggiornato. Puoi effettuare ulteriori operazioni cognitive oppure, quando riterrai conclusa la riflessione, passare alla fase operativa tramite 'a_concludi_intro'.";
       case 'start_exec':
-        return "Fase operativa attiva. Ora puoi utilizzare gli strumenti a tua disposizione per interagire con l'ambiente, oppure inviare la tua risposta finale per concludere il compito.";
+        return "Fase operativa attiva. Ora puoi utilizzare gli strumenti a tua disposizione per interagire con l'ambiente, oppure invocare l'azione di terminazione per fornire la risposta finale e concludere il compito.";
     }
   },
 
@@ -51,7 +67,7 @@ export const defaultItalianPolicy: OrchestratorPolicy = {
       case 'xor_concludi_violation':
         return "'a_concludi_intro' serve esclusivamente a chiudere la preparazione: invocala da sola, senza combinare altre azioni nello stesso messaggio.";
       case 'unauthorized_cognitive_action':
-        return `L'azione '${context?.toolId}' non è abilitata per questa sessione di lavoro.`;
+        return `L'azione '${context?.toolId}' appartiene al Mondo esterno o non è abilitata per la riflessione interna. Gli strumenti del Mondo esterno sono accessibili solo nella fase operativa (dopo 'a_concludi_intro'). Invoca 'a_abort_call' per annullare la chiamata non valida.`;
       case 'unregistered_cognitive_action':
         return `L'azione '${context?.toolId}' non è riconosciuta dal sistema.`;
       case 'unmounted_world_tool':

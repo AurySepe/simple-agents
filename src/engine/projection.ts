@@ -155,5 +155,6 @@ export function computeVisibleTools(
  */
 export type SystemFrameProjector = (
   directive: Directive,
-  state: AgentState
+  state: AgentState,
+  policy?: OrchestratorPolicy
 ) => string;

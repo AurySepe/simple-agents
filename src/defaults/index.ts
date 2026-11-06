@@ -16,19 +16,26 @@ export interface DefaultFrameworkConfigOptions {
   cognitiveToolkitOverrides?: Partial<CognitiveToolkit>;
   projector?: SystemFrameProjector;
   policy?: OrchestratorPolicy;
+  awarenessPrompt?: string;
 }
 
 /**
  * Assembla una configurazione completa di Livello 1 pronta all'uso.
  * Per impostazione predefinita utilizza:
  * - CognitiveToolkit in-memory (tutte le 10 primitive canoniche)
- * - Proiettore GitHub-Flavored Markdown
+ * - Proiettore GitHub-Flavored Markdown (con consapevolezza del protocollo a due fasi)
  * - Policy linguistica italiana
  */
 export function createDefaultFrameworkConfig(
   options?: DefaultFrameworkConfigOptions
 ): FrameworkConfig {
-  const policy = options?.policy ?? defaultItalianPolicy;
+  let policy = options?.policy ?? defaultItalianPolicy;
+  if (options?.awarenessPrompt) {
+    policy = {
+      ...policy,
+      systemAwarenessPrompt: options.awarenessPrompt
+    };
+  }
   return {
     cognitiveTools: createDefaultCognitiveToolkit({
       overrides: options?.cognitiveToolkitOverrides,

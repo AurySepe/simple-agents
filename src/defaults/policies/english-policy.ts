@@ -5,14 +5,30 @@ import { OrchestratorPolicy } from '../../engine/orchestrator.js';
  * Fornisce istruzioni naturali, chiare e operative, prive di gergo matematico interno.
  */
 export const defaultEnglishPolicy: OrchestratorPolicy = {
+  systemAwarenessPrompt: `## EXECUTION PROTOCOL (TWO-PHASE CYCLE):
+System operation is governed by a recurring two-phase architecture:
+1. **Internal Reflection Phase (Introspection)**:
+   - Active at session start and upon receiving new data or results from the external World.
+   - In this phase, analyze the available information within your thinking process and plan upcoming actions.
+   - You may use any enabled cognitive tools to manage your internal state or working memory.
+   - When internal deliberation is complete and you are ready to act in the World or conclude the request, invoke 'a_concludi_intro'.
+2. **Operational Phase (Action in the World or Termination)**:
+   - Both external World tools and the formal termination action for the final response are active.
+   - Use external World tools to interact with the environment, or, if all operations are complete, invoke the termination action (e.g. 'rispondi_e_termina') with the required data to conclude.
+   - Upon completion of World actions, the system returns results and brings you back to the reflection phase to examine them.
+3. **Fundamental Response Rule**:
+   - At any point, the ONLY tools you may invoke are strictly those provided in the active tools list for this specific turn.
+   - During the Internal Reflection Phase, external World tools and termination actions are temporarily locked.
+   - NEVER reply with plain text to conclude the task: the final response must be delivered through the dedicated termination action. If you are in the Internal Reflection Phase, invoke 'a_concludi_intro' first to transition to the Operational Phase and unlock the termination action.`,
+
   formatDirectivePrompt: (type) => {
     switch (type) {
       case 'start_intro':
-        return "Internal preparation phase. Before interacting externally, you can update your current goal, store useful data, or activate the necessary tools and documents. When you have completed preparations and are ready to act, call 'a_concludi_intro'.";
+        return "Internal reflection phase. You may examine available information and update your internal state or goal using enabled cognitive tools. External World tools and termination actions are not callable in this turn: the designated action to complete reflection and access the operational phase (to act on the World or conclude the task) is 'a_concludi_intro'.";
       case 'loop_intro':
-        return "Internal memory updated. You can make further adjustments or call 'a_concludi_intro' to proceed to action.";
+        return "Internal state updated. You may perform further cognitive adjustments or, when reflection is complete, proceed to the operational phase via 'a_concludi_intro'.";
       case 'start_exec':
-        return "Operational phase active. You can now use your available tools to interact with the environment, or send your final response to complete the task.";
+        return "Operational phase active. You can now use your available tools to interact with the environment, or invoke the termination action to provide the final response and conclude the task.";
     }
   },
 
@@ -50,7 +66,7 @@ export const defaultEnglishPolicy: OrchestratorPolicy = {
       case 'xor_concludi_violation':
         return "'a_concludi_intro' is solely meant to conclude preparation: call it by itself, without combining other actions in the same turn.";
       case 'unauthorized_cognitive_action':
-        return `The action '${context?.toolId}' is not enabled for this session.`;
+        return `The action '${context?.toolId}' belongs to the external World or is not enabled for internal reflection. External World tools are accessible only in the operational phase (after 'a_concludi_intro'). Invoke 'a_abort_call' to cancel the invalid call.`;
       case 'unregistered_cognitive_action':
         return `The action '${context?.toolId}' is not recognized by the system.`;
       case 'unmounted_world_tool':

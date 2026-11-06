@@ -211,6 +211,11 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
     // 2. Estrazione e validazione delle Tool Calls
     const rawCalls = rawMessage.tool_calls;
     if (!rawCalls || rawCalls.length === 0) {
+      if (response.done_reason === 'length') {
+        throw new Error(
+          `Il modello '${response.model}' ha saturato la finestra di contesto (num_ctx). Generazione troncata per superamento lunghezza (prompt_eval_count=${response.prompt_eval_count ?? 'N/D'}, eval_count=${response.eval_count ?? 'N/D'}). Incrementare 'num_ctx'. Contenuto parziale: "${rawMessage.content || thought || ''}"`
+        );
+      }
       throw new Error(
         `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Contenuto: "${rawMessage.content || thought || ''}"`
       );

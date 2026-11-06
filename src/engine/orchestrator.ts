@@ -140,6 +140,7 @@ export interface RunResult<T = DataValue> {
  * ============================================================================
  */
 export interface OrchestratorPolicy {
+  systemAwarenessPrompt?: string;
   formatDirectivePrompt(type: 'start_intro' | 'loop_intro' | 'start_exec'): string;
   formatSchemaErrorPrompt(targetToolId: string, errorDetail: string): string;
   formatSyntaxErrorPrompt(targetToolId: string, rawText: string, errorDetail: string): string;
@@ -1381,7 +1382,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
   }
 
   private buildInferenceTriple(directive: Directive): InferenceTriple {
-    const systemFrame = this.framework.systemFrameProjector(directive, this.state);
+    const systemFrame = this.framework.systemFrameProjector(directive, this.state, this.framework.policy);
 
     const allWorldDefs = new Map<string, ToolDefinition>();
     for (const def of this.world.getAllDefinitions()) {
