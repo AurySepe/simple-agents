@@ -10,9 +10,9 @@ import {
   WorldTool
 } from '../src/index.js';
 
-describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', () => {
+describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in Ω_op)', () => {
   function setupCommercialScenario() {
-    // 1. LIVELLO 1: Framework Ω (Standard Library di default)
+    // 1. LIVELLO 1: Framework Ω_op (Standard Library di default)
     const framework = new FrameworkEngine(createDefaultFrameworkConfig());
 
     // 2. LIVELLO 2: Il Mondo W (Database Ordini e Servizio Sconti)
@@ -46,18 +46,18 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
     const world = createWorldRegistry([dbOrdiniTool, applicaScontoTool]);
     const runtime = framework.bindWorld(world);
 
-    // 3. LIVELLO 3: Manifesto dell'Agente Commerciale
+    // 3. LIVELLO 3: Manifesto dell'Agente Commerciale Operativo
     const manifest: AgentManifest = {
       I: "Sei l'Assistente Commerciale Aziendale. Applica le policy in modo rigoroso.",
-      Ms0: 'In attesa di richieste da elaborare',
+      Ms0: 'Verificare preventivo del cliente 55 e applicare sconto VIP',
       Ds0: { anno_fiscale: 2026 },
-      A_int: [
-        'aggiorna_missione',
-        'imposta_dato',
-        'cerca_tool',
-        'carica_tool',
-        'cerca_concetti',
-        'carica_concetto'
+      Ta0: ['w_db_ordini', 'w_applica_sconto'],
+      Ka0: [
+        {
+          id: 'pol_sconti_2026',
+          descrizione: 'Policy sconti 2026',
+          corpo: 'Preventivi oltre 150€ hanno diritto al 15% di sconto.'
+        }
       ],
       A_term: [
         {
@@ -72,7 +72,7 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
       ]
     };
 
-    // 4. MOCK DEL MODELLO LINGUISTICO: Riproduce fedelmente i 9 passi formali
+    // 4. MOCK DEL MODELLO LINGUISTICO: Riproduce fedelmente i 3 passi operativi
     function createMockModel() {
       let stepCount = 0;
       const model: LanguageModelAdapter = {
@@ -80,56 +80,8 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
           stepCount++;
 
           // --- MACRO-CICLO c = 0 ---
-          // Passo 1 (c=0, t=0): In introspezione, cerca concetti e cerca tool
+          // Passo 1: Chiama il DB fisico w_db_ordini
           if (stepCount === 1) {
-            expect(ctx.visibleTools.some((t) => t.id === 'cerca_concetti')).toBe(true);
-            expect(ctx.visibleTools.some((t) => t.id === 'cerca_tool')).toBe(true);
-            return {
-              thought: 'Cerco la policy sconti e i tool disponibili per gli ordini.',
-              calls: [
-                { id: 'call_c1', name: 'cerca_concetti', payload: { query: 'sconti clienti' } },
-                { id: 'call_t1', name: 'cerca_tool', payload: { query: 'ordini' } }
-              ]
-            };
-          }
-
-          // Passo 2 (c=0, t=1): Carica concetto, monta i tool in Ta, aggiorna Ms
-          if (stepCount === 2) {
-            return {
-              thought: 'Carico la policy in memoria, monto i tool nel toolbelt e aggiorno la missione.',
-              calls: [
-                {
-                  id: 'call_m1',
-                  name: 'aggiorna_missione',
-                  payload: {
-                    nuovo_scopo: 'Verificare preventivo del cliente 55 e applicare sconto VIP'
-                  }
-                },
-                {
-                  id: 'call_m2',
-                  name: 'carica_concetto',
-                  payload: { concetto_ids: ['pol_sconti_2026'] }
-                },
-                {
-                  id: 'call_m3',
-                  name: 'carica_tool',
-                  payload: { tool_ids: ['w_db_ordini', 'w_applica_sconto'] }
-                }
-              ]
-            };
-          }
-
-          // Passo 3 (c=0, t=2): Conclude la preparazione interna (XOR: a_concludi_intro da solo)
-          if (stepCount === 3) {
-            expect(ctx.systemFrame).toContain('Verificare preventivo del cliente 55');
-            return {
-              thought: 'La mia mente è pronta: chiudo la preparazione interna.',
-              calls: [{ id: 'call_close_0', name: 'a_concludi_intro', payload: {} }]
-            };
-          }
-
-          // Passo 4 (c=0, t=3): Fase Esecutiva -> Chiama il DB fisico w_db_ordini
-          if (stepCount === 4) {
             expect(ctx.visibleTools.some((t) => t.id === 'w_db_ordini')).toBe(true);
             expect(ctx.visibleTools.some((t) => t.id === 'a_successo')).toBe(true);
             return {
@@ -145,35 +97,9 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
           }
 
           // --- MACRO-CICLO c = 1 (dopo risveglio dal mondo) ---
-          // Passo 5 (c=1, t=4): In introspezione obbligatoria post-yield -> Salva il dato in Ds
-          if (stepCount === 5) {
-            expect(ctx.messages.some((m) => m.channel === 'result' && m.callId === 'call_db_1')).toBe(true);
-            return {
-              thought: 'Ricevuti i dati del preventivo ORD-99 (200€). Salvo nella memoria di lavoro.',
-              calls: [
-                {
-                  id: 'call_ds_1',
-                  name: 'imposta_dato',
-                  payload: {
-                    chiave: 'preventivo_corrente',
-                    valore: { ordine_id: 'ORD-99', totale: 200.0 }
-                  }
-                }
-              ]
-            };
-          }
-
-          // Passo 6 (c=1, t=5): Conclude introspezione post-dato
-          if (stepCount === 6) {
-            return {
-              thought: 'Dato salvato in memoria. Chiudo introspezione.',
-              calls: [{ id: 'call_close_1', name: 'a_concludi_intro', payload: {} }]
-            };
-          }
-
-          // Passo 7 (c=1, t=6): Fase Esecutiva -> Chiama w_applica_sconto (15% di sconto su ORD-99)
-          if (stepCount === 7) {
-            expect(ctx.systemFrame).toContain('preventivo_corrente');
+          // Passo 2: Chiama w_applica_sconto (15% di sconto su ORD-99)
+          if (stepCount === 2) {
+            expect(ctx.messages.some((m) => m.type === 'result' && m.callId === 'call_db_1')).toBe(true);
             return {
               thought: 'Il totale supera 150€: applico lo sconto del 15% sull ordine ORD-99.',
               calls: [
@@ -187,17 +113,9 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
           }
 
           // --- MACRO-CICLO c = 2 (dopo secondo risveglio dal mondo) ---
-          // Passo 8 (c=2, t=7): Introspezione di valutazione esito finale -> Chiude subito
-          if (stepCount === 8) {
-            expect(ctx.messages.some((m) => m.channel === 'result' && m.callId === 'call_disc_1')).toBe(true);
-            return {
-              thought: 'Esito APPLICATO ricevuto. Nessuna ulteriore modifica mentale necessaria.',
-              calls: [{ id: 'call_close_2', name: 'a_concludi_intro', payload: {} }]
-            };
-          }
-
-          // Passo 9 (c=2, t=8): Fase Esecutiva Finale -> Emette il contratto di terminazione tipizzato!
-          if (stepCount === 9) {
+          // Passo 3: Emette il contratto di terminazione tipizzato!
+          if (stepCount === 3) {
+            expect(ctx.messages.some((m) => m.type === 'result' && m.callId === 'call_disc_1')).toBe(true);
             return {
               thought: 'Tutto completato. Emetto la terminazione tipizzata a_successo.',
               calls: [
@@ -229,14 +147,15 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
     const agent = runtime.spawnAgent(manifest, model);
 
     // CICLO 0 (c = 0): Richiesta iniziale dell'utente
-    const outcome0 = await agent.wakeup({
+    agent.feedPayload({
       userContent:
         "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€."
     });
 
+    const outcome0 = await agent.resume();
     expect(outcome0.status).toBe('yield');
     if (outcome0.status !== 'yield') throw new Error('Expected yield');
-    expect(outcome0.macroCycle).toBe(1);
+    expect(outcome0.macroCycle).toBe(0);
     expect(outcome0.pendingCalls).toHaveLength(1);
     expect(outcome0.pendingCalls[0].name).toBe('w_db_ordini');
 
@@ -245,13 +164,14 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
     const dbResult = await world.executeTool(call0.name, call0.payload);
 
     // CICLO 1 (c = 1): Risveglio dell'agente con il risultato del database
-    const outcome1 = await agent.wakeup({
+    agent.feedPayload({
       worldResults: [{ callId: call0.id, result: dbResult }]
     });
 
+    const outcome1 = await agent.resume();
     expect(outcome1.status).toBe('yield');
     if (outcome1.status !== 'yield') throw new Error('Expected yield');
-    expect(outcome1.macroCycle).toBe(2);
+    expect(outcome1.macroCycle).toBe(1);
     expect(outcome1.pendingCalls).toHaveLength(1);
     expect(outcome1.pendingCalls[0].name).toBe('w_applica_sconto');
 
@@ -260,10 +180,11 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
     const discountResult = await world.executeTool(call1.name, call1.payload);
 
     // CICLO 2 (c = 2): Risveglio finale e terminazione
-    const outcome2 = await agent.wakeup({
+    agent.feedPayload({
       worldResults: [{ callId: call1.id, result: discountResult }]
     });
 
+    const outcome2 = await agent.resume();
     expect(outcome2.status).toBe('halt');
     if (outcome2.status !== 'halt') throw new Error('Expected halt');
     expect(outcome2.result.type).toBe('a_successo');
@@ -275,11 +196,10 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
 
     expect(agent.getControlState()).toBe('q_halt');
     expect(agent.getState().Ms).toBe('Verificare preventivo del cliente 55 e applicare sconto VIP');
-    expect(agent.getState().Ds['preventivo_corrente']).toEqual({ ordine_id: 'ORD-99', totale: 200.0 });
     expect(agent.getState().Ka.has('pol_sconti_2026')).toBe(true);
     expect(agent.getState().Ta.has('w_db_ordini')).toBe(true);
     expect(agent.getState().Ta.has('w_applica_sconto')).toBe(true);
-    expect(getStepCount()).toBe(9);
+    expect(getStepCount()).toBe(3);
   });
 
   it('dovrebbe eseguire l intero scenario in modo completamente autonomo tramite runtime.runAgent() in una sola chiamata', async () => {
@@ -311,19 +231,18 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli)', 
 
     // 2. Verifica dei macro-cicli consumati (2 yield verso il mondo esterno)
     expect(runResult.macroCycles).toBe(2);
-    expect(visitedCycles).toEqual([1, 2, 2]);
+    expect(visitedCycles).toEqual([0, 1, 2]);
 
     // 3. Verifica dei tool fisici eseguiti automaticamente dal motore
     expect(executedTools).toEqual(['w_db_ordini', 'w_applica_sconto']);
 
     // 4. Verifica dello stato interno finale
     expect(runResult.state.Ms).toBe('Verificare preventivo del cliente 55 e applicare sconto VIP');
-    expect(runResult.state.Ds['preventivo_corrente']).toEqual({ ordine_id: 'ORD-99', totale: 200.0 });
     expect(runResult.state.Ka.has('pol_sconti_2026')).toBe(true);
     expect(runResult.state.Ta.has('w_db_ordini')).toBe(true);
     expect(runResult.state.Ta.has('w_applica_sconto')).toBe(true);
 
-    // 5. Tutti i 9 passi decisionali sono stati eseguiti
-    expect(getStepCount()).toBe(9);
+    // 5. Tutti i 3 passi operativi sono stati eseguiti
+    expect(getStepCount()).toBe(3);
   });
 });

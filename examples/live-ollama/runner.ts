@@ -22,7 +22,7 @@ export async function runCommercialAgent(userPrompt?: string) {
   console.log('   FRAMEWORK Ω: ESECUZIONE LIVE CON OLLAMA E QWEN 3.5');
   console.log('='.repeat(80));
 
-  // 1. Inizializzazione Livello 1 (Framework Engine con Policy Italiana e primitive cognitive)
+  // 1. Inizializzazione Livello 1 (Framework Engine con Policy Italiana)
   const framework = new FrameworkEngine(createDefaultFrameworkConfig());
 
   // 2. Inizializzazione Livello 2 (Mondo Aziendale W)

@@ -14,10 +14,7 @@ export * from './adapters/index.js';
 // 3. Dominio del Mondo W (Registry)
 export * from './world/index.js';
 
-// 4. Universo Introspettivo A_int_universal
-export * from './engine/introspective-universe.js';
-
-// 5. Visibilità V_Ω e Proiezione F_Ω
+// 4. Visibilità V_Ω e Proiezione F_Ω
 export * from './engine/projection.js';
 
 // 6. Motore di Transizione Ω (Orchestratore)

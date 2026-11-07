@@ -43,9 +43,6 @@ Il tuo scopo è assistere i clienti nella gestione dei loro ordini e nell'applic
   // Tool fisici attivi e montati nel toolbelt iniziale (Ta0 ⊆ W)
   Ta0: ['w_cerca_cliente', 'w_dettaglio_ordini', 'w_applica_sconto'],
 
-  // Capacità cognitive concesse per la fase introspettiva (q_intro)
-  A_int: ['aggiorna_missione'],
-
   // Contratti terminali tipizzati (A_term)
   A_term: [
     {

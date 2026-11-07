@@ -32,26 +32,17 @@ describe('Ollama Transport & Qwen Strategy', () => {
     messages: [
       {
         index: 0,
-        role: 'user',
-        channel: 'payload',
+        type: 'stimulus',
         content: 'Voglio lo sconto per cliente 55'
       },
       {
         index: 1,
-        role: 'orchestrator',
-        channel: 'directive',
-        content: 'Fase di introspezione'
-      },
-      {
-        index: 2,
-        role: 'agent',
-        channel: 'thought',
+        type: 'thought',
         content: 'Sto per controllare il database'
       },
       {
-        index: 3,
-        role: 'agent',
-        channel: 'call',
+        index: 2,
+        type: 'action',
         callId: 'call_init',
         content: {
           name: 'w_db_ordini',
@@ -59,9 +50,8 @@ describe('Ollama Transport & Qwen Strategy', () => {
         }
       },
       {
-        index: 4,
-        role: 'world',
-        channel: 'result',
+        index: 3,
+        type: 'result',
         callId: 'call_init',
         content: { totale: 200 }
       }
@@ -178,14 +168,8 @@ describe('Ollama Transport & Qwen Strategy', () => {
         content: 'Voglio lo sconto per cliente 55'
       });
 
-      // 3. Orchestrator directive -> user (preserva l'unicità del blocco system iniziale)
+      // 3. Agent thought + call raggruppati in un unico messaggio assistant (con thinking effimero di default)
       expect(messages[2]).toEqual({
-        role: 'user',
-        content: 'Fase di introspezione'
-      });
-
-      // 4. Agent thought + call raggruppati in un unico messaggio assistant (con thinking effimero di default)
-      expect(messages[3]).toEqual({
         role: 'assistant',
         content: '',
         tool_calls: [
@@ -200,14 +184,14 @@ describe('Ollama Transport & Qwen Strategy', () => {
         ]
       });
 
-      // 5. World result -> tool con tool_call_id corrispondente
-      expect(messages[4]).toEqual({
+      // 4. World result -> tool con tool_call_id corrispondente
+      expect(messages[3]).toEqual({
         role: 'tool',
         tool_call_id: 'call_init',
         content: JSON.stringify({ totale: 200 })
       });
 
-      // 6. Tools formattati con JSON schema
+      // 5. Tools formattati con JSON schema
       expect(tools).toHaveLength(1);
       expect(tools![0].function.name).toBe('w_db_ordini');
       expect(tools![0].function.parameters.type).toBe('object');
@@ -219,7 +203,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         includeHistoricalThinking: true
       });
       const { messages } = strategy.formatContext(sampleTriple);
-      expect(messages[3]).toEqual({
+      expect(messages[2]).toEqual({
         role: 'assistant',
         content: 'Sto per controllare il database',
         tool_calls: [
@@ -235,62 +219,24 @@ describe('Ollama Transport & Qwen Strategy', () => {
       });
     });
 
-    it('deve mappare i risultati delle azioni cognitive (role: orchestrator, channel: result) a role: tool con tool_call_id', () => {
-      const cognitiveTriple: InferenceTriple = {
-        systemFrame: 'System Frame',
-        visibleTools: [],
-        messages: [
-          {
-            index: 0,
-            role: 'agent',
-            channel: 'call',
-            callId: 'call_cog_1',
-            content: {
-              name: 'imposta_dato',
-              payload: { chiave: 'sconto', valore: 10 }
-            }
-          },
-          {
-            index: 1,
-            role: 'orchestrator',
-            channel: 'result',
-            callId: 'call_cog_1',
-            content: 'OK'
-          }
-        ]
-      };
-
-      const { messages } = strategy.formatContext(cognitiveTriple);
-      expect(messages[0].role).toBe('system');
-      expect(messages[1].role).toBe('assistant');
-      expect(messages[2]).toEqual({
-        role: 'tool',
-        tool_call_id: 'call_cog_1',
-        content: 'OK'
-      });
-    });
-
-    it('deve mappare gli errori di schema (err_schema) direttamente come messaggi role: tool con tool_call_id e il messaggio di errore diretto', () => {
+    it('deve mappare gli errori diagnostici direttamente come messaggi role: tool con tool_call_id e il messaggio di errore', () => {
       const errorTriple: InferenceTriple = {
         systemFrame: 'System Frame Iniziale',
         visibleTools: [sampleTool],
         messages: [
           {
             index: 0,
-            role: 'user',
-            channel: 'payload',
+            type: 'stimulus',
             content: 'Esegui operazione con parametro'
           },
           {
             index: 1,
-            role: 'agent',
-            channel: 'thought',
+            type: 'thought',
             content: 'Provo a chiamare il tool'
           },
           {
             index: 2,
-            role: 'agent',
-            channel: 'call',
+            type: 'action',
             callId: 'call_err_42',
             content: {
               name: 'w_db_ordini',
@@ -299,32 +245,27 @@ describe('Ollama Transport & Qwen Strategy', () => {
           },
           {
             index: 3,
-            role: 'orchestrator',
-            channel: 'directive',
-            directiveType: 'err_schema',
-            targetToolId: 'w_db_ordini',
-            schemaErrorDetail: '{"cliente_id":{"_errors":["ID cliente deve essere positivo"]}}',
+            type: 'result',
             callId: 'call_err_42',
-            content: 'Si è verificato un errore nei parametri: correggi o annulla.'
+            content: {
+              status: 'error',
+              code: 'SCHEMA_VALIDATION_ERROR',
+              message: 'ID cliente deve essere positivo'
+            }
           }
         ]
       };
 
       const { messages } = strategy.formatContext(errorTriple);
 
-      // 1. System frame unico all'inizio
       expect(messages[0]).toEqual({
         role: 'system',
         content: 'System Frame Iniziale'
       });
-
-      // 2. User payload
       expect(messages[1]).toEqual({
         role: 'user',
         content: 'Esegui operazione con parametro'
       });
-
-      // 3. Assistant con tool_calls (senza thinking pregresso per risparmio contesto)
       expect(messages[2]).toEqual({
         role: 'assistant',
         content: '',
@@ -339,12 +280,14 @@ describe('Ollama Transport & Qwen Strategy', () => {
           }
         ]
       });
-
-      // 4. Risposta al tool fallito: role: 'tool' con tool_call_id e messaggio di errore puro
       expect(messages[3]).toEqual({
         role: 'tool',
         tool_call_id: 'call_err_42',
-        content: '{"cliente_id":{"_errors":["ID cliente deve essere positivo"]}}'
+        content: JSON.stringify({
+          status: 'error',
+          code: 'SCHEMA_VALIDATION_ERROR',
+          message: 'ID cliente deve essere positivo'
+        })
       });
     });
 
@@ -687,12 +630,12 @@ describe('Ollama Transport & Qwen Strategy', () => {
         systemFrame: '# SYSTEM',
         visibleTools: [sampleTool],
         messages: [
-          { index: 0, role: 'user', channel: 'payload', content: 'Cerca per clienti 10 e 20' },
-          { index: 1, role: 'agent', channel: 'thought', content: 'Controllo entrambi in parallelo' },
-          { index: 2, role: 'agent', channel: 'call', callId: 'call_p1', content: { name: 'w_db_ordini', payload: { cliente_id: 10 } } },
-          { index: 3, role: 'agent', channel: 'call', callId: 'call_p2', content: { name: 'w_db_ordini', payload: { cliente_id: 20 } } },
-          { index: 4, role: 'world', channel: 'result', callId: 'call_p1', content: { totale: 100 } },
-          { index: 5, role: 'world', channel: 'result', callId: 'call_p2', content: { totale: 200 } }
+          { index: 0, type: 'stimulus', content: 'Cerca per clienti 10 e 20' },
+          { index: 1, type: 'thought', content: 'Controllo entrambi in parallelo' },
+          { index: 2, type: 'action', callId: 'call_p1', content: { name: 'w_db_ordini', payload: { cliente_id: 10 } } },
+          { index: 3, type: 'action', callId: 'call_p2', content: { name: 'w_db_ordini', payload: { cliente_id: 20 } } },
+          { index: 4, type: 'result', callId: 'call_p1', content: { totale: 100 } },
+          { index: 5, type: 'result', callId: 'call_p2', content: { totale: 200 } }
         ]
       };
 

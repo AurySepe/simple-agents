@@ -3,7 +3,6 @@ import * as path from 'path';
 import { z } from 'zod';
 import {
   AgentEvent,
-  CognitiveActionEvent,
   HaltEvent,
   ModelInferenceEvent,
   StateTransitionEvent,
@@ -72,20 +71,13 @@ export interface StepAuditData {
     fsmControlState: string;
     phaseLabel: string;
   };
-  direttivaReale: {
-    type: string;
-    prompt?: string;
-    targetToolId?: string;
-    schemaErrorDetail?: string;
-  };
   statoAgentePrimaDelPasso: StateAuditSnapshot;
   inputGrezzoPassatoAlModello: {
     systemFrame: string;
     messagesHistory: Array<{
       index: number;
       tau?: { c: number; t: number };
-      role: string;
-      channel: string;
+      type: string;
       callId?: string;
       content: Message['content'];
     }>;
@@ -104,11 +96,6 @@ export interface StepAuditData {
       payload: DataRecord;
     }>;
   };
-  operazioniCognitiveEseguite: Array<{
-    toolName: string;
-    args: DataRecord;
-    result: ToolResult;
-  }>;
   esitoEsecuzioneNelMondo: Array<{
     toolId: string;
     parametriInviati: DataRecord;
@@ -140,6 +127,8 @@ export class ModularAuditExporter {
     outputDir: string;
     phasesCount: number;
     stepsCount: number;
+    indexFilePath: string;
+    htmlDashboardPath?: string;
   } {
     const events = collector.getEvents();
     const outputDir = path.resolve(options.outputDir);
@@ -154,7 +143,6 @@ export class ModularAuditExporter {
     }
 
     const inferences = collector.filterByType('model_inference');
-    const cognitiveActions = collector.filterByType('cognitive_action');
     const worldActions = collector.filterByType('world_action');
     const transitions = collector.filterByType('state_transition');
     const halts = collector.filterByType('halt');
@@ -164,11 +152,6 @@ export class ModularAuditExporter {
       const stepNumber = idx + 1;
       const stepTick = inf.tick;
       const stepCycle = inf.macroCycle;
-
-      // Cognitive actions di questo step
-      const stepCog = cognitiveActions.filter(
-        (c) => c.tick === stepTick && c.macroCycle === stepCycle
-      );
 
       // Transition di questo step
       const stepTrans = transitions.find(
@@ -180,13 +163,9 @@ export class ModularAuditExporter {
         (w) => w.tick === stepTick || w.macroCycle === stepCycle
       );
 
-      // Stato dopo il passo (dall'ultima azione cognitiva, da halt, o dallo snapshot)
-      const lastCog = stepCog[stepCog.length - 1];
       const haltEvent = halts.find((h) => h.tick === stepTick);
       const afterSnapshot = haltEvent
         ? haltEvent.stateSnapshot
-        : lastCog
-        ? lastCog.stateSnapshot
         : inf.stateSnapshot;
 
       return {
@@ -196,19 +175,11 @@ export class ModularAuditExporter {
           tick: stepTick,
           fsmControlState: inf.controlState,
           phaseLabel:
-            inf.controlState === 'q_intro'
-              ? 'Pianificazione interna (Introspezione)'
-              : inf.controlState === 'q_exec'
+            inf.controlState === 'q_exec'
               ? 'Azione operativa (Esecuzione nel Mondo)'
               : inf.controlState === 'q_repair'
               ? 'Riparazione automatica'
               : inf.controlState
-        },
-        direttivaReale: {
-          type: inf.directive.type,
-          prompt: inf.directive.prompt,
-          targetToolId: inf.directive.type === 'err_schema' ? inf.directive.targetToolId : undefined,
-          schemaErrorDetail: inf.directive.type === 'err_schema' ? inf.directive.schemaErrorDetail : undefined
         },
         statoAgentePrimaDelPasso: {
           scopo_Ms: inf.stateSnapshot.Ms,
@@ -222,8 +193,7 @@ export class ModularAuditExporter {
           messagesHistory: inf.context.messages.map((m) => ({
             index: m.index,
             tau: m.tau,
-            role: m.role,
-            channel: m.channel,
+            type: m.type,
             callId: m.callId,
             content: m.content
           })),
@@ -242,11 +212,6 @@ export class ModularAuditExporter {
             payload: c.payload
           }))
         },
-        operazioniCognitiveEseguite: stepCog.map((c) => ({
-          toolName: c.toolName,
-          args: c.args,
-          result: c.result
-        })),
         esitoEsecuzioneNelMondo:
           inf.controlState === 'q_exec'
             ? stepWorld.map((w) => ({
@@ -407,7 +372,9 @@ export class ModularAuditExporter {
     return {
       outputDir,
       phasesCount: phaseGroups.length,
-      stepsCount: stepDataList.length
+      stepsCount: stepDataList.length,
+      indexFilePath: path.join(outputDir, 'index.json'),
+      htmlDashboardPath: options.generateHtmlDashboard !== false ? path.join(outputDir, 'index.html') : undefined
     };
   }
 }

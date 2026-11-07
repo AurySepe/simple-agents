@@ -22,41 +22,17 @@ export interface ConsoleLoggerOptions {
 function humanizeFSMState(state: string): string {
   switch (state) {
     case 'q_sleep':
-      return 'In attesa di input';
-    case 'q_intro':
-      return 'Pianificazione interna';
+      return 'In attesa di stimolo';
     case 'q_exec':
-      return 'Azione operativa';
+      return 'Deliberazione operativa';
     case 'q_repair':
-      return 'Riparazione automatica';
+      return 'Riparazione schema';
     case 'q_yield':
       return 'Attesa servizi esterni';
     case 'q_halt':
       return 'Completato';
     default:
       return state;
-  }
-}
-
-/**
- * Traduce le direttive formali del protocollo in etichette comprensibili.
- */
-function humanizeDirectiveLabel(directive: { type: string; targetToolId?: string }): string {
-  switch (directive.type) {
-    case 'start_intro':
-      return 'Inizio pianificazione (analisi richiesta, ricerca tool e policy)';
-    case 'resume_intro':
-      return 'Rientro in riflessione interna (esame esiti ambiente esterno)';
-    case 'loop_intro':
-      return 'Affinamento memoria e piano interno';
-    case 'start_exec':
-      return 'Esecuzione azioni nel Mondo esterno';
-    case 'err_schema':
-      return directive.targetToolId
-        ? `Correzione parametri non conformi su '${directive.targetToolId}'`
-        : 'Correzione parametri anomali';
-    default:
-      return directive.type;
   }
 }
 
@@ -69,69 +45,49 @@ function humanizeTransitionReason(
 ): string {
   const toolId = context?.toolId ? `'${context.toolId}'` : '';
   switch (code) {
-    case 'router_initial_intro':
-      return 'avvio pianificazione preliminare';
-    case 'router_initial_exec':
-      return 'avvio diretto in azione operativa';
-    case 'intro_concluded':
-      return 'pianificazione completata';
-    case 'intro_empty_action':
-      return 'nessuna operazione indicata';
-    case 'intro_xor_violation':
-      return 'conclusione pianificazione non separata dalle altre azioni';
-    case 'intro_unauthorized_action':
-      return toolId ? `azione non autorizzata: ${toolId}` : 'azione non autorizzata';
-    case 'intro_unregistered_action':
-      return toolId ? `azione non registrata: ${toolId}` : 'azione non registrata';
-    case 'intro_action_execution_error':
-      return toolId ? `errore operazione mentale: ${toolId}` : 'errore operazione';
-    case 'exec_empty_calls':
-      return 'nessuna chiamata emessa in fase esecutiva';
-    case 'exec_term_schema_error':
-      return toolId ? `violazione contratto terminazione: ${toolId}` : 'violazione terminazione';
+    case 'stimulus_received':
+      return 'ricezione stimolo utente';
+    case 'exec_world_yield':
+      return 'invio chiamate a tool di mondo e attesa esiti';
     case 'exec_term_success':
       return toolId ? `terminazione con contratto ${toolId}` : 'terminazione con contratto';
-    case 'exec_world_unmounted_tool':
-      return toolId ? `servizio esterno non abilitato: ${toolId}` : 'servizio non abilitato';
-    case 'exec_world_schema_error':
-      return toolId ? `parametri non conformi per: ${toolId}` : 'parametri non conformi';
-    case 'exec_world_yield':
-      return 'invio richieste e attesa risposta servizi esterni';
-    case 'repair_abort_success':
-      return 'recupero completato con abort';
-    case 'repair_abort_yield':
-      return 'recupero completato con abort da exec';
-    case 'repair_retry_intro':
-      return 'ritorno a pianificazione dopo correzione';
-    case 'repair_retry_exec':
-      return 'ritorno ad azione operativa dopo correzione';
+    case 'exec_schema_error':
+      return toolId ? `parametri non conformi per: ${toolId}` : 'errore parametri schema';
+    case 'exec_syntax_error':
+      return toolId ? `sintassi JSON non valida per: ${toolId}` : 'errore sintassi JSON';
+    case 'repair_success':
+      return 'riparazione schema completata con successo';
+    case 'repair_abort':
+      return 'chiamata non valida annullata';
+    case 'post_yield_exec':
+      return 'ricezione esiti da servizi esterni e ripresa deliberazione';
     case 'manual_override':
-      return 'forzatura manuale';
-    case 'post_yield_sleep':
-      return 'in attesa di nuovi input';
+      return 'modifica manuale di stato';
     default:
       return code;
   }
 }
 
-/**
- * Formatta in modo compatto il contenuto di un messaggio per l'estratto di cronologia.
- */
 function formatMessageContent(content: unknown): string {
-  if (content === undefined || content === null) return '';
+  if (content === undefined) return '';
+  if (content === null) return 'null';
   if (typeof content === 'string') {
-    const singleLine = content.replace(/\s+/g, ' ').trim();
-    return singleLine.length > 95 ? `"${singleLine.slice(0, 92)}..."` : `"${singleLine}"`;
+    const singleLine = content.replace(/\r?\n/g, ' ').trim();
+    return singleLine.length > 80 ? singleLine.slice(0, 77) + '...' : singleLine;
   }
-  const json = JSON.stringify(content);
-  return json.length > 95 ? `${json.slice(0, 92)}...` : json;
+  if (typeof content === 'object') {
+    try {
+      const json = JSON.stringify(content);
+      return json.length > 80 ? json.slice(0, 77) + '...' : json;
+    } catch {
+      return String(content);
+    }
+  }
+  return String(content);
 }
 
-/**
- * Estrae e formatta gli ultimi N messaggi dalla cronologia Ep.
- */
 function formatRecentMessages(
-  messages: Array<Pick<Message, 'role' | 'channel' | 'callId' | 'content'>>,
+  messages: Array<Pick<Message, 'type' | 'callId' | 'content'>>,
   maxCount = 3
 ): string[] {
   if (!messages || messages.length === 0) {
@@ -149,7 +105,7 @@ function formatRecentMessages(
   for (let i = startIdx; i < total; i++) {
     const msg = messages[i];
     const callRef = msg.callId ? ` [${msg.callId}]` : '';
-    const tag = `[${msg.role}:${msg.channel}${callRef}]`;
+    const tag = `[${msg.type}${callRef}]`;
     const formattedContent = formatMessageContent(msg.content);
     lines.push(`${tag} ${formattedContent}`);
   }
@@ -157,9 +113,6 @@ function formatRecentMessages(
   return lines;
 }
 
-/**
- * Formatta in modo compatto o multi-linea una chiamata di tool con i suoi argomenti.
- */
 function formatCall(name: string, payload: unknown): string {
   if (!payload || (typeof payload === 'object' && Object.keys(payload).length === 0)) {
     return `${name}()`;
@@ -176,17 +129,6 @@ function formatCall(name: string, payload: unknown): string {
   return `${name}(\n     ${indented}\n   )`;
 }
 
-/**
- * ============================================================================
- * LOGGER DI CONSOLE ESSENZIALE, TRASPARENTE E CENTRATO SUI DATI
- * ============================================================================
- * Mostra ad ogni passo:
- * 1. Da cosa è composto lo STATO dell'Agente prima del passo (Ms, Ds, Ta, Ka)
- * 2. Cosa viene effettivamente PASSATO al modello (input, direttiva, tool)
- * 3. Il FLUSSO DI COSCIENZA del modello (thought)
- * 4. Le CHIAMATE e ARGOMENTI decisi dal modello
- * 5. Gli ESITI dei servizi esterni e le transizioni
- */
 export class ConsoleLoggerObserver implements AgentObserver {
   private level: LogLevel;
   private showThoughts: boolean;
@@ -210,7 +152,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
     this.writer = options?.writer ?? ((msg: string) => console.log(msg));
   }
 
-  // --- Utility ANSI ---
   private c(colorCode: string, text: string): string {
     if (!this.useColors) return text;
     return `${colorCode}${text}\x1b[0m`;
@@ -315,21 +256,20 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write('');
         this.write(pfx + this.bold(this.cyan(`▶ PASSO ${stepNum} [${phase}]`)));
 
-        // 1. STATO DELL'AGENTE PRIMA DEL PASSO (Ms, Ds, Ta, Ka)
         if (this.showState && event.stateSnapshot) {
           const s = event.stateSnapshot;
           this.write(pfx + `  🧠 ${this.bold('Stato Agente prima del passo:')}`);
-          this.write(pfx + `     • ${this.bold('Scopo (Ms):')} ${this.cyan(`"${s.Ms}"`)}`);
+          this.write(pfx + `     • ${this.bold('Missione (Ms):')} ${this.cyan(`"${s.Ms}"`)}`);
 
           const dsKeys = Object.keys(s.Ds);
           if (dsKeys.length === 0) {
-            this.write(pfx + `     • ${this.bold('Memoria (Ds):')} ${this.dim('{} (vuota)')}`);
+            this.write(pfx + `     • ${this.bold('Dati Operativi (Ds):')} ${this.dim('{} (vuota)')}`);
           } else {
             const compactDs = JSON.stringify(s.Ds);
             if (compactDs.length < 65) {
-              this.write(pfx + `     • ${this.bold('Memoria (Ds):')} ${this.cyan(compactDs)}`);
+              this.write(pfx + `     • ${this.bold('Dati Operativi (Ds):')} ${this.cyan(compactDs)}`);
             } else {
-              this.write(pfx + `     • ${this.bold('Memoria (Ds):')}`);
+              this.write(pfx + `     • ${this.bold('Dati Operativi (Ds):')}`);
               for (const line of JSON.stringify(s.Ds, null, 2).split('\n')) {
                 this.write(pfx + `         ${this.cyan(line)}`);
               }
@@ -348,24 +288,20 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
           if (s.Ka && s.Ka.size > 0) {
             const kaList = Array.from(s.Ka.keys());
-            this.write(pfx + `     • ${this.bold('Policy attive (Ka):')} ${this.cyan(`[ ${kaList.join(', ')} ]`)}`);
+            this.write(pfx + `     • ${this.bold('Conoscenza attiva (Ka):')} ${this.cyan(`[ ${kaList.join(', ')} ]`)}`);
           }
         }
         break;
       }
 
       case 'model_inference': {
-        // 2. COSA VIENE PASSATO AL MODELLO (F_Ω, Ep, V_Ω)
         if (this.showModelInputs) {
           const toolNames = event.context.visibleTools.map((t) => t.id).join(', ');
-          const directiveLabel = humanizeDirectiveLabel(event.directive);
           const totalMsgs = event.context.messages.length;
           const recentMsgs = formatRecentMessages(event.context.messages, 3);
 
           this.write(pfx + `  📥 ${this.bold('Cosa riceve il modello in questa chiamata:')}`);
-          this.write(pfx + `     • ${this.bold('Direttiva / Guida:')} ${this.yellow(directiveLabel)}`);
 
-          // Frame di sistema usato (F_Ω)
           if (this.showSystemFrame) {
             this.write(pfx + `     • ${this.bold('Frame di sistema usato (F_Ω):')}`);
             for (const line of event.context.systemFrame.split('\n')) {
@@ -373,7 +309,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
             }
           }
 
-          // Cronologia messaggi (estratto degli ultimi messaggi)
           const msgHeader = totalMsgs > 3
             ? `Cronologia messaggi (ultimi 3 di ${totalMsgs}):`
             : `Cronologia messaggi (${totalMsgs}):`;
@@ -382,7 +317,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
             this.write(pfx + `       ${this.cyan(ml)}`);
           }
 
-          // Tool disponibili (V_Ω)
           if (this.showVisibleTools) {
             this.write(
               pfx +
@@ -393,7 +327,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
           }
         }
 
-        // 3. FLUSSO DI COSCIENZA DEL MODELLO
         if (this.showThoughts && event.output.thought) {
           this.write(
             pfx +
@@ -407,7 +340,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
           }
         }
 
-        // 4. CHIAMATE E ARGOMENTI DECISI DAL MODELLO
         if (event.output.calls.length > 0) {
           const callCount = event.output.calls.length;
           this.write(
@@ -422,29 +354,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
         } else {
           this.write(pfx + `  ⚡ ${this.dim('Nessuna chiamata emessa dal modello.')}`);
         }
-        break;
-      }
-
-      case 'cognitive_action': {
-        let detail = '';
-        if (isDataRecord(event.args)) {
-          if (event.toolName === 'imposta_dato') {
-            const k = event.args.chiave;
-            if (typeof k === 'string') detail = `: salvato dato '${k}'`;
-          } else if (event.toolName === 'aggiorna_missione') {
-            detail = `: nuovo scopo impostato`;
-          } else if (event.toolName === 'carica_tool' && Array.isArray(event.args.tool_ids)) {
-            detail = `: montati [${event.args.tool_ids.join(', ')}]`;
-          } else if (event.toolName === 'carica_concetto' && Array.isArray(event.args.concetto_ids)) {
-            detail = `: caricate policy [${event.args.concetto_ids.join(', ')}]`;
-          } else if (event.toolName === 'cerca_tool' || event.toolName === 'cerca_concetti') {
-            const q = typeof event.args.query === 'string' ? event.args.query : '';
-            detail = `: ricerca '${q}'`;
-          }
-        }
-        this.write(
-          pfx + `  ${this.magenta('✓')} ${this.dim('Operazione interna:')} ${this.bold(event.toolName)}${detail}`
-        );
         break;
       }
 
@@ -491,13 +400,13 @@ export class ConsoleLoggerObserver implements AgentObserver {
         break;
       }
 
-      case 'schema_error': {
+      case 'tool_error': {
         this.write('');
         this.write(
           pfx +
-            `⚠️  ${this.red(this.bold('Parametri non conformi'))} ${this.dim(
-              `su '${event.targetToolId}':`
-            )} ${this.red(event.errorDetail)}`
+            `⚠️  ${this.red(this.bold('Errore sul tool'))} ${this.dim(
+              `'${event.targetToolId}':`
+            )} ${this.red(event.errorPayload.message)}`
         );
         break;
       }
@@ -527,9 +436,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
   }
 }
 
-/**
- * Factory helper per creare rapidamente un console observer strutturato.
- */
 export function createConsoleObserver(options?: ConsoleLoggerOptions): ConsoleLoggerObserver {
   return new ConsoleLoggerObserver(options);
 }

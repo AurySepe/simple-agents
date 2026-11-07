@@ -1,7 +1,7 @@
 import {
   AgentState,
   DataRecord,
-  Directive,
+  DiagnosticErrorPayload,
   ExitResult,
   FSMControlState,
   InferenceTriple,
@@ -11,14 +11,6 @@ import {
   TransitionReasonCode,
   UserPayload
 } from '../types/index.js';
-
-/**
- * ============================================================================
- * EVENTI DI TELEMETRIA E OSSERVABILITÀ DELL'AUTOMA AGENTE
- * ============================================================================
- * Tutti gli eventi sono fortemente tipizzati come discriminated union su 'type'.
- * Includono timestamp e coordinate temporali formali tau = <c, t>.
- */
 
 export interface BaseAgentEvent {
   timestamp: Date;
@@ -35,26 +27,15 @@ export interface MacroCycleStartEvent extends BaseAgentEvent {
 export interface StepStartEvent extends BaseAgentEvent {
   type: 'step_start';
   controlState: FSMControlState;
-  directive: Directive;
   stateSnapshot: Readonly<AgentState>;
 }
 
 export interface ModelInferenceEvent extends BaseAgentEvent {
   type: 'model_inference';
   controlState: FSMControlState;
-  directive: Directive;
   context: InferenceTriple;
   output: ModelOutput;
   durationMs: number;
-  stateSnapshot: Readonly<AgentState>;
-}
-
-export interface CognitiveActionEvent extends BaseAgentEvent {
-  type: 'cognitive_action';
-  toolName: string;
-  canonicalId: string;
-  args: DataRecord;
-  result: ToolResult;
   stateSnapshot: Readonly<AgentState>;
 }
 
@@ -75,11 +56,11 @@ export interface StateTransitionEvent extends BaseAgentEvent {
   context?: DataRecord;
 }
 
-export interface SchemaErrorEvent extends BaseAgentEvent {
-  type: 'schema_error';
+export interface ToolErrorEvent extends BaseAgentEvent {
+  type: 'tool_error';
   targetToolId: string;
-  errorDetail: string;
-  recoveryDirective: Directive;
+  callId?: string;
+  errorPayload: DiagnosticErrorPayload;
 }
 
 export interface YieldEvent extends BaseAgentEvent {
@@ -97,12 +78,8 @@ export type AgentEvent =
   | MacroCycleStartEvent
   | StepStartEvent
   | ModelInferenceEvent
-  | CognitiveActionEvent
   | WorldActionEvent
   | StateTransitionEvent
-  | SchemaErrorEvent
+  | ToolErrorEvent
   | YieldEvent
   | HaltEvent;
-
-export type AgentEventType = AgentEvent['type'];
-

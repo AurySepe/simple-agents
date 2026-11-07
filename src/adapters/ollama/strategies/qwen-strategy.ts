@@ -56,8 +56,6 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
       name: string;
       payload: DataRecord;
     }> = [];
-    const lastCallIdByToolName = new Map<string, string>();
-    let lastCallId: string | undefined;
 
     const flushPendingAgent = () => {
       if (pendingThought !== undefined || pendingCalls.length > 0) {
@@ -86,65 +84,31 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
     };
 
     for (const msg of context.messages) {
-      if (msg.role === 'agent') {
-        if (msg.channel === 'thought') {
-          pendingThought = msg.content;
-        } else if (msg.channel === 'call') {
-          pendingCalls.push({
-            id: msg.callId,
-            name: msg.content.name,
-            payload: msg.content.payload
-          });
-          lastCallIdByToolName.set(msg.content.name, msg.callId);
-          lastCallId = msg.callId;
-        }
+      if (msg.type === 'thought') {
+        pendingThought = msg.content;
+        continue;
+      }
+
+      if (msg.type === 'action') {
+        pendingCalls.push({
+          id: msg.callId,
+          name: msg.content.name,
+          payload: msg.content.payload
+        });
         continue;
       }
 
       // Scarica l'eventuale turno dell'agente precedente
       flushPendingAgent();
 
-      if (msg.channel === 'result') {
-        // Esito di un tool (sia fisico da 'world' che cognitivo da 'orchestrator')
+      if (msg.type === 'result') {
+        // Esito di un tool (sia risposta del mondo che errore nativo)
         messages.push({
           role: 'tool',
           tool_call_id: msg.callId,
           content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         });
-      } else if (
-        msg.channel === 'directive' &&
-        (msg.directiveType === 'err_schema' || msg.directiveType === 'err_syntax')
-      ) {
-        // Errore di validazione (schema) o sintassi JSON del tool:
-        // Mappato come risposta del tool (role: 'tool') associata al tool_call_id
-        // e con il messaggio di errore diretto come content, sfruttando l'allineamento nativo di Qwen sui tool errors.
-        const targetCallId =
-          msg.callId ??
-          lastCallIdByToolName.get(msg.targetToolId) ??
-          lastCallId;
-
-        const errorContent =
-          msg.directiveType === 'err_schema'
-            ? msg.schemaErrorDetail
-            : msg.syntaxErrorDetail;
-
-        if (targetCallId) {
-          messages.push({
-            role: 'tool',
-            tool_call_id: targetCallId,
-            content: errorContent
-          });
-        } else {
-          // Fallback come user se non esiste alcuna chiamata associabile
-          messages.push({
-            role: 'user',
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-          });
-        }
-      } else if (msg.role === 'user' || msg.role === 'orchestrator' || msg.role === 'world') {
-        // Turni di stimolo utente, direttive standard dell'orchestratore o summary
-        // Mappati come 'user' per preservare l'unicità del blocco 'system' iniziale
-        // senza alcuna alterazione o prefisso aggiunto al contenuto puro
+      } else if (msg.type === 'stimulus') {
         messages.push({
           role: 'user',
           content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)

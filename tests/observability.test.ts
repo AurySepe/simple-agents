@@ -29,7 +29,6 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
       I: 'Agente Meteo Assistente',
       Ms0: 'In attesa',
       Ta0: ['w_meteo'],
-      A_int: ['aggiorna_missione'],
       A_term: [
         {
           id: 'risposta_finale',
@@ -46,40 +45,16 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
         stepCount++;
         if (stepCount === 1) {
           return {
-            thought: 'Devo aggiornare il mio scopo interno prima di agire.',
-            calls: [
-              {
-                id: 'c1',
-                name: 'aggiorna_missione',
-                payload: { nuovo_scopo: 'Controllare meteo Roma' }
-              }
-            ]
+            thought: 'Interrogo il tool meteo.',
+            calls: [{ id: 'c1', name: 'w_meteo', payload: { citta: 'Roma' } }]
           };
         }
         if (stepCount === 2) {
           return {
-            thought: 'Scopo aggiornato, chiudo introspezione.',
-            calls: [{ id: 'c2', name: 'a_concludi_intro', payload: {} }]
-          };
-        }
-        if (stepCount === 3) {
-          return {
-            thought: 'Interrogo il tool meteo.',
-            calls: [{ id: 'c3', name: 'w_meteo', payload: { citta: 'Roma' } }]
-          };
-        }
-        if (stepCount === 4) {
-          return {
-            thought: 'Meteo ricevuto, posso concludere.',
-            calls: [{ id: 'c4', name: 'a_concludi_intro', payload: {} }]
-          };
-        }
-        if (stepCount === 5) {
-          return {
-            thought: 'Fornisco la risposta conclusiva.',
+            thought: 'Meteo ricevuto, posso concludere con la risposta finale.',
             calls: [
               {
-                id: 'c5',
+                id: 'c2',
                 name: 'risposta_finale',
                 payload: { esito: 'Il meteo a Roma è Sereno con 24 gradi.' }
               }
@@ -109,7 +84,6 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     expect(eventTypes).toContain('macro_cycle_start');
     expect(eventTypes).toContain('step_start');
     expect(eventTypes).toContain('model_inference');
-    expect(eventTypes).toContain('cognitive_action');
     expect(eventTypes).toContain('world_action');
     expect(eventTypes).toContain('state_transition');
     expect(eventTypes).toContain('yield');
@@ -117,9 +91,9 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
 
     // Verifica estrazione dei pensieri dell'agente (Thought Trace)
     const thoughts = collector.getThoughts();
-    expect(thoughts).toHaveLength(5);
-    expect(thoughts[0].thought).toBe('Devo aggiornare il mio scopo interno prima di agire.');
-    expect(thoughts[2].thought).toBe('Interrogo il tool meteo.');
+    expect(thoughts).toHaveLength(2);
+    expect(thoughts[0].thought).toBe('Interrogo il tool meteo.');
+    expect(thoughts[1].thought).toBe('Meteo ricevuto, posso concludere con la risposta finale.');
 
     // Verifica azioni sul Mondo
     const worldActions = collector.getWorldActions();
@@ -128,12 +102,6 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     expect(worldActions[0].args).toEqual({ citta: 'Roma' });
     expect(worldActions[0].result).toEqual({ temperatura: 24, condizione: 'Sereno a Roma' });
     expect(worldActions[0].durationMs).toBeGreaterThanOrEqual(0);
-
-    // Verifica azioni cognitive
-    const cognitiveActions = collector.getCognitiveActions();
-    expect(cognitiveActions).toHaveLength(1);
-    expect(cognitiveActions[0].canonicalId).toBe('aggiorna_missione');
-    expect(cognitiveActions[0].stateSnapshot.Ms).toBe('Controllare meteo Roma');
 
     // Verifica serializzazione JSON
     const json = collector.toJSON();
@@ -155,7 +123,6 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     const manifest: AgentManifest = {
       I: 'Agente Logger Test',
       Ms0: 'Test',
-      A_int: [],
       A_term: [
         {
           id: 'termina',
@@ -199,7 +166,6 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     const manifest: AgentManifest = {
       I: 'Agente Runtime Global',
       Ms0: 'Test',
-      A_int: [],
       A_term: [
         {
           id: 'ok',
@@ -221,4 +187,3 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     expect(collector.filterByType('halt')).toHaveLength(1);
   });
 });
-

@@ -1,140 +1,28 @@
-import { OrchestratorPolicy } from '../../engine/orchestrator.js';
+import { DiagnosticErrorPayload } from '../../types/index.js';
 
-/**
- * Policy di default in lingua italiana.
- * Fornisce testi chiari, operativi e privi di gergo matematico interno,
- * formulati per guidare l'LLM con la massima efficacia decisionale.
- */
-export const defaultItalianPolicy: OrchestratorPolicy = {
-  systemAwarenessPrompt: `## PROTOCOLLO DI ESECUZIONE (CICLO A DUE FASI):
-Il funzionamento del sistema è governato da un'architettura a due fasi ricorrenti:
-1. **Fase di Riflessione Interna (Introspezione)**:
-   - È attiva all'avvio della sessione e ad ogni ricezione di nuovi dati o esiti dall'ambiente esterno.
-   - Serve esclusivamente all'elaborazione interna: esaminare le informazioni, comprendere i concetti ed eventualmente aggiornare il proprio stato interiore o memoria di lavoro mediante gli strumenti cognitivi abilitati.
-   - In questa fase NON si interagisce con l'ambiente né si conclude il compito: non è necessario né opportuno pianificare in dettaglio l'azione operativa o la risposta finale, poiché tale valutazione avverrà direttamente nella successiva fase operativa.
-   - Quando la riflessione interiore è conclusa, l'azione designata per procedere è unicamente 'a_concludi_intro'.
-2. **Fase Operativa (Azione nell'Ambiente o Terminazione)**:
-   - In questa fase diventano pienamente accessibili tutti gli strumenti per interagire con l'ambiente esterno e tutte le azioni contrattuali di terminazione per la chiusura del compito.
-   - Utilizzi gli strumenti disponibili per effettuare le operazioni necessarie oppure, quando il compito è completato, invochi l'azione contrattuale di terminazione per trasmettere l'esito finale.
-   - Al termine dell'esecuzione di azioni nell'ambiente, il sistema restituirà i risultati e ti ricondurrà nella fase di riflessione per assimilarli.
-3. **Regola Fondamentale di Risposta**:
-   - In qualsiasi momento, gli UNICI strumenti che puoi invocare sono rigorosamente quelli definiti nella lista dei tool attivi per questo specifico turno.
-   - Durante la Fase di Riflessione Interna gli strumenti operativi e di terminazione non sono attivi: non cercare di chiamarli né rispondere con testo libero. Se intendi agire o concludere, invoca 'a_concludi_intro' per entrare nella Fase Operativa dove tali azioni saranno disponibili.`,
+export interface OperationalPolicy {
+  formatSchemaErrorMessage: (targetToolId: string, errorDetail: string) => string;
+  formatSyntaxErrorMessage: (targetToolId: string, rawText: string, errorDetail: string) => string;
+  formatDiagnosticPayload: (
+    code: DiagnosticErrorPayload['code'],
+    message: string,
+    details?: unknown
+  ) => DiagnosticErrorPayload;
+}
 
-  formatPhaseNotice: (phase) => {
-    if (phase === 'intro') {
-      return `▶ **Fase di Riflessione Interna (Introspezione)**\nIn questo turno sei nella riflessione interiore per esaminare i dati e aggiornare lo stato. Gli strumenti operativi e le azioni di terminazione non sono attivi in questo micro-passo: non pianificare l'azione o la risposta finale adesso. Quando hai esaminato le informazioni, invoca 'a_concludi_intro' per accedere alla fase operativa dove potrai agire o concludere.`;
-    }
-    return `▶ **Fase Operativa (Azione nell'Ambiente o Terminazione)**\nIn questo turno sei nella fase operativa. Sono attivi tutti gli strumenti per interagire con l'ambiente e le azioni di terminazione per trasmettere l'esito finale e concludere il compito.`;
+export const defaultItalianPolicy: OperationalPolicy = {
+  formatSchemaErrorMessage: (targetToolId, errorDetail) => {
+    return `Parametri non conformi allo schema per il tool '${targetToolId}': ${errorDetail}`;
   },
 
-  formatDirectivePrompt: (type) => {
-    switch (type) {
-      case 'start_intro':
-        return "Fase iniziale di riflessione interna per esaminare la richiesta e aggiornare il proprio stato interiore mediante gli strumenti cognitivi abilitati. Tutte le azioni operative (verso l'ambiente o per la terminazione formale del compito) saranno accessibili nella successiva fase operativa una volta conclusa la riflessione tramite 'a_concludi_intro'.";
-      case 'resume_intro':
-        return "Esiti dall'ambiente esterno ricevuti. Sei rientrato nella fase di riflessione interna per assimilarli ed eventualmente aggiornare il tuo stato interiore. Ricorda che ti trovi in riflessione (gli strumenti operativi e di terminazione non sono attivi in questo micro-passo): per procedere con la prossima azione nell'ambiente o per terminare il compito, invoca 'a_concludi_intro'.";
-      case 'loop_intro':
-        return "Stato interiore aggiornato. Puoi effettuare ulteriori regolazioni cognitive oppure procedere alla fase operativa tramite 'a_concludi_intro'.";
-      case 'start_exec':
-        return "Fase operativa attiva. Ora puoi utilizzare gli strumenti disponibili per interagire con l'ambiente, oppure invocare l'azione di terminazione per trasmettere l'esito finale e concludere il compito.";
-    }
+  formatSyntaxErrorMessage: (targetToolId, rawText, errorDetail) => {
+    return `Sintassi JSON non valida negli argomenti per il tool '${targetToolId}': ${errorDetail}. Testo ricevuto: "${rawText}"`;
   },
 
-  formatSchemaErrorPrompt: (targetToolId, errorDetail) => {
-    return `Si è verificato un errore nei parametri per l'azione '${targetToolId}': ${errorDetail}. Correggi i parametri ed effettua nuovamente la chiamata, oppure invoca 'a_abort_call' per annullarla.`;
-  },
-
-  formatSyntaxErrorPrompt: (targetToolId, rawText, errorDetail) => {
-    return `Errore di sintassi JSON negli argomenti per l'azione '${targetToolId}': ${errorDetail}. Testo non parsabile ricevuto: "${rawText}". Correggi la formattazione JSON ed effettua nuovamente la chiamata, oppure invoca 'a_abort_call' per annullarla.`;
-  },
-
-  formatDirectiveMessageContent: (directive) => {
-    return directive.prompt;
-  },
-
-  formatAbortResultContent: (targetToolId) => {
-    return `La richiesta di chiamata per '${targetToolId}' è stata revocata con successo su istruzione dell'assistente.`;
-  },
-
-  formatVoidResultContent: () => {
-    return 'OK';
-  },
-
-  formatControlActionDescription: (action) => {
-    switch (action) {
-      case 'a_concludi_intro':
-        return "Conclude la riflessione interna corrente e avvia la fase operativa per agire nell'ambiente o terminare il compito.";
-      case 'a_abort_call':
-        return "Annulla la chiamata non valida e rinuncia all'operazione per consentire all'esecuzione di proseguire.";
-    }
-  },
-
-  formatInternalErrorDetail: (kind, context) => {
-    switch (kind) {
-      case 'xor_concludi_violation':
-        return "'a_concludi_intro' serve esclusivamente a chiudere la preparazione: invocala da sola, senza combinare altre azioni nello stesso messaggio.";
-      case 'unauthorized_cognitive_action':
-        return `L'azione '${context?.toolId}' appartiene al Mondo esterno o non è abilitata per la riflessione interna. Gli strumenti del Mondo esterno sono accessibili solo nella fase operativa (dopo 'a_concludi_intro'). Invoca 'a_abort_call' per annullare la chiamata non valida.`;
-      case 'unregistered_cognitive_action':
-        return `L'azione '${context?.toolId}' non è riconosciuta dal sistema.`;
-      case 'unmounted_world_tool':
-        return `Lo strumento '${context?.toolId}' non è al momento abilitato. Attivalo tramite lo strumento di caricamento prima di chiamarlo.`;
-      case 'unregistered_world_tool':
-        return `Lo strumento '${context?.toolId}' non è presente nel catalogo disponibile.`;
-    }
-  },
-
-  validationMessages: {
-    nuovo_scopo_required: "Specificare il nuovo obiettivo su cui concentrarsi (non può essere vuoto).",
-    chiave_required: "Specificare il nome della variabile da salvare (non può essere vuoto).",
-    query_required: "Specificare il testo di ricerca da eseguire (non può essere vuoto).",
-    tool_ids_required: "Indicare almeno uno strumento da selezionare.",
-    concetto_ids_required: "Indicare almeno un documento o concetto da selezionare.",
-    sintesi_required: "Fornire un testo di riassunto per i messaggi da compattare.",
-    invalid_indices: "Gli indici dei messaggi da compattare non sono validi."
-  },
-
-  cognitiveMetadata: {
-    aggiorna_missione: {
-      toolName: 'aggiorna_missione',
-      description: "Aggiorna l'obiettivo corrente su cui ti stai focalizzando in questa sessione."
-    },
-    imposta_dato: {
-      toolName: 'imposta_dato',
-      description: "Salva o aggiorna un dato utile nella memoria di lavoro per le interazioni successive."
-    },
-    elimina_dato: {
-      toolName: 'elimina_dato',
-      description: "Rimuove un dato non più necessario dalla memoria di lavoro."
-    },
-    compatta_memoria: {
-      toolName: 'compatta_memoria',
-      description: "Riassume una serie di messaggi precedenti per risparmiare spazio di contesto, mantenendo i dettagli salienti."
-    },
-    cerca_tool: {
-      toolName: 'cerca_tool',
-      description: "Cerca nel catalogo per trovare quali strumenti sono disponibili."
-    },
-    carica_tool: {
-      toolName: 'carica_tool',
-      description: "Abilita uno o più strumenti per poterli utilizzare direttamente nella fase operativa."
-    },
-    scarica_tool: {
-      toolName: 'scarica_tool',
-      description: "Disabilita strumenti non più necessari per mantenere il contesto leggero e pulito."
-    },
-    cerca_concetti: {
-      toolName: 'cerca_concetti',
-      description: "Cerca documenti, linee guida o informazioni rilevanti nella base di conoscenza."
-    },
-    carica_concetto: {
-      toolName: 'carica_concetto',
-      description: "Carica il testo completo di un documento nella memoria attiva per poterlo consultare."
-    },
-    scarica_concetto: {
-      toolName: 'scarica_concetto',
-      description: "Rimuove un documento dalla memoria attiva quando non serve più."
-    }
-  }
+  formatDiagnosticPayload: (code, message, details) => ({
+    status: 'error',
+    code,
+    message,
+    details
+  })
 };

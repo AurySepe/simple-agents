@@ -14,7 +14,7 @@ import {
 
 async function runAndExport() {
   console.log('='.repeat(80));
-  console.log('   ESPORTAZIONE STRUTTURATA AUDIT FSM (DIVISIONE PER FASI E STEP)');
+  console.log('   ESPORTAZIONE STRUTTURATA AUDIT FSM (DIVISIONE PER FASI E STEP IN Ω_op)');
   console.log('='.repeat(80));
   console.log('\n🚀 Esecuzione dello scenario commerciale in corso...\n');
 
@@ -49,15 +49,15 @@ async function runAndExport() {
   // ==========================================================================
   const manifest: AgentManifest = {
     I: "Sei l'Assistente Commerciale Aziendale. Elabora preventivi e sconti nel rispetto delle policy.",
-    Ms0: 'In attesa di richieste commerciali da analizzare',
+    Ms0: 'Verificare preventivo del cliente 55 e applicare lo sconto VIP autorizzato',
     Ds0: { anno_fiscale: 2026 },
-    A_int: [
-      'aggiorna_missione',
-      'imposta_dato',
-      'cerca_tool',
-      'carica_tool',
-      'cerca_concetti',
-      'carica_concetto'
+    Ta0: ['w_db_ordini', 'w_applica_sconto'],
+    Ka0: [
+      {
+        id: 'pol_sconti_2026',
+        descrizione: 'Policy sconti 2026',
+        corpo: 'Preventivi oltre 150€ hanno diritto al 15% di sconto.'
+      }
     ],
     A_term: [
       {
@@ -73,7 +73,7 @@ async function runAndExport() {
   };
 
   // ==========================================================================
-  // 3. Modello Linguistico deterministico (9 Passi su 3 Macro-Cicli)
+  // 3. Modello Linguistico deterministico
   // ==========================================================================
   let step = 0;
   const model: LanguageModelAdapter = {
@@ -82,79 +82,20 @@ async function runAndExport() {
 
       if (step === 1) {
         return {
-          thought: 'Ricevuta la richiesta di sconto per il cliente 55. Cerco le policy relative agli sconti e i tool di gestione ordini.',
+          thought: 'Ricevuta la richiesta per il cliente 55. Interrogo il database per recuperare il preventivo.',
           calls: [
-            { id: 'call_c1', name: 'cerca_concetti', payload: { query: 'sconti clienti' } },
-            { id: 'call_t1', name: 'cerca_tool', payload: { query: 'ordini' } }
+            {
+              id: 'call_db_1',
+              name: 'w_db_ordini',
+              payload: { cliente_id: 55 }
+            }
           ]
         };
       }
 
       if (step === 2) {
         return {
-          thought: 'Ho individuato la policy sconti 2026 e i tool per database e applicazione sconto. Li carico nella mia memoria di lavoro.',
-          calls: [
-            {
-              id: 'call_m1',
-              name: 'aggiorna_missione',
-              payload: {
-                nuovo_scopo: 'Verificare preventivo del cliente 55 e applicare lo sconto VIP autorizzato'
-              }
-            },
-            {
-              id: 'call_m2',
-              name: 'carica_concetto',
-              payload: { concetto_ids: ['pol_sconti_2026'] }
-            },
-            {
-              id: 'call_m3',
-              name: 'carica_tool',
-              payload: { tool_ids: ['w_db_ordini', 'w_applica_sconto'] }
-            }
-          ]
-        };
-      }
-
-      if (step === 3) {
-        return {
-          thought: 'Tutti i concetti e i tool sono montati. Concludo la preparazione interna per passare alla fase esecutiva.',
-          calls: [{ id: 'call_close_0', name: 'a_concludi_intro', payload: {} }]
-        };
-      }
-
-      if (step === 4) {
-        return {
-          thought: 'Fase Esecutiva: Interrogo il database del Mondo W per estrarre l ultimo preventivo del cliente 55.',
-          calls: [{ id: 'call_db_1', name: 'w_db_ordini', payload: { cliente_id: 55 } }]
-        };
-      }
-
-      if (step === 5) {
-        return {
-          thought: 'Ricevuti dal Mondo i dati del preventivo ORD-99 (totale 200€). Salvo il dato strutturato nella memoria di lavoro Ds.',
-          calls: [
-            {
-              id: 'call_ds_1',
-              name: 'imposta_dato',
-              payload: {
-                chiave: 'preventivo_corrente',
-                valore: { ordine_id: 'ORD-99', totale: 200.0 }
-              }
-            }
-          ]
-        };
-      }
-
-      if (step === 6) {
-        return {
-          thought: 'Dato salvato con successo. Chiudo la fase introspettiva.',
-          calls: [{ id: 'call_close_1', name: 'a_concludi_intro', payload: {} }]
-        };
-      }
-
-      if (step === 7) {
-        return {
-          thought: 'Il totale di 200€ supera la soglia minima di 150€ per clienti VIP: applico lo sconto autorizzato del 15%.',
+          thought: 'Il preventivo ORD-99 ammonta a 200€, superando la soglia di 150€. Applico lo sconto del 15%.',
           calls: [
             {
               id: 'call_disc_1',
@@ -165,16 +106,9 @@ async function runAndExport() {
         };
       }
 
-      if (step === 8) {
+      if (step === 3) {
         return {
-          thought: 'Esito APPLICATO confermato dal Mondo W con nuovo totale di 170.0€. Chiudo subito l introspezione.',
-          calls: [{ id: 'call_close_2', name: 'a_concludi_intro', payload: {} }]
-        };
-      }
-
-      if (step === 9) {
-        return {
-          thought: 'Operazione completata con successo. Emetto il contratto di terminazione tipizzato a_successo.',
+          thought: 'Lo sconto è stato applicato correttamente. Posso chiudere il processo con il contratto a_successo.',
           calls: [
             {
               id: 'call_term_1',
@@ -194,45 +128,56 @@ async function runAndExport() {
   };
 
   // ==========================================================================
-  // 4. Raccoglitore di Telemetria e Stato
+  // 4. Esecuzione con InMemoryTelemetryCollector
   // ==========================================================================
   const collector = new InMemoryTelemetryCollector();
 
   const runResult = await runtime.runAgent(manifest, model, {
-    userContent: "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€.",
+    userContent:
+      "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€.",
     observers: [collector]
   });
 
+  console.log(`✅ Esecuzione completata con esito '${runResult.result.type}' in ${runResult.macroCycles} macro-cicli.\n`);
+
   // ==========================================================================
-  // 5. Esportazione Modulare dell'Audit (Fasi FSM + Step con Payload Reali)
+  // 5. Esportazione Modulare tramite ModularAuditExporter
   // ==========================================================================
-  const auditDir = path.resolve(process.cwd(), 'audit');
+  const scratchDir = path.resolve(process.cwd(), 'scratch');
+  const modularOutputDir = path.join(scratchDir, 'audit-commerciale');
 
   const exportResult = ModularAuditExporter.export(collector, {
-    outputDir: auditDir,
-    scenarioName: 'Walkthrough Commerciale: Verifica Preventivo e Applicazione Sconto',
+    outputDir: modularOutputDir,
+    scenarioName: 'Scenario Commerciale Sconto VIP (Ω_op)',
     generateHtmlDashboard: true
   });
 
   console.log('='.repeat(80));
-  console.log('✅ AUDIT MODULARE GENERATO CON SUCCESSO!');
+  console.log('   REPORT ESPORTAZIONE MODULARE AUDIT');
   console.log('='.repeat(80));
-  console.log(`📁 Cartella radice audit: ${exportResult.outputDir}`);
-  console.log(`📑 Fasi FSM individuate:  ${exportResult.phasesCount}`);
-  console.log(`🔢 Micro-passi registrati: ${exportResult.stepsCount}`);
-  console.log(`🏁 Contratto finale:       ${runResult.result.type}`);
-  console.log('');
-  console.log('Struttura file generata:');
-  console.log('  • audit/index.json                   <-- Indice delle Fasi e mappa dei file');
-  console.log('  • audit/index.html                   <-- Dashboard visuale interattiva con ispettore');
-  console.log('  • audit/phases/01_cycle0_q_intro/    <-- File phase_summary.json + step_01.json, etc.');
-  console.log('  • audit/phases/02_cycle0_q_exec/     <-- Chiamate esterne e payload reali');
-  console.log('  • audit/phases/...');
-  console.log('='.repeat(80));
+  console.log(`Directory di destinazione: ${exportResult.outputDir}`);
+  console.log(`Fasi FSM registrate:       ${exportResult.phasesCount}`);
+  console.log(`Passi decisionali totali:  ${exportResult.stepsCount}`);
+  console.log(`File indice generato:      ${exportResult.indexFilePath}`);
+  console.log(`Dashboard HTML interattiva:${exportResult.htmlDashboardPath}\n`);
+
+  // Mostra anteprima dell'indice JSON
+  const indexContent = JSON.parse(fs.readFileSync(exportResult.indexFilePath, 'utf8'));
+  console.log('📄 Struttura generata in index.json:');
+  console.log(JSON.stringify({
+    scenario: indexContent.scenario,
+    statisticheGenerali: indexContent.statisticheGenerali,
+    mappaFasiFSM: indexContent.mappaFasiFSM.map((f: any) => ({
+      fase: f.fase,
+      directory: f.directory,
+      conteggioPassi: f.conteggioPassi
+    }))
+  }, null, 2));
+
+  // Salvataggio anche del vecchio file flat unificato per retrocompatibilità
+  const flatPath = path.join(scratchDir, 'agent-state-timeline.json');
+  fs.writeFileSync(flatPath, collector.exportStateTimelineJSON(), 'utf8');
+  console.log(`\n💾 Timeline flat unificata salvata in: ${flatPath}\n`);
 }
 
-runAndExport().catch((err) => {
-  console.error('Errore durante la generazione del JSON:', err);
-  process.exit(1);
-});
-
+runAndExport().catch(console.error);

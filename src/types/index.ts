@@ -14,32 +14,11 @@ export interface TimeIndex {
 
 /**
  * ============================================================================
- * 2. LO SPAZIO DEI RUOLI EPISTEMICI: Π
- * ============================================================================
- * Definisce l'autorità formale della sorgente del messaggio:
- * - orchestrator (π_Ω): massima autorità, genera direttive e risposte cognitive
- * - agent (π_agent): il ragionatore (thought e call)
- * - world (π_world): risultati oggettivi passivi da W
- * - user (π_user): payload esogeni iniziali o asincroni
- */
-export type Role = 'orchestrator' | 'agent' | 'world' | 'user';
-
-/**
- * ============================================================================
- * 3. LO SPAZIO DEI CANALI DI CONTENUTO: K
- * ============================================================================
- */
-export type Channel = 'thought' | 'call' | 'result' | 'directive' | 'payload' | 'summary';
-
-/**
- * ============================================================================
- * 4. ALBERO DISCRETO DEI DATI E MESSAGGI ATOMICI DEL FLUSSO
+ * 2. SPAZIO DISCRETO DEI DATI
  * ============================================================================
  * Struttura algebrica pura per lo stato strutturato (D_s), i payload esogeni
- * e i risultati di esecuzione dei tool, indipendente da specifici formati
- * contingenti di serializzazione (JSON, YAML, CBOR, ecc.).
+ * e i risultati di esecuzione dei tool.
  */
-
 export type Scalar = string | number | boolean | null;
 
 export type DataValue =
@@ -53,18 +32,28 @@ export type UserPayload = string | DataRecord;
 
 export type ToolResult = DataValue | void | undefined;
 
-export type DirectiveContent = string | DataRecord;
+/**
+ * ============================================================================
+ * 3. STRUTTURA ATOMICA DEGLI EVENTI EPISTEMICI: e = <τ, type, μ, id>
+ * ============================================================================
+ * T_event = { 'stimulus', 'thought', 'action', 'result' }
+ */
+export type EventType = 'stimulus' | 'thought' | 'action' | 'result';
 
-export interface ThoughtMessage {
-  role: 'agent';
-  channel: 'thought';
+export interface StimulusEvent {
+  type: 'stimulus';
+  content: UserPayload;
+  callId?: never;
+}
+
+export interface ThoughtEvent {
+  type: 'thought';
   content: string;
   callId?: never;
 }
 
-export interface CallMessage {
-  role: 'agent';
-  channel: 'call';
+export interface ActionEvent {
+  type: 'action';
   callId: string;
   content: {
     name: string;
@@ -72,76 +61,37 @@ export interface CallMessage {
   };
 }
 
-export interface ResultMessage {
-  role: 'world' | 'orchestrator';
-  channel: 'result';
+export interface DiagnosticErrorPayload {
+  status: 'error';
+  code: 'SCHEMA_VALIDATION_ERROR' | 'SYNTAX_ERROR' | 'UNMOUNTED_TOOL' | 'UNKNOWN_ACTION';
+  message: string;
+  details?: unknown;
+}
+
+export interface ResultEvent {
+  type: 'result';
   callId: string;
-  content: ToolResult;
+  content: ToolResult | DiagnosticErrorPayload;
 }
 
-export interface BaseDirectiveMessage {
-  role: 'orchestrator';
-  channel: 'directive';
-  content: DirectiveContent;
-}
+export type EpEventInput =
+  | StimulusEvent
+  | ThoughtEvent
+  | ActionEvent
+  | ResultEvent;
 
-export interface OperationalDirectiveMessage extends BaseDirectiveMessage {
-  directiveType?: 'start_intro' | 'resume_intro' | 'loop_intro' | 'start_exec';
-  callId?: never;
-  targetToolId?: never;
-  schemaErrorDetail?: never;
-}
-
-export interface ErrSchemaDirectiveMessage extends BaseDirectiveMessage {
-  directiveType: 'err_schema';
-  callId?: string;
-  targetToolId: string;
-  schemaErrorDetail: string;
-}
-
-export interface ErrSyntaxDirectiveMessage extends BaseDirectiveMessage {
-  directiveType: 'err_syntax';
-  callId?: string;
-  targetToolId: string;
-  rawText: string;
-  syntaxErrorDetail: string;
-}
-
-export type DirectiveMessage =
-  | OperationalDirectiveMessage
-  | ErrSchemaDirectiveMessage
-  | ErrSyntaxDirectiveMessage;
-
-export interface PayloadMessage {
-  role: 'user';
-  channel: 'payload';
-  content: UserPayload;
-  callId?: never;
-}
-
-export interface SummaryMessage {
-  role: 'orchestrator' | 'world';
-  channel: 'summary';
-  content: string;
-  callId?: never;
-}
-
-export type MessageInput =
-  | ThoughtMessage
-  | CallMessage
-  | ResultMessage
-  | DirectiveMessage
-  | PayloadMessage
-  | SummaryMessage;
-
-export type Message = MessageInput & {
+export type EpEvent = EpEventInput & {
   index: number;
   tau?: TimeIndex;
 };
 
+// Alias per compatibilità con il flusso di traccia
+export type Message = EpEvent;
+export type MessageInput = EpEventInput;
+
 /**
  * ============================================================================
- * 5. ONTOLOGIA DI UN CONCETTO: c = <id, descrizione, corpo>
+ * 4. ONTOLOGIA DI UN CONCETTO: c = <id, descrizione, corpo>
  * ============================================================================
  */
 export interface Concept {
@@ -152,9 +102,8 @@ export interface Concept {
 
 /**
  * ============================================================================
- * 6. DEFINIZIONE GENERALE DEI TOOL (INTERFACCIA PER IL MODELLO LLM)
+ * 5. DEFINIZIONE DEI TOOL FISICI DEL MONDO (W)
  * ============================================================================
- * Rappresenta la firma formale contrattuale esposta nella maschera di visibilità V_Ω.
  */
 export interface ToolDefinition<TIn = any> {
   id: string;
@@ -162,69 +111,13 @@ export interface ToolDefinition<TIn = any> {
   parameters: z.ZodType<TIn>;
 }
 
-/**
- * Tool Fisico del Mondo Esterno (W):
- * In ossequio al Teorema di Non-Invasività, opera esclusivamente sui parametri in ingresso
- * e non ha accesso allo stato interno dell'agente.
- */
 export interface WorldTool<TIn = any, TOut extends ToolResult = ToolResult> extends ToolDefinition<TIn> {
   execute: (args: TIn) => Promise<TOut> | TOut;
 }
 
 /**
- * Tool Cognitivo di Introspezione (A_int):
- * Ha facoltà e mandato di applicare transizioni di memoria sullo stato S dell'agente.
- */
-export interface CognitiveTool<TIn = any, TOut extends ToolResult = ToolResult> extends ToolDefinition<TIn> {
-  execute: (args: TIn, state: AgentState) => Promise<TOut> | TOut;
-}
-
-/**
- * ============================================================================
- * PARAMETRI FORMALI TIPICIZZATI PER LE AZIONI COGNITIVE CANONICHE
- * ============================================================================
- */
-export interface CognitiveActionArgsMap {
-  aggiorna_missione: { nuovo_scopo: string };
-  imposta_dato: { chiave: string; valore: DataValue };
-  elimina_dato: { chiave: string };
-  compatta_memoria: { start_idx: number; end_idx: number; sintesi: string };
-  cerca_tool: { query: string };
-  carica_tool: { tool_ids: string[] };
-  scarica_tool: { tool_ids: string[] };
-  cerca_concetti: { query: string };
-  carica_concetto: { concetto_ids: string[] };
-  scarica_concetto: { concetto_ids: string[] };
-}
-
-/**
- * ============================================================================
- * AZIONI COGNITIVE CANONICHE DELL'UNIVERSO INTROSPETTIVO (A_int_universal)
- * ============================================================================
- * Insieme chiuso delle 10 primitive mentali formalizzate nel Framework.
- */
-export const CANONICAL_COGNITIVE_ACTION_IDS = [
-  'aggiorna_missione',
-  'imposta_dato',
-  'elimina_dato',
-  'compatta_memoria',
-  'cerca_tool',
-  'carica_tool',
-  'scarica_tool',
-  'cerca_concetti',
-  'carica_concetto',
-  'scarica_concetto'
-] as const;
-
-export type CanonicalCognitiveActionId = (typeof CANONICAL_COGNITIVE_ACTION_IDS)[number];
-
-/**
  * Type guards rigorosi
  */
-export function isCanonicalCognitiveActionId(id: string): id is CanonicalCognitiveActionId {
-  return CANONICAL_COGNITIVE_ACTION_IDS.some((item) => item === id);
-}
-
 export function isDataRecord(val: unknown): val is DataRecord {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
@@ -248,127 +141,23 @@ export function isNonEmptyArray<T>(arr: T[]): arr is NonEmptyArray<T> {
 
 /**
  * ============================================================================
- * METADATI LINGUISTICI ED EPISTEMICI PER IL MODELLO (LLM-Facing)
- * ============================================================================
- * Disaccoppia la costante simbolica interna del codice dal nome e dalla descrizione
- * con cui l'azione viene effettivamente proiettata ed emessa dal modello.
- */
-export interface CognitiveActionMetadata {
-  toolName: string;    // Il nome visto ed emesso dall'LLM (es. 'update_mission' in inglese, 'aggiorna_missione' in italiano)
-  description: string; // La descrizione del tool inviata all'LLM
-}
-
-export type CognitiveMetadataMap = Record<CanonicalCognitiveActionId, CognitiveActionMetadata>;
-
-/**
- * Catalogo fortemente tipizzato delle azioni cognitive del Framework (Livello 1).
- * Obbliga a tempo di compilazione a definire tutte le 10 azioni canoniche,
- * consentendo opzionalmente l'aggiunta di ulteriori azioni cognitive personalizzate.
- */
-export type CognitiveToolkit = {
-  [K in CanonicalCognitiveActionId]: CognitiveTool<CognitiveActionArgsMap[K]>;
-} & Record<string, CognitiveTool>;
-
-/**
- * ============================================================================
- * TIPOLOGIE DI ERRORI DI PROTOCOLLO E SCHEMA DELL'AUTOMA Ω
- * ============================================================================
- */
-export type SchemaErrorKind =
-  | 'xor_concludi_violation'
-  | 'unauthorized_cognitive_action'
-  | 'unregistered_cognitive_action'
-  | 'unmounted_world_tool'
-  | 'unregistered_world_tool';
-
-/**
- * ============================================================================
- * MESSAGGI DI VALIDAZIONE DEI PARAMETRI COGNITIVI (Policy-driven)
- * ============================================================================
- * Permette di parametrizzare a Livello 1 i testi esatti con cui Zod guida
- * l'agente nella correzione dei parametri formali durante q_repair.
- */
-export interface CognitiveValidationMessages {
-  nuovo_scopo_required: string;
-  chiave_required: string;
-  query_required: string;
-  tool_ids_required: string;
-  concetto_ids_required: string;
-  sintesi_required: string;
-  invalid_indices: string;
-}
-
-/**
- * ============================================================================
- * 7. LO STATO GLOBALE DELL'AGENTE: S = <I, Ms, Ds, Ta, Ka, Ep>
+ * 6. LO STATO GLOBALE DELL'AGENTE: S = <I, Ms, Ds, Ta, Ka, Ep>
  * ============================================================================
  */
 export interface AgentState {
   I: string;                           // Identità assoluta immutabile
-  Ms: string;                          // Missione corrente a breve termine
-  Ds: DataRecord;                      // Dati strutturati di contesto
-  Ta: Set<string>;                     // Toolbelt attivo (ID dei tool montati in W)
+  Ms: string;                          // Missione corrente
+  Ds: DataRecord;                      // Mappa dei dati operativi strutturati
+  Ta: Set<string>;                     // Toolbelt attivo (ID dei tool montati da W)
   Ka: Map<string, Concept>;            // Buffer concetti attivi a testo pieno
-  Ep: Message[];                       // Flusso di coscienza cronologico
+  Ep: Message[];                       // Traccia episodica degli eventi
 }
 
 /**
  * ============================================================================
- * 8. LE DIRETTIVE DI CONTROLLO: Δ (Discriminated Union Rigorosa)
+ * 7. LA TRIPLA DI CONTESTO PER L'INFERENZA: C_Ω
  * ============================================================================
- */
-export interface StartIntroDirective {
-  type: 'start_intro';
-  prompt: string;
-}
-
-export interface ResumeIntroDirective {
-  type: 'resume_intro';
-  prompt: string;
-}
-
-export interface LoopIntroDirective {
-  type: 'loop_intro';
-  prompt: string;
-}
-
-export interface StartExecDirective {
-  type: 'start_exec';
-  prompt: string;
-}
-
-export interface ErrSchemaDirective {
-  type: 'err_schema';
-  prompt: string;
-  targetToolId: string;       // Obbligatorio in caso di errore schema
-  schemaErrorDetail: string;  // Obbligatorio in caso di errore schema
-  callId?: string;
-}
-
-export interface ErrSyntaxDirective {
-  type: 'err_syntax';
-  prompt: string;
-  targetToolId: string;       // Obbligatorio in caso di errore sintassi
-  rawText: string;            // Testo non parsabile ricevuto
-  syntaxErrorDetail: string;  // Dettaglio dell'errore di sintassi JSON
-  callId?: string;
-}
-
-export type Directive =
-  | StartIntroDirective
-  | ResumeIntroDirective
-  | LoopIntroDirective
-  | StartExecDirective
-  | ErrSchemaDirective
-  | ErrSyntaxDirective;
-
-export type DirectiveType = Directive['type'];
-
-/**
- * ============================================================================
- * 9. LA TRIPLA DI CONTESTO FONDAMENTALE PER L'INFERENZA: C_Ω
- * ============================================================================
- * C_Ω(δ, S) = < F_Ω (System), Ep (Messages), V_Ω (Tools) >
+ * C_Ω(S, q) = < F_Ω (System), Ep (Messages), V_Ω (Tools) >
  */
 export interface InferenceTriple {
   systemFrame: string;                 // F_Ω proiettato per il canale system
@@ -378,7 +167,7 @@ export interface InferenceTriple {
 
 /**
  * ============================================================================
- * 10. RISPOSTA DUAL DEL MODELLO LINGUISTICO: M(C_Ω)
+ * 8. RISPOSTA DEL MODELLO LINGUISTICO: M(C_Ω)
  * ============================================================================
  */
 export interface ValidToolCall {
@@ -408,12 +197,12 @@ export interface ModelOutput {
 
 /**
  * ============================================================================
- * 11. I CONTRATTI DI TERMINAZIONE: A_term e TAGGED UNION
+ * 9. I CONTRATTI DI TERMINAZIONE: A_term e TAGGED UNION
  * ============================================================================
  */
 export interface TerminationContract<T = DataValue> {
   id: string;
-  description: string;                // Descrizione esplicita fornita dall'utente nel Manifesto
+  description: string;
   schema: z.ZodType<T>;
 }
 
@@ -424,66 +213,43 @@ export interface ExitResult<T = DataValue> {
 
 /**
  * ============================================================================
- * 12. IL MANIFESTO DELL'AGENTE: M_agent = <S0, A_int, A_term>
+ * 10. LA SPECIFICA DELL'AGENTE: A_op = <I, Ms0, Ds0, Ta0, Ka0, A_term>
  * ============================================================================
  */
-export interface AgentManifest<
-  TCognitive extends string = CanonicalCognitiveActionId,
-  TTerm = DataValue
-> {
+export interface AgentManifest<TTerm = DataValue> {
   I: string;
   Ms0: string;
   Ds0?: DataRecord;
-  Ta0?: Set<string> | readonly string[];                   // Sottoinsieme rigoroso di tool montati all'avvio: Ta0 ⊆ W
-  Ka0?: Set<Concept> | readonly Concept[];                 // Sottoinsieme rigoroso di concetti pre-caricati: Ka0 ⊆ U_knowledge
+  Ta0?: Set<string> | readonly string[];
+  Ka0?: Set<Concept> | readonly Concept[];
   Ep0?: Message[];
-  A_int: Set<TCognitive> | readonly TCognitive[];          // Capacità cognitive concesse (se vuoto => reattivo), tipizzate canonicamente
-  A_term: TerminationContract<TTerm>[];                    // Porte di uscita tipizzate
+  A_term: TerminationContract<TTerm>[];
 }
 
 /**
  * ============================================================================
- * 13. STATI MACROSCOPICI DI CONTROLLO DELL'AUTOMA: Q
+ * 11. STATI MACROSCOPICI DI CONTROLLO DELL'AUTOMA: Q
  * ============================================================================
  */
 export type FSMControlState =
   | 'q_sleep'
-  | 'q_intro'
   | 'q_exec'
-  | 'q_repair'
   | 'q_yield'
+  | 'q_repair'
   | 'q_halt';
 
 /**
  * ============================================================================
- * 14. CODICI SIMBOLICI DELLE TRANSIZIONI FSM
+ * 12. CODICI DELLE TRANSIZIONI FSM
  * ============================================================================
- * Codici costanti simbolici astratti che identificano la causa di una transizione
- * senza alcuna stringa in linguaggio naturale all'interno del motore Ω.
  */
 export type TransitionReasonCode =
-  | 'router_initial_intro'
-  | 'router_initial_exec'
-  | 'intro_concluded'
-  | 'intro_empty_action'
-  | 'intro_xor_violation'
-  | 'intro_unauthorized_action'
-  | 'intro_unregistered_action'
-  | 'intro_action_execution_error'
-  | 'intro_json_syntax_error'
-  | 'exec_empty_calls'
-  | 'exec_term_schema_error'
-  | 'exec_term_success'
-  | 'exec_world_unmounted_tool'
-  | 'exec_world_schema_error'
-  | 'exec_json_syntax_error'
+  | 'stimulus_received'
   | 'exec_world_yield'
-  | 'repair_abort_success'
-  | 'repair_abort_yield'
-  | 'repair_retry_intro'
-  | 'repair_retry_exec'
-  | 'manual_override'
-  | 'post_yield_sleep';
-
-
-
+  | 'exec_term_success'
+  | 'exec_schema_error'
+  | 'exec_syntax_error'
+  | 'repair_success'
+  | 'repair_abort'
+  | 'post_yield_exec'
+  | 'manual_override';

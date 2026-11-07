@@ -3,7 +3,6 @@ import { z } from 'zod';
 import {
   AgentManifest,
   AgentState,
-  createDefaultCognitiveToolkit,
   createDefaultFrameworkConfig,
   createWorldRegistry,
   defaultEnglishPolicy,
@@ -12,94 +11,54 @@ import {
   defaultXmlProjector,
   FrameworkEngine,
   LanguageModelAdapter,
-  WorldRegistry
+  ToolDefinition
 } from '../src/index.js';
 
 describe('Standard Library / Defaults di Livello 1', () => {
-  it('dovrebbe istanziare un FrameworkEngine con una sola riga tramite createDefaultFrameworkConfig()', () => {
+  it('dovrebbe istanziare un FrameworkEngine con createDefaultFrameworkConfig()', () => {
     const framework = new FrameworkEngine(createDefaultFrameworkConfig());
     expect(framework).toBeInstanceOf(FrameworkEngine);
   });
 
   it('dovrebbe consentire l override selettivo del proiettore e della policy linguistica con messaggi in inglese', () => {
     const config = createDefaultFrameworkConfig({
-      projector: defaultXmlProjector,
+      systemFrameProjector: defaultXmlProjector,
       policy: defaultEnglishPolicy
     });
 
     expect(config.systemFrameProjector).toBe(defaultXmlProjector);
     expect(config.policy).toBe(defaultEnglishPolicy);
 
-    // Verifica che lo schema sia stato generato con il messaggio di validazione in inglese della policy
-    const parseResult = config.cognitiveTools.aggiorna_missione.parameters.safeParse({ nuovo_scopo: '' });
-    expect(parseResult.success).toBe(false);
-    if (!parseResult.success) {
-      expect(JSON.stringify(parseResult.error.format())).toContain(
-        defaultEnglishPolicy.validationMessages.nuovo_scopo_required
-      );
-    }
+    const errorMsg = config.policy?.formatSchemaErrorMessage('test_tool', 'Missing field x');
+    expect(errorMsg).toContain("Invalid parameters for tool 'test_tool': Missing field x");
   });
 
-  describe('Cognitive Tools di Default (In-Memory)', () => {
-    it('dovrebbe eseguire correttamente le mutazioni di stato in-memory', async () => {
-      const toolkit = createDefaultCognitiveToolkit();
-      const state: AgentState = {
-        I: 'Agente Test',
-        Ms: 'Scopo iniziale',
-        Ds: {},
-        Ta: new Set(),
-        Ka: new Map(),
-        Ep: []
-      };
+  describe('Policy di Default (Italiana ed Inglese)', () => {
+    it('dovrebbe formattare gli errori di schema e sintassi in italiano', () => {
+      const schemaErr = defaultItalianPolicy.formatSchemaErrorMessage('calcola', 'importo mancante');
+      expect(schemaErr).toBe("Parametri non conformi allo schema per il tool 'calcola': importo mancante");
 
-      // 1. aggiorna_missione
-      toolkit.aggiorna_missione.execute({ nuovo_scopo: 'Nuovo scopo' }, state);
-      expect(state.Ms).toBe('Nuovo scopo');
+      const syntaxErr = defaultItalianPolicy.formatSyntaxErrorMessage('calcola', '{ foo: ', 'Unexpected end of JSON');
+      expect(syntaxErr).toBe('Sintassi JSON non valida negli argomenti per il tool \'calcola\': Unexpected end of JSON. Testo ricevuto: "{ foo: "');
 
-      // 2. imposta_dato
-      toolkit.imposta_dato.execute({ chiave: 'session_id', valore: 12345 }, state);
-      expect(state.Ds['session_id']).toBe(12345);
+      const diag = defaultItalianPolicy.formatDiagnosticPayload('SCHEMA_VALIDATION_ERROR', schemaErr, { foo: 'bar' });
+      expect(diag.status).toBe('error');
+      expect(diag.code).toBe('SCHEMA_VALIDATION_ERROR');
+      expect(diag.message).toBe(schemaErr);
+      expect(diag.details).toEqual({ foo: 'bar' });
+    });
 
-      // 3. elimina_dato
-      toolkit.elimina_dato.execute({ chiave: 'session_id' }, state);
-      expect(state.Ds['session_id']).toBeUndefined();
+    it('dovrebbe formattare gli errori di schema e sintassi in inglese', () => {
+      const schemaErr = defaultEnglishPolicy.formatSchemaErrorMessage('calculate', 'missing amount');
+      expect(schemaErr).toBe("Invalid parameters for tool 'calculate': missing amount");
 
-      // 4. carica_tool e scarica_tool
-      toolkit.carica_tool.execute({ tool_ids: ['tool_api_1', 'tool_api_2'] }, state);
-      expect(state.Ta.has('tool_api_1')).toBe(true);
-      expect(state.Ta.has('tool_api_2')).toBe(true);
+      const syntaxErr = defaultEnglishPolicy.formatSyntaxErrorMessage('calculate', '{ foo: ', 'Unexpected end of JSON');
+      expect(syntaxErr).toBe('Invalid JSON syntax in arguments for tool \'calculate\': Unexpected end of JSON. Received raw text: "{ foo: "');
 
-      toolkit.scarica_tool.execute({ tool_ids: ['tool_api_1'] }, state);
-      expect(state.Ta.has('tool_api_1')).toBe(false);
-      expect(state.Ta.has('tool_api_2')).toBe(true);
-
-      // 5. carica_concetto e scarica_concetto
-      toolkit.carica_concetto.execute({ concetto_ids: ['c_policy_reso'] }, state);
-      expect(state.Ka.has('c_policy_reso')).toBe(true);
-
-      toolkit.scarica_concetto.execute({ concetto_ids: ['c_policy_reso'] }, state);
-      expect(state.Ka.has('c_policy_reso')).toBe(false);
-
-      // 6. compatta_memoria
-      state.Ep = [
-        { index: 0, role: 'user', channel: 'payload', content: 'Msg 0' },
-        { index: 1, role: 'agent', channel: 'thought', content: 'Msg 1' },
-        { index: 2, role: 'agent', channel: 'call', callId: 'call_test', content: { name: 'test_tool', payload: {} } },
-        { index: 3, role: 'world', channel: 'result', callId: 'call_test', content: 'Msg 3' },
-        { index: 4, role: 'user', channel: 'payload', content: 'Msg 4' }
-      ];
-
-      toolkit.compatta_memoria.execute(
-        { start_idx: 1, end_idx: 3, sintesi: 'Riassunto chiamate intermedie' },
-        state
-      );
-
-      // [Msg 0] + [Sommario] + [Msg 4] = 3 messaggi
-      expect(state.Ep.length).toBe(3);
-      expect(state.Ep[0].content).toBe('Msg 0');
-      expect(state.Ep[1].channel).toBe('summary');
-      expect(state.Ep[1].content).toBe('Riassunto chiamate intermedie');
-      expect(state.Ep[2].content).toBe('Msg 4');
+      const diag = defaultEnglishPolicy.formatDiagnosticPayload('SYNTAX_ERROR', syntaxErr);
+      expect(diag.status).toBe('error');
+      expect(diag.code).toBe('SYNTAX_ERROR');
+      expect(diag.message).toBe(syntaxErr);
     });
   });
 
@@ -116,151 +75,102 @@ describe('Standard Library / Defaults di Livello 1', () => {
     };
 
     it('dovrebbe proiettare lo stato in Markdown', () => {
-      const output = defaultMarkdownProjector({ type: 'start_intro', prompt: 'test' }, dummyState);
-      expect(output).toContain('# IDENTITÀ:');
-      expect(output).toContain('## OBIETTIVO CORRENTE:');
+      const output = defaultMarkdownProjector.renderFrame(dummyState);
+      expect(output).toContain('# IDENTITY');
+      expect(output).toContain('## MISSION');
       expect(output).toContain('ORD-999');
-      expect(output).toContain('calcola_totale');
       expect(output).toContain('Politica resi');
     });
 
     it('dovrebbe proiettare lo stato in XML', () => {
-      const output = defaultXmlProjector({ type: 'start_intro', prompt: 'test' }, dummyState);
+      const output = defaultXmlProjector.renderFrame(dummyState);
       expect(output).toContain('<identity>');
-      expect(output).toContain('<current_mission>');
+      expect(output).toContain('<mission>');
       expect(output).toContain('<structured_data>');
-      expect(output).toContain('<mounted_tools>');
       expect(output).toContain('<active_concepts>');
     });
   });
 
   describe('End-to-End con i Default', () => {
-    it('dovrebbe eseguire un ciclo completo agente con i moduli di default', async () => {
+    it('dovrebbe eseguire un ciclo completo agente con i moduli di default e terminare con A_term', async () => {
       const framework = new FrameworkEngine(createDefaultFrameworkConfig());
-      const mockWorld = createWorldRegistry([]);
+
+      const mockTool = {
+        id: 'saluta',
+        description: 'Saluta l utente',
+        parameters: z.object({ nome: z.string() }),
+        execute: async (args: { nome: string }) => `Ciao ${args.nome}!`
+      };
+
+      const mockWorld = createWorldRegistry([mockTool]);
+
       const runtime = framework.bindWorld(mockWorld);
 
       const manifest: AgentManifest = {
         I: 'Agente Default',
-        Ms0: 'Inizio',
-        A_int: new Set(['aggiorna_missione']),
+        Ms0: 'Saluta e termina',
+        Ta0: ['saluta'],
         A_term: [
           {
             id: 'termina',
-            description: 'Conclude',
+            description: 'Conclude operatività',
             schema: z.object({ esito: z.string() })
           }
         ]
       };
 
+      let stepCount = 0;
       const model: LanguageModelAdapter = {
-        infer: async (ctx) => {
-          // Passo 1: se Ms non è ancora aggiornato, chiamiamo aggiorna_missione (che ha ritorno void)
-          const stateMs = ctx.systemFrame.includes('Ms aggiornata');
-          if (!stateMs && ctx.visibleTools.some((t) => t.id === 'aggiorna_missione')) {
+        infer: async (_ctx) => {
+          stepCount++;
+          if (stepCount === 1) {
+            // Primo step: chiama il tool operativo del mondo
             return {
+              thought: 'Devo salutare l utente',
               calls: [
                 {
-                  id: 'call_void_1',
-                  name: 'aggiorna_missione',
-                  payload: { nuovo_scopo: 'Ms aggiornata' }
+                  id: 'call_1',
+                  name: 'saluta',
+                  payload: { nome: 'Mario' }
                 }
               ]
             };
           }
-          // Passo 2: concludiamo intro
-          if (ctx.visibleTools.some((t) => t.id === 'a_concludi_intro')) {
-            return { calls: [{ id: 'c1', name: 'a_concludi_intro', payload: {} }] };
-          }
-          // Passo 3: in exec, terminiamo
-          return { calls: [{ id: 'c2', name: 'termina', payload: { esito: 'Perfetto' } }] };
+          // Secondo step: vede il risultato nel canale result ed esce tramite A_term
+          return {
+            thought: 'Saluto completato, ora termino',
+            calls: [
+              {
+                id: 'call_term',
+                name: 'termina',
+                payload: { esito: 'Perfetto' }
+              }
+            ]
+          };
         }
       };
 
       const agent = runtime.spawnAgent(manifest, model);
-      const outcome = await agent.wakeup({ userContent: 'Esegui il task.' });
+      const outcome = await agent.run({ userContent: 'Esegui il task.' });
 
-      expect(outcome.status).toBe('halt');
-      if (outcome.status === 'halt') {
-        expect(outcome.result.type).toBe('termina');
-        expect(outcome.result.payload).toEqual({ esito: 'Perfetto' });
-      }
+      expect(outcome.result.type).toBe('termina');
+      expect(outcome.result.payload).toEqual({ esito: 'Perfetto' });
 
-      // Verifica formale: la chiamata a ritorno void ha prodotto content: 'OK' dichiarato a Livello 1
-      const voidResultMsg = agent.getState().Ep.find(
-        (m) => m.channel === 'result' && m.callId === 'call_void_1'
-      );
-      expect(voidResultMsg).toBeDefined();
-      expect(voidResultMsg?.content).toBe('OK');
-    });
+      // Verifica eventi generati in Ep (4-tupla)
+      const ep = agent.getState().Ep;
+      const stimulus = ep.find((e) => e.type === 'stimulus');
+      expect(stimulus).toBeDefined();
+      expect(stimulus?.content).toBe('Esegui il task.');
 
-    it('dovrebbe garantire la portabilità del Manifesto traducendo le chiamate LLM in inglese verso le costanti interne', async () => {
-      // Configuriamo il framework in inglese
-      const framework = new FrameworkEngine(
-        createDefaultFrameworkConfig({ policy: defaultEnglishPolicy })
-      );
-      const mockWorld = createWorldRegistry([]);
-      const runtime = framework.bindWorld(mockWorld);
+      const thought = ep.find((e) => e.type === 'thought');
+      expect(thought).toBeDefined();
 
-      // Lo STESSO Manifesto identico (con permessi espressi nelle costanti canoniche del codice)
-      const portableManifest: AgentManifest = {
-        I: 'International Agent',
-        Ms0: 'Initial Mission',
-        A_int: new Set(['aggiorna_missione']), // Costante canonica stabile!
-        A_term: [
-          {
-            id: 'finish',
-            description: 'Finish',
-            schema: z.object({ result: z.string() })
-          }
-        ]
-      };
+      const action = ep.find((e) => e.type === 'action' && e.content.name === 'saluta');
+      expect(action).toBeDefined();
 
-      let visibleToolIds: string[] = [];
-
-      const model: LanguageModelAdapter = {
-        infer: async (ctx) => {
-          visibleToolIds = ctx.visibleTools.map((t) => t.id);
-
-          // Il modello vede ed emette 'update_mission' (il nome in inglese fornito dalla policy)!
-          const updated = ctx.systemFrame.includes('Goal updated in English');
-          if (!updated && ctx.visibleTools.some((t) => t.id === 'update_mission')) {
-            return {
-              calls: [
-                {
-                  id: 'call_en_1',
-                  name: 'update_mission',
-                  payload: { nuovo_scopo: 'Goal updated in English' }
-                }
-              ]
-            };
-          }
-          if (ctx.visibleTools.some((t) => t.id === 'a_concludi_intro')) {
-            return { calls: [{ id: 'c_end', name: 'a_concludi_intro', payload: {} }] };
-          }
-          return { calls: [{ id: 'c_term', name: 'finish', payload: { result: 'Done' } }] };
-        }
-      };
-
-      const agent = runtime.spawnAgent(portableManifest, model);
-      agent.feedPayload({ userContent: 'Start task.' });
-
-      // Eseguiamo il primo step: deve mostrare 'update_mission' all'LLM ed eseguire la mutazione di 'aggiorna_missione'
-      const outcome1 = await agent.step();
-      expect(outcome1.status).toBe('running');
-
-      // Verifica 1: all'LLM è stato esposto 'update_mission' e NON la chiave interna
-      expect(visibleToolIds).toContain('update_mission');
-      expect(visibleToolIds).not.toContain('aggiorna_missione');
-
-      // Verifica 2: l'Orchestratore ha mappato 'update_mission' -> 'aggiorna_missione',
-      // autorizzato dal Manifesto e mutando regolarmente Ms!
-      expect(agent.getState().Ms).toBe('Goal updated in English');
-
-      // Proseguiamo fino a termine
-      const finalOutcome = await agent.resume();
-      expect(finalOutcome.status).toBe('halt');
+      const result = ep.find((e) => e.type === 'result' && e.callId === 'call_1');
+      expect(result).toBeDefined();
+      expect(result?.content).toBe('Ciao Mario!');
     });
   });
 });
-

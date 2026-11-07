@@ -11,11 +11,11 @@ import {
 
 async function main() {
   console.log('='.repeat(80));
-  console.log('   ESECUZIONE DIMOSTRATIVA AUTONOMA: SCENARIO COMMERCIALE (3 MACRO-CICLI)');
+  console.log('   ESECUZIONE DIMOSTRATIVA AUTONOMA: SCENARIO COMMERCIALE (3 MACRO-CICLI IN Ω_op)');
   console.log('='.repeat(80));
 
   // ==========================================================================
-  // 1. LIVELLO 1: Framework Engine Ω con Standard Library di Default
+  // 1. LIVELLO 1: Framework Engine Ω_op con Standard Library di Default
   // ==========================================================================
   const framework = new FrameworkEngine(createDefaultFrameworkConfig());
 
@@ -33,7 +33,6 @@ async function main() {
       cliente_id: z.number().int().positive()
     }),
     execute: async ({ cliente_id }) => {
-      // Simuliamo una minima latenza di rete/database
       await new Promise((resolve) => setTimeout(resolve, 80));
       return worldDatabase[cliente_id];
     }
@@ -56,19 +55,19 @@ async function main() {
   const runtime = framework.bindWorld(world);
 
   // ==========================================================================
-  // 3. LIVELLO 3: Manifesto dell'Agente Commerciale
+  // 3. LIVELLO 3: Manifesto dell'Agente Commerciale Operativo
   // ==========================================================================
   const manifest: AgentManifest = {
     I: "Sei l'Assistente Commerciale Aziendale. Elabora preventivi e sconti nel rispetto delle policy.",
-    Ms0: 'In attesa di richieste commerciali da analizzare',
+    Ms0: 'Verificare preventivo del cliente 55 e applicare lo sconto VIP autorizzato',
     Ds0: { anno_fiscale: 2026 },
-    A_int: [
-      'aggiorna_missione',
-      'imposta_dato',
-      'cerca_tool',
-      'carica_tool',
-      'cerca_concetti',
-      'carica_concetto'
+    Ta0: ['w_db_ordini', 'w_applica_sconto'],
+    Ka0: [
+      {
+        id: 'pol_sconti_2026',
+        descrizione: 'Policy sconti 2026',
+        corpo: 'Preventivi oltre 150€ hanno diritto al 15% di sconto.'
+      }
     ],
     A_term: [
       {
@@ -84,61 +83,18 @@ async function main() {
   };
 
   // ==========================================================================
-  // 4. MODELLO LINGUISTICO: Simulatore dei 9 Passi Formali
+  // 4. MODELLO LINGUISTICO: Simulatore dei 3 Passi Operativi
   // ==========================================================================
   let step = 0;
   const model: LanguageModelAdapter = {
     infer: async () => {
       step++;
-      // Simuliamo la latenza di inferenza del modello LLM
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // --- MACRO-CICLO c = 0 (Introspezione, preparazione e query DB) ---
+      // --- MACRO-CICLO c = 0 (Query al DB del Mondo) ---
       if (step === 1) {
         return {
-          thought: 'Ricevuta la richiesta di sconto per il cliente 55. Cerco le policy relative agli sconti e i tool di gestione ordini.',
-          calls: [
-            { id: 'call_c1', name: 'cerca_concetti', payload: { query: 'sconti clienti' } },
-            { id: 'call_t1', name: 'cerca_tool', payload: { query: 'ordini' } }
-          ]
-        };
-      }
-
-      if (step === 2) {
-        return {
-          thought: 'Ho individuato la policy sconti 2026 e i tool per database e applicazione sconto. Li carico nella mia memoria di lavoro.',
-          calls: [
-            {
-              id: 'call_m1',
-              name: 'aggiorna_missione',
-              payload: {
-                nuovo_scopo: 'Verificare preventivo del cliente 55 e applicare lo sconto VIP autorizzato'
-              }
-            },
-            {
-              id: 'call_m2',
-              name: 'carica_concetto',
-              payload: { concetto_ids: ['pol_sconti_2026'] }
-            },
-            {
-              id: 'call_m3',
-              name: 'carica_tool',
-              payload: { tool_ids: ['w_db_ordini', 'w_applica_sconto'] }
-            }
-          ]
-        };
-      }
-
-      if (step === 3) {
-        return {
-          thought: 'Tutti i concetti e i tool sono montati. Concludo la preparazione interna per passare alla fase esecutiva.',
-          calls: [{ id: 'call_close_0', name: 'a_concludi_intro', payload: {} }]
-        };
-      }
-
-      if (step === 4) {
-        return {
-          thought: 'Fase Esecutiva: Interrogo il database del Mondo W per estrarre l ultimo preventivo del cliente 55.',
+          thought: 'Ricevuta la richiesta per il cliente 55. Interrogo il database per recuperare il preventivo.',
           calls: [
             {
               id: 'call_db_1',
@@ -149,33 +105,10 @@ async function main() {
         };
       }
 
-      // --- MACRO-CICLO c = 1 (Elaborazione dati preventivo e applicazione sconto) ---
-      if (step === 5) {
+      // --- MACRO-CICLO c = 1 (Applicazione dello sconto nel Mondo) ---
+      if (step === 2) {
         return {
-          thought: 'Ricevuti dal Mondo i dati del preventivo ORD-99 (totale 200€). Salvo il dato strutturato nella memoria di lavoro Ds.',
-          calls: [
-            {
-              id: 'call_ds_1',
-              name: 'imposta_dato',
-              payload: {
-                chiave: 'preventivo_corrente',
-                valore: { ordine_id: 'ORD-99', totale: 200.0 }
-              }
-            }
-          ]
-        };
-      }
-
-      if (step === 6) {
-        return {
-          thought: 'Dato salvato con successo. Chiudo la fase introspettiva.',
-          calls: [{ id: 'call_close_1', name: 'a_concludi_intro', payload: {} }]
-        };
-      }
-
-      if (step === 7) {
-        return {
-          thought: 'Il totale di 200€ supera la soglia minima di 150€ per clienti VIP: applico lo sconto autorizzato del 15%.',
+          thought: 'Il preventivo ORD-99 ammonta a 200€, superando la soglia di 150€. Applico lo sconto del 15%.',
           calls: [
             {
               id: 'call_disc_1',
@@ -186,17 +119,10 @@ async function main() {
         };
       }
 
-      // --- MACRO-CICLO c = 2 (Verifica finale e terminazione tipizzata) ---
-      if (step === 8) {
+      // --- MACRO-CICLO c = 2 (Terminazione tipizzata) ---
+      if (step === 3) {
         return {
-          thought: 'Esito APPLICATO confermato dal Mondo W con nuovo totale di 170.0€. Chiudo subito l introspezione.',
-          calls: [{ id: 'call_close_2', name: 'a_concludi_intro', payload: {} }]
-        };
-      }
-
-      if (step === 9) {
-        return {
-          thought: 'Operazione completata con successo. Emetto il contratto di terminazione tipizzato a_successo.',
+          thought: 'Lo sconto è stato applicato correttamente. Posso chiudere il processo con il contratto a_successo.',
           calls: [
             {
               id: 'call_term_1',
@@ -211,44 +137,39 @@ async function main() {
         };
       }
 
-      throw new Error(`Passo non previsto: ${step}`);
+      throw new Error(`Passo inatteso: ${step}`);
     }
   };
 
   // ==========================================================================
-  // 5. OSSERVATORE DA CONSOLE (Configurato in modalità VERBOSE per stampare TUTTO)
+  // 5. OBSERVER & LOGGER CONSOLE A COLORI
   // ==========================================================================
-  const logger = createConsoleObserver({
-    level: 'verbose',
-    showThoughts: true,
-    showVisibleTools: true,
-    showSystemFrame: true
+  const consoleObserver = createConsoleObserver({
+    prefix: '[AGENTE-COMMERCIALE]',
+    includeTimestamp: true
   });
 
   // ==========================================================================
   // 6. ESECUZIONE AUTONOMA END-TO-END
   // ==========================================================================
-  console.log('\n🚀 Avvio esecuzione autonoma...\n');
+  console.log('\n🚀 Avvio esecuzione autonoma runtime.runAgent()...\n');
 
+  const startTime = Date.now();
   const runResult = await runtime.runAgent(manifest, model, {
-    userContent: "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€.",
-    observers: [logger]
+    userContent:
+      "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€.",
+    observers: [consoleObserver]
   });
+  const duration = Date.now() - startTime;
 
   console.log('\n' + '='.repeat(80));
-  console.log('   ESECUZIONE COMPLETATA CON SUCCESSO!');
+  console.log('   RISULTATO FINALE DELL ESECUZIONE');
   console.log('='.repeat(80));
-  console.log('🏁 Contratto di uscita:', runResult.result.type);
-  console.log('📦 Dati di uscita:', runResult.result.payload);
-  console.log('🔄 Macro-cicli del Mondo consumati:', runResult.macroCycles);
-  console.log('⏱️ Passi decisionali eseguiti:', runResult.ticks);
-  console.log('🧠 Stato finale Ms (Missione):', runResult.state.Ms);
-  console.log('💾 Stato finale Ds (Memoria):', runResult.state.Ds);
-  console.log('='.repeat(80) + '\n');
+  console.log(`Esito Contratto: ${runResult.result.type}`);
+  console.log(`Dati Restituiti: ${JSON.stringify(runResult.result.payload, null, 2)}`);
+  console.log(`Macro-Cicli di Mondo (c): ${runResult.macroCycles}`);
+  console.log(`Tick Decisionali Totali (t): ${runResult.ticks}`);
+  console.log(`Tempo Totale Esecuzione: ${duration} ms\n`);
 }
 
-main().catch((err) => {
-  console.error('Errore durante la demo:', err);
-  process.exit(1);
-});
-
+main().catch(console.error);
