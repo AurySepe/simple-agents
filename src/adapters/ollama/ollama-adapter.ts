@@ -1,4 +1,4 @@
-import { InferenceTriple, ModelOutput } from '../../types/index.js';
+import { InferenceTriple, ModelOutput, ModelResult } from '../../types/index.js';
 import { LanguageModelAdapter } from '../index.js';
 import { OllamaClient } from './client.js';
 import {
@@ -48,7 +48,7 @@ export class OllamaModelAdapter implements LanguageModelAdapter {
     this.onContextTruncation = config.onContextTruncation;
   }
 
-  async infer(context: InferenceTriple): Promise<ModelOutput> {
+  async infer(context: InferenceTriple): Promise<ModelResult> {
     const { messages, tools } = this.strategy.formatContext(context);
 
     const { response, metrics } = await this.client.chat({

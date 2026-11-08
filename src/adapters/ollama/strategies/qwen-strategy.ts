@@ -5,6 +5,7 @@ import {
   isDataRecord,
   isNonEmptyArray,
   ModelOutput,
+  ModelResult,
   ToolCall
 } from '../../../types/index.js';
 import {
@@ -138,7 +139,7 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
     return { messages, tools };
   }
 
-  parseResponse(response: OllamaChatResponse): ModelOutput {
+  parseResponse(response: OllamaChatResponse): ModelResult {
     const rawMessage = response.message;
 
     // 1. Estrazione deterministica del pensiero secondo la modalità esplicita configurata dall'utente
@@ -180,9 +181,16 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
     const rawCalls = rawMessage.tool_calls;
     if (!rawCalls || rawCalls.length === 0) {
       if (response.done_reason === 'length') {
-        throw new Error(
-          `Il modello '${response.model}' ha saturato la finestra di contesto (num_ctx). Generazione troncata per superamento lunghezza (prompt_eval_count=${response.prompt_eval_count ?? 'N/D'}, eval_count=${response.eval_count ?? 'N/D'}). Incrementare 'num_ctx'. Contenuto parziale: "${rawMessage.content || thought || ''}"`
-        );
+        const thoughtLength = thought ? thought.length : 0;
+        const thoughtTail = thought ? `\nThinking finale (ultimi 1500 caratteri di ${thoughtLength}):\n${thought.slice(-1500)}` : '';
+        return {
+          status: 'stall',
+          stall: {
+            reason: 'thinking_budget_exhausted',
+            partialThought: thought || rawMessage.content || '',
+            message: `Il modello '${response.model}' ha saturato il budget di token di pensiero (done_reason='length') prima di selezionare un'azione.${thoughtTail}`
+          }
+        };
       }
       throw new Error(
         `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Thinking: "${thought || ''}". Contenuto: "${rawMessage.content || ''}"`

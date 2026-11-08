@@ -1,11 +1,13 @@
 import {
   AgentState,
   DataRecord,
+  DeliberationStall,
   DiagnosticErrorPayload,
   ExitResult,
   FSMControlState,
   InferenceTriple,
   ModelOutput,
+  ModelResult,
   ToolCall,
   ToolResult,
   TransitionReasonCode,
@@ -34,7 +36,7 @@ export interface ModelInferenceEvent extends BaseAgentEvent {
   type: 'model_inference';
   controlState: FSMControlState;
   context: InferenceTriple;
-  output: ModelOutput;
+  output: ModelResult;
   durationMs: number;
   stateSnapshot: Readonly<AgentState>;
 }
@@ -75,6 +77,12 @@ export interface HaltEvent extends BaseAgentEvent {
   stateSnapshot: Readonly<AgentState>;
 }
 
+export interface StallEvent extends BaseAgentEvent {
+  type: 'stall';
+  stall: DeliberationStall;
+  stateSnapshot: Readonly<AgentState>;
+}
+
 export type AgentEvent =
   | MacroCycleStartEvent
   | StepStartEvent
@@ -83,4 +91,5 @@ export type AgentEvent =
   | StateTransitionEvent
   | ToolErrorEvent
   | YieldEvent
-  | HaltEvent;
+  | HaltEvent
+  | StallEvent;

@@ -222,6 +222,8 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in 
     });
 
     // 1. Verifica terminazione corretta
+    expect(runResult.status).toBe('halt');
+    if (runResult.status !== 'halt') throw new Error('Expected halt');
     expect(runResult.result.type).toBe('a_successo');
     expect(runResult.result.payload).toEqual({
       ordine_id: 'ORD-99',

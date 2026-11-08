@@ -254,9 +254,38 @@ export function normalizeToolCall(call: ToolCallInput): ToolCall {
 
 export type NonEmptyArray<T> = [T, ...T[]];
 
+/**
+ * ============================================================================
+ * 8. RISPOSTA DEL MODELLO LINGUISTICO: M(C_Ω)
+ * ============================================================================
+ */
+
+/**
+ * Rappresenta la paralisi deliberativa del modello linguistico
+ * dovuta all'esaurimento del budget di token di pensiero (finish_reason='length')
+ * prima di riuscire a selezionare un'azione.
+ */
+export interface DeliberationStall {
+  reason: 'thinking_budget_exhausted';
+  partialThought: string;
+  message: string;
+}
+
 export interface ModelOutput {
+  status?: 'success';
   thought?: string;
   calls: NonEmptyArray<ToolCallInput>;
+}
+
+export interface ModelStallOutput {
+  status: 'stall';
+  stall: DeliberationStall;
+}
+
+export type ModelResult = ModelOutput | ModelStallOutput;
+
+export function isModelStall(result: ModelResult): result is ModelStallOutput {
+  return result.status === 'stall';
 }
 
 /**
@@ -300,14 +329,16 @@ export type FSMControlState =
   | 'q_exec'
   | 'q_yield'
   | 'q_repair'
-  | 'q_halt';
+  | 'q_halt'
+  | 'q_stall';
 
 export type ActiveFSMState<TTerm = DataValue> =
   | { phase: 'q_sleep' }
   | { phase: 'q_exec' }
   | { phase: 'q_yield'; pendingCalls: ValidToolCall[] }
   | { phase: 'q_repair'; targetToolId: string; targetCallId: string }
-  | { phase: 'q_halt'; exitResult: ExitResult<TTerm> };
+  | { phase: 'q_halt'; exitResult: ExitResult<TTerm> }
+  | { phase: 'q_stall'; stall: DeliberationStall };
 
 /**
  * ============================================================================
@@ -323,4 +354,5 @@ export type TransitionReasonCode =
   | 'repair_success'
   | 'repair_abort'
   | 'post_yield_exec'
-  | 'manual_override';
+  | 'manual_override'
+  | 'exec_deliberation_stall';

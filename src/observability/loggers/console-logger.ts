@@ -33,6 +33,8 @@ function humanizeFSMState(state: string): string {
       return 'Attesa servizi esterni';
     case 'q_halt':
       return 'Completato';
+    case 'q_stall':
+      return 'Stallo deliberativo';
     default:
       return state;
   }
@@ -65,6 +67,8 @@ function humanizeTransitionReason(
       return 'ricezione esiti da servizi esterni e ripresa deliberazione';
     case 'manual_override':
       return 'modifica manuale di stato';
+    case 'exec_deliberation_stall':
+      return 'stallo deliberativo: thinking budget esaurito';
     default:
       return code;
   }
@@ -230,6 +234,18 @@ export class ConsoleLoggerObserver implements AgentObserver {
       }
 
       case 'model_inference': {
+        if (event.output.status === 'stall') {
+          if (this.showThoughts && event.output.stall.partialThought) {
+            this.write(pfx + `  💭 ${this.yellow(this.bold('Pensiero parziale fino allo stallo:'))}`);
+            const lines = event.output.stall.partialThought.split('\n');
+            for (const l of lines) {
+              this.write(pfx + `     ${this.yellow(l)}`);
+            }
+          }
+          this.write(pfx + `  🛑 ${this.red(this.bold('Stallo deliberativo:'))} ${this.red(event.output.stall.message)}`);
+          break;
+        }
+
         // Pensiero deliberativo dell'agente (se presente)
         if (this.showThoughts && event.output.thought) {
           this.write(pfx + `  💭 ${this.yellow(this.bold('Pensiero:'))}`);
@@ -306,6 +322,14 @@ export class ConsoleLoggerObserver implements AgentObserver {
         for (const line of formattedResult.split('\n')) {
           this.write(pfx + `   ${this.green(line)}`);
         }
+        this.write('');
+        break;
+      }
+
+      case 'stall': {
+        this.write('');
+        this.write(pfx + this.bold(this.red(`🛑 [Stallo Deliberativo - ${event.stall.reason}]`)));
+        this.write(pfx + `   ${this.red(event.stall.message)}`);
         this.write('');
         break;
       }

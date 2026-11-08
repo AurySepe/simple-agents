@@ -1,5 +1,5 @@
 import type { OpenAI } from 'openai';
-import { InferenceTriple, ModelOutput } from '../../types/index.js';
+import { InferenceTriple, ModelOutput, ModelResult } from '../../types/index.js';
 
 /**
  * Estensione fortemente tipizzata del messaggio assistant per supportare
@@ -81,5 +81,5 @@ export interface SGLangModelFamilyStrategy {
     toolChoice?: SGLangToolChoice;
   };
 
-  parseResponse(response: SGLangChatResponse): ModelOutput;
+  parseResponse(response: SGLangChatResponse): ModelResult;
 }

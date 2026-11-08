@@ -250,4 +250,123 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
       expect(step2.pendingCalls[0].payload).toEqual({ x: 10, y: 20 });
     }
   });
+
+  describe('Cognitive Stall & Inability: Gestione formale di q_stall (thinking_budget_exhausted)', () => {
+    it('dovrebbe registrare il pensiero parziale in Ep e transitare nello stato terminale q_stall quando infer restituisce uno stall', async () => {
+      const stallModel: LanguageModelAdapter = {
+        infer: async () => ({
+          status: 'stall',
+          stall: {
+            reason: 'thinking_budget_exhausted',
+            partialThought: 'Sto riflettendo ricorsivamente ma ho esaurito il budget...',
+            message: 'Limite max_tokens raggiunto durante la deliberazione interna.'
+          }
+        })
+      };
+
+      const agent = runtime.spawnAgent(manifest, stallModel);
+      agent.feedPayload({ userContent: 'Task ad altissima complessità di ragionamento' });
+      expect(agent.getControlState()).toBe('q_exec');
+
+      const stepOutcome = await agent.step();
+
+      // 1. Step restituisce status 'stall' con il dettaglio dello stallo
+      expect(stepOutcome.status).toBe('stall');
+      if (stepOutcome.status === 'stall') {
+        expect(stepOutcome.stall.reason).toBe('thinking_budget_exhausted');
+        expect(stepOutcome.stall.partialThought).toBe('Sto riflettendo ricorsivamente ma ho esaurito il budget...');
+        expect(stepOutcome.stall.message).toContain('Limite max_tokens');
+      }
+
+      // 2. FSM è nello stato terminale q_stall
+      expect(agent.getControlState()).toBe('q_stall');
+
+      // 3. Il pensiero parziale è stato registrato nella memoria episodica Ep
+      const ep = agent.getState().Ep;
+      const recordedThought = ep.find((e) => e.type === 'thought');
+      expect(recordedThought).toBeDefined();
+      expect(recordedThought?.content).toBe('Sto riflettendo ricorsivamente ma ho esaurito il budget...');
+
+      // 4. Invoking step() di nuovo restituisce in modo idempotente lo stato terminale stall
+      const stepAfterTerminal = await agent.step();
+      expect(stepAfterTerminal.status).toBe('stall');
+      expect(agent.getControlState()).toBe('q_stall');
+    });
+
+    it('dovrebbe completare agent.run() restituendo StallRunResult con status="stall"', async () => {
+      const stallModel: LanguageModelAdapter = {
+        infer: async () => ({
+          status: 'stall',
+          stall: {
+            reason: 'thinking_budget_exhausted',
+            partialThought: 'Loop di pensiero interrotto.',
+            message: 'finish_reason length'
+          }
+        })
+      };
+
+      const agent = runtime.spawnAgent(manifest, stallModel);
+      const runResult = await agent.run({ userContent: 'Elabora richiesta impossibile' });
+
+      expect(runResult.status).toBe('stall');
+      if (runResult.status === 'stall') {
+        expect(runResult.stall.reason).toBe('thinking_budget_exhausted');
+        expect(runResult.stall.partialThought).toBe('Loop di pensiero interrotto.');
+        expect(runResult.macroCycles).toBe(0);
+        expect(runResult.ticks).toBe(1);
+      }
+      expect(agent.getControlState()).toBe('q_stall');
+    });
+
+    it('dovrebbe transitare a q_stall anche se lo stallo cognitivo si verifica durante q_repair', async () => {
+      let callCount = 0;
+      const model: LanguageModelAdapter = {
+        infer: async () => {
+          callCount++;
+          if (callCount === 1) {
+            // Primo step: genera syntax_error portando in q_repair
+            return {
+              calls: [
+                {
+                  status: 'syntax_error',
+                  id: 'err_call_1',
+                  name: 'esegui_calcolo',
+                  rawText: '{"x": invalid',
+                  errorDetail: 'JSON parse error',
+                  payload: { raw: '{"x": invalid' }
+                }
+              ]
+            };
+          }
+          // Secondo step: in q_repair, esaurisce il budget di pensiero
+          return {
+            status: 'stall',
+            stall: {
+              reason: 'thinking_budget_exhausted',
+              partialThought: 'Stavo tentando di riparare il payload ma ho esaurito i token.',
+              message: 'Token budget exhausted in repair'
+            }
+          };
+        }
+      };
+
+      const agent = runtime.spawnAgent(manifest, model);
+      agent.feedPayload({ userContent: 'Test repair stall' });
+
+      // Step 1: transizione a q_repair
+      const s1 = await agent.step();
+      expect(s1.status).toBe('running');
+      expect(agent.getControlState()).toBe('q_repair');
+
+      // Step 2: stallo cognitivo durante la riparazione -> q_stall
+      const s2 = await agent.step();
+      expect(s2.status).toBe('stall');
+      expect(agent.getControlState()).toBe('q_stall');
+
+      const ep = agent.getState().Ep;
+      const lastThought = ep[ep.length - 1];
+      expect(lastThought.type).toBe('thought');
+      expect(lastThought.content).toBe('Stavo tentando di riparare il payload ma ho esaurito i token.');
+    });
+  });
 });

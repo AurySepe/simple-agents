@@ -283,6 +283,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
         ]
       });
 
+      if (output.status === 'stall') throw new Error('Unexpected stall');
       expect(output.thought).toBe('Devo verificare il cliente 55 nel database');
       expect(output.calls).toHaveLength(1);
       expect(output.calls[0]).toEqual({
@@ -324,6 +325,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
         ]
       });
 
+      if (output.status === 'stall') throw new Error('Unexpected stall');
       expect(output.calls).toHaveLength(1);
       expect(output.calls[0].status).toBe('syntax_error');
       if (output.calls[0].status === 'syntax_error') {
@@ -334,26 +336,31 @@ describe('SGLang Transport & Qwen Strategy', () => {
 
     it('deve rilevare troncamento per saturazione token quando finish_reason="length"', () => {
       const strategy = new SGLangQwenStrategy();
-      expect(() =>
-        strategy.parseResponse({
-          id: '1',
-          object: 'chat.completion',
-          created: 123,
-          model: 'QuantTrio/Qwen3.5-9B-AWQ',
-          choices: [
-            {
-              index: 0,
-              logprobs: null,
-              message: {
-                role: 'assistant',
-                content: 'Risposta parzialmente generata...',
-                refusal: null
-              },
-              finish_reason: 'length'
-            }
-          ]
-        })
-      ).toThrowError(/saturato il limite di token/);
+      const output = strategy.parseResponse({
+        id: '1',
+        object: 'chat.completion',
+        created: 123,
+        model: 'QuantTrio/Qwen3.5-9B-AWQ',
+        choices: [
+          {
+            index: 0,
+            logprobs: null,
+            message: {
+              role: 'assistant',
+              content: 'Risposta parzialmente generata...',
+              refusal: null
+            },
+            finish_reason: 'length'
+          }
+        ]
+      });
+
+      expect(output.status).toBe('stall');
+      if (output.status === 'stall') {
+        expect(output.stall.reason).toBe('thinking_budget_exhausted');
+        expect(output.stall.partialThought).toBe('Risposta parzialmente generata...');
+        expect(output.stall.message).toContain('budget di token');
+      }
     });
 
     it('deve supportare reasoning da tag <think> in modalità think_tags', () => {
@@ -384,6 +391,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
         ]
       });
 
+      if (output.status === 'stall') throw new Error('Unexpected stall');
       expect(output.thought).toBe('Analisi interna tra tag');
       expect(output.calls[0].name).toBe('test_action');
     });
@@ -439,6 +447,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
 
       const output = await adapter.infer(sampleTriple);
 
+      if (output.status === 'stall') throw new Error('Unexpected stall');
       expect(output.thought).toBe('Verifico ordine');
       expect(output.calls).toHaveLength(1);
       expect(output.calls[0].name).toBe('w_db_ordini');

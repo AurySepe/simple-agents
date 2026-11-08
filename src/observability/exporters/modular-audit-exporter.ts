@@ -205,12 +205,17 @@ export class ModularAuditExporter {
         },
         outputGrezzoDalModello: {
           durataMs: inf.durationMs,
-          thought: inf.output.thought,
-          calls: inf.output.calls.map((c) => ({
-            id: c.id,
-            name: c.name,
-            payload: c.payload
-          }))
+          status: inf.output.status ?? 'success',
+          thought: inf.output.status === 'stall' ? inf.output.stall.partialThought : inf.output.thought,
+          calls:
+            inf.output.status === 'stall'
+              ? []
+              : inf.output.calls.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  payload: c.payload
+                })),
+          stall: inf.output.status === 'stall' ? inf.output.stall : undefined
         },
         esitoEsecuzioneNelMondo:
           inf.controlState === 'q_exec'

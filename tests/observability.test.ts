@@ -73,6 +73,8 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
       observers: [collector]
     });
 
+    expect(result.status).toBe('halt');
+    if (result.status !== 'halt') throw new Error('Expected halt');
     expect(result.result.type).toBe('risposta_finale');
 
     // 5. Verifiche di Telemetria

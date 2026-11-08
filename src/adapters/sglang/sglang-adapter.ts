@@ -1,4 +1,4 @@
-import { InferenceTriple, ModelOutput } from '../../types/index.js';
+import { InferenceTriple, ModelOutput, ModelResult } from '../../types/index.js';
 import { LanguageModelAdapter } from '../index.js';
 import { SGLangClient } from './client.js';
 import {
@@ -45,7 +45,7 @@ export class SGLangModelAdapter implements LanguageModelAdapter {
     this.onContextTruncation = config.onContextTruncation;
   }
 
-  async infer(context: InferenceTriple): Promise<ModelOutput> {
+  async infer(context: InferenceTriple): Promise<ModelResult> {
     const { messages, tools, toolChoice } = this.strategy.formatContext(context);
 
     // Se l'utente ha specificato esplicitamente un tool_choice nelle options, ha priorità,

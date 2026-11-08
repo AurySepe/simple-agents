@@ -6,6 +6,7 @@ import {
   isDataRecord,
   isNonEmptyArray,
   ModelOutput,
+  ModelResult,
   SyntaxErrorToolCall,
   ToolCall,
   ValidToolCall
@@ -139,7 +140,7 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
     return { messages, tools, toolChoice };
   }
 
-  parseResponse(response: SGLangChatResponse): ModelOutput {
+  parseResponse(response: SGLangChatResponse): ModelResult {
     if (!response.choices || response.choices.length === 0) {
       throw new Error(`Risposta SGLang priva di scelte (choices vuoto): ${JSON.stringify(response)}`);
     }
@@ -157,9 +158,14 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
         } else if (rawMessage.thinking && rawMessage.thinking.trim().length > 0) {
           thought = rawMessage.thinking.trim();
         } else if (rawMessage.content) {
-          const match = rawMessage.content.match(/<think>([\s\S]*?)<\/think>/i);
-          if (match) {
-            thought = match[1].trim();
+          const matchClosed = rawMessage.content.match(/<think>([\s\S]*?)<\/think>/i);
+          if (matchClosed) {
+            thought = matchClosed[1].trim();
+          } else {
+            const matchOpen = rawMessage.content.match(/<think>([\s\S]*)$/i);
+            if (matchOpen) {
+              thought = matchOpen[1].trim();
+            }
           }
         }
         break;
@@ -190,9 +196,14 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
       if (choice.finish_reason === 'length') {
         const thoughtLength = thought ? thought.length : 0;
         const thoughtTail = thought ? `\nThinking finale (ultimi 1500 caratteri di ${thoughtLength}):\n${thought.slice(-1500)}` : '';
-        throw new Error(
-          `Il modello '${response.model}' ha saturato il limite di token (finish_reason='length'). Generazione troncata prima della selezione delle azioni. Incrementare 'max_tokens' o verificare il contesto.${thoughtTail}`
-        );
+        return {
+          status: 'stall',
+          stall: {
+            reason: 'thinking_budget_exhausted',
+            partialThought: thought || rawMessage.content || '',
+            message: `Il modello '${response.model}' ha saturato il budget di token di pensiero (finish_reason='length') prima di selezionare un'azione.${thoughtTail}`
+          }
+        };
       }
       throw new Error(
         `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Thinking: "${thought || ''}". Contenuto: "${rawMessage.content || ''}"`

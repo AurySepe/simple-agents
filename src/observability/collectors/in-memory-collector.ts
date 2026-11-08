@@ -36,14 +36,18 @@ export class InMemoryTelemetryCollector implements AgentObserver {
   public getThoughts(): Array<{ macroCycle: number; tick: number; thought: string }> {
     const inferences = this.filterByType('model_inference');
     return inferences
-      .filter((inf): inf is ModelInferenceEvent & { output: { thought: string } } =>
-        typeof inf.output.thought === 'string' && inf.output.thought.trim().length > 0
-      )
-      .map((inf) => ({
-        macroCycle: inf.macroCycle,
-        tick: inf.tick,
-        thought: inf.output.thought!
-      }));
+      .map((inf) => {
+        const thought =
+          inf.output.status === 'stall'
+            ? inf.output.stall.partialThought
+            : inf.output.thought;
+        return {
+          macroCycle: inf.macroCycle,
+          tick: inf.tick,
+          thought: thought || ''
+        };
+      })
+      .filter((item) => item.thought.trim().length > 0);
   }
 
   public getWorldActions(): WorldActionEvent[] {
@@ -84,12 +88,15 @@ export class InMemoryTelemetryCollector implements AgentObserver {
         Ka: Array.from(inf.stateSnapshot.Ka ? inf.stateSnapshot.Ka.keys() : []),
         messageCount: inf.stateSnapshot.Ep.length
       },
-      thought: inf.output.thought,
-      calls: inf.output.calls.map((c) => ({
-        id: c.id,
-        name: c.name,
-        payload: c.payload
-      }))
+      thought: inf.output.status === 'stall' ? inf.output.stall.partialThought : inf.output.thought,
+      calls:
+        inf.output.status === 'stall'
+          ? []
+          : inf.output.calls.map((c) => ({
+              id: c.id,
+              name: c.name,
+              payload: c.payload
+            }))
     }));
   }
 

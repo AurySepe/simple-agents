@@ -8,6 +8,7 @@ import {
   createEpEvent,
   DataRecord,
   DataValue,
+  DeliberationStall,
   DiagnosticErrorPayload,
   ExitResult,
   FSMControlState,
@@ -16,6 +17,7 @@ import {
   isDataValue,
   Message,
   MessageInput,
+  ModelResult,
   normalizeToolCall,
   SyntaxErrorToolCall,
   ToolCall,
@@ -73,9 +75,24 @@ export type HaltStepOutcome<T = DataValue> = {
   state: AgentState;
 };
 
-export type StepOutcome<T = DataValue> = RunningStepOutcome | YieldStepOutcome | HaltStepOutcome<T>;
+export type StallStepOutcome = {
+  status: 'stall';
+  macroCycle: number;
+  tick: number;
+  stall: DeliberationStall;
+  state: AgentState;
+};
 
-export type ExecutionOutcome<T = DataValue> = YieldStepOutcome | HaltStepOutcome<T>;
+export type StepOutcome<T = DataValue> =
+  | RunningStepOutcome
+  | YieldStepOutcome
+  | HaltStepOutcome<T>
+  | StallStepOutcome;
+
+export type ExecutionOutcome<T = DataValue> =
+  | YieldStepOutcome
+  | HaltStepOutcome<T>
+  | StallStepOutcome;
 
 /**
  * Opzioni di configurazione per l'esecuzione autonoma end-to-end (run)
@@ -90,12 +107,25 @@ export interface RunOptions<T = DataValue> {
   afterToolExecution?: (toolId: string, args: DataRecord, result: ToolResult) => void | Promise<void>;
 }
 
-export interface RunResult<T = DataValue> {
-  result: ExitResult<T>;
+export interface BaseRunResult {
   macroCycles: number;
   ticks: number;
   state: AgentState;
 }
+
+export interface HaltRunResult<T = DataValue> extends BaseRunResult {
+  status: 'halt';
+  result: ExitResult<T>;
+  stall?: never;
+}
+
+export interface StallRunResult extends BaseRunResult {
+  status: 'stall';
+  stall: DeliberationStall;
+  result?: never;
+}
+
+export type RunResult<T = DataValue> = HaltRunResult<T> | StallRunResult;
 
 /**
  * ============================================================================
@@ -385,6 +415,16 @@ export class AgentInstance<T extends DataValue = DataValue> {
         };
       }
 
+      case 'q_stall': {
+        return {
+          status: 'stall',
+          macroCycle: this.c,
+          tick: this.t,
+          stall: this.fsm.stall,
+          state: this.state
+        };
+      }
+
       case 'q_yield': {
         throw new Error(
           "L'agente si trova in attesa asincrona 'q_yield'. Fornisci i risultati con 'feedPayload({ worldResults })'."
@@ -426,6 +466,40 @@ export class AgentInstance<T extends DataValue = DataValue> {
       durationMs,
       stateSnapshot: this.getSnapshot()
     });
+
+    // Se il modello è in stallo deliberativo (thinking budget esaurito)
+    if (output.status === 'stall') {
+      if (output.stall.partialThought) {
+        this.appendMessage({
+          type: 'thought',
+          content: output.stall.partialThought
+        });
+      }
+
+      this.transitionTo(
+        { phase: 'q_stall', stall: output.stall },
+        'exec_deliberation_stall',
+        { reason: output.stall.reason }
+      );
+      this.t++;
+
+      void this.emitEvent({
+        type: 'stall',
+        timestamp: new Date(),
+        macroCycle: this.c,
+        tick: this.t,
+        stall: output.stall,
+        stateSnapshot: { ...this.state, Ds: { ...this.state.Ds } }
+      });
+
+      return {
+        status: 'stall',
+        macroCycle: this.c,
+        tick: this.t,
+        stall: output.stall,
+        state: this.state
+      };
+    }
 
     // 1. Accodamento evento deliberativo thought se presente
     if (output.thought) {
@@ -789,6 +863,39 @@ export class AgentInstance<T extends DataValue = DataValue> {
       stateSnapshot: this.getSnapshot()
     });
 
+    if (output.status === 'stall') {
+      if (output.stall.partialThought) {
+        this.appendMessage({
+          type: 'thought',
+          content: output.stall.partialThought
+        });
+      }
+
+      this.transitionTo(
+        { phase: 'q_stall', stall: output.stall },
+        'exec_deliberation_stall',
+        { reason: output.stall.reason }
+      );
+      this.t++;
+
+      void this.emitEvent({
+        type: 'stall',
+        timestamp: new Date(),
+        macroCycle: this.c,
+        tick: this.t,
+        stall: output.stall,
+        stateSnapshot: { ...this.state, Ds: { ...this.state.Ds } }
+      });
+
+      return {
+        status: 'stall',
+        macroCycle: this.c,
+        tick: this.t,
+        stall: output.stall,
+        state: this.state
+      };
+    }
+
     if (output.thought) {
       this.appendMessage({
         type: 'thought',
@@ -932,7 +1039,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
         );
       }
       const outcome = await this.step();
-      if (outcome.status === 'yield' || outcome.status === 'halt') {
+      if (outcome.status === 'yield' || outcome.status === 'halt' || outcome.status === 'stall') {
         return outcome;
       }
     }
@@ -972,7 +1079,18 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
         if (outcome.status === 'halt') {
           return {
+            status: 'halt',
             result: outcome.result,
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
+        }
+
+        if (outcome.status === 'stall') {
+          return {
+            status: 'stall',
+            stall: outcome.stall,
             macroCycles: this.c,
             ticks: this.t,
             state: this.state

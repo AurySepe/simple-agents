@@ -1,17 +1,17 @@
-import { InferenceTriple, ModelOutput } from '../types/index.js';
+import { InferenceTriple, ModelResult } from '../types/index.js';
 
 /**
  * ============================================================================
  * INTERFACCIA DEL MODELLO LINGUISTICO: M
  * ============================================================================
  * Il Framework definisce il Modello come una funzione pura di inferenza:
- * M: C_Ω -> Promise<ModelOutput>
+ * M: C_Ω -> Promise<ModelResult>
  *
  * L'implementazione reale (Gemini, Claude, OpenAI, mock di test, ecc.)
  * viene fornita dall'utente del framework tramite dependency injection.
  */
 export interface LanguageModelAdapter {
-  infer(context: InferenceTriple): Promise<ModelOutput>;
+  infer(context: InferenceTriple): Promise<ModelResult>;
 }
 
 // 1. Client e Tipi di Trasporto Ollama

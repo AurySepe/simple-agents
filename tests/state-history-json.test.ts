@@ -112,6 +112,8 @@ describe('Test Esportazione JSON dello Stato ad Ogni Fase', () => {
       observers: [collector]
     });
 
+    expect(runResult.status).toBe('halt');
+    if (runResult.status !== 'halt') throw new Error('Expected halt');
     expect(runResult.result.type).toBe('a_concluso');
 
     // 5. Generazione ed esportazione della timeline dello stato in formato JSON

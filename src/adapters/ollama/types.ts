@@ -1,4 +1,4 @@
-import { DataRecord, InferenceTriple, ModelOutput } from '../../types/index.js';
+import { DataRecord, InferenceTriple, ModelOutput, ModelResult } from '../../types/index.js';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -112,6 +112,6 @@ export interface ModelFamilyStrategy {
     tools?: OllamaToolDefinition[];
   };
 
-  parseResponse(response: OllamaChatResponse): ModelOutput;
+  parseResponse(response: OllamaChatResponse): ModelResult;
 }
 

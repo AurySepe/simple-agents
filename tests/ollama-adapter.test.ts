@@ -312,6 +312,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         done: true
       });
 
+      if (parsed.status === 'stall') throw new Error('Unexpected stall');
       expect(parsed.thought).toBe('Il cliente 55 richiede verifica del preventivo.');
       expect(parsed.calls).toHaveLength(1);
       expect(parsed.calls[0]).toEqual({
@@ -343,6 +344,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         done: true
       });
 
+      if (parsed.status === 'stall') throw new Error('Unexpected stall');
       expect(parsed.calls).toHaveLength(1);
       expect(parsed.calls[0].status).toBe('syntax_error');
       if (parsed.calls[0].status === 'syntax_error') {
@@ -370,6 +372,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         done: true
       });
 
+      if (parsed.status === 'stall') throw new Error('Unexpected stall');
       expect(parsed.thought).toBe('Analisi interna del problema cliente.');
       expect(parsed.calls).toHaveLength(1);
     });
@@ -392,6 +395,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         done: true
       });
 
+      if (parsed.status === 'stall') throw new Error('Unexpected stall');
       expect(parsed.thought).toBe('Analisi troncata bruscamente per limite token');
     });
 
@@ -414,6 +418,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         done: true
       });
 
+      if (parsed.status === 'stall') throw new Error('Unexpected stall');
       expect(parsed.thought).toBeUndefined();
       expect(parsed.calls).toHaveLength(1);
     });
@@ -438,6 +443,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
       });
 
       // Il pensiero epistemico deve provenire unicamente da thinking
+      if (parsed.status === 'stall') throw new Error('Unexpected stall');
       expect(parsed.thought).toBe('Sto verificando gli ordini per il cliente 42 nel database.');
       expect(parsed.calls).toHaveLength(1);
       expect(parsed.calls[0].name).toBe('w_db_ordini');
@@ -520,6 +526,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
       });
 
       const output = await adapter.infer(sampleTriple);
+      if (output.status === 'stall') throw new Error('Unexpected stall');
       expect(output.thought).toBe('Eseguo la chiamata');
       expect(output.calls[0].name).toBe('w_db_ordini');
     });

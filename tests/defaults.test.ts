@@ -193,6 +193,8 @@ describe('Standard Library / Defaults di Livello 1', () => {
       const agent = runtime.spawnAgent(manifest, model);
       const outcome = await agent.run({ userContent: 'Esegui il task.' });
 
+      expect(outcome.status).toBe('halt');
+      if (outcome.status !== 'halt') throw new Error('Expected halt');
       expect(outcome.result.type).toBe('termina');
       expect(outcome.result.payload).toEqual({ esito: 'Perfetto' });
 
