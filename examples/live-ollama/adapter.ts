@@ -20,6 +20,7 @@ export interface CreateOllamaAdapterOptions {
   numCtx?: number;
   timeoutMs?: number;
   includeHistoricalThinking?: boolean;
+  writer?: (message: string) => void;
 }
 
 export function createOllamaQwenAdapter(options?: CreateOllamaAdapterOptions): LanguageModelAdapter {
@@ -29,11 +30,12 @@ export function createOllamaQwenAdapter(options?: CreateOllamaAdapterOptions): L
   const numCtx = options?.numCtx ?? 16384;
   const timeoutMs = options?.timeoutMs ?? 120000;
   const includeHistoricalThinking = options?.includeHistoricalThinking ?? false;
+  const write = options?.writer ?? ((msg: string) => console.log(msg));
 
   // 1. Client HTTP di trasporto
   const client = new OllamaClient({
     baseUrl,
-    timeoutMs // 90s per gestire in sicurezza anche l'eventuale cold start della GPU
+    timeoutMs // 120s per gestire in sicurezza anche l'eventuale cold start della GPU
   });
 
   // 2. Strategia di famiglia Qwen (estrazione deterministica del pensiero dal campo native message.thinking)
@@ -52,15 +54,18 @@ export function createOllamaQwenAdapter(options?: CreateOllamaAdapterOptions): L
       num_ctx: numCtx
     },
     onMetrics: (m) => {
-      console.log(
-        `📊 [Inferenza Ollama] Prompt: ${m.promptEvalCount} tok | Generati: ${m.evalCount} tok | Velocità: ${m.tokensPerSecond.toFixed(1)} tok/s`
+      const saturationStr =
+        m.contextSaturationRatio !== undefined
+          ? ` | Sat: ${(m.contextSaturationRatio * 100).toFixed(1)}% (${m.promptEvalCount}/${m.numCtx} tok)`
+          : '';
+      write(
+        `📊 [Inferenza Ollama] Prompt: ${m.promptEvalCount} tok | Generati: ${m.evalCount} tok${saturationStr} | Velocità: ${m.tokensPerSecond.toFixed(1)} tok/s`
       );
     },
     onContextTruncation: (w) => {
-      console.warn(
-        `⚠️ [Warning Contesto] Rilevata saturazione del contesto (${w.promptEvalCount}/${w.numCtx} tok)!`
+      write(
+        `⚠️ [Warning Contesto] Rilevata saturazione del contesto (${w.promptEvalCount}/${w.numCtx} tok, ${(w.saturationRatio * 100).toFixed(1)}%)!`
       );
     }
   });
 }
-

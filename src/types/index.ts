@@ -61,12 +61,23 @@ export interface ActionEvent {
   };
 }
 
-export interface DiagnosticErrorPayload {
-  status: 'error';
-  code: 'SCHEMA_VALIDATION_ERROR' | 'SYNTAX_ERROR' | 'UNMOUNTED_TOOL' | 'UNKNOWN_ACTION';
-  message: string;
-  details?: unknown;
+export interface EpCoordinates {
+  index: number;
+  tau?: TimeIndex;
 }
+
+export type DiagnosticErrorCode =
+  | 'SCHEMA_VALIDATION_ERROR'
+  | 'SYNTAX_ERROR'
+  | 'UNMOUNTED_TOOL'
+  | 'UNKNOWN_ACTION';
+
+export type DiagnosticErrorPayload = {
+  status: 'error';
+  code: DiagnosticErrorCode;
+  message: string;
+  details?: Record<string, unknown> | { rawText: string; detail: string } | { toolId: string };
+};
 
 export interface ResultEvent {
   type: 'result';
@@ -80,14 +91,29 @@ export type EpEventInput =
   | ActionEvent
   | ResultEvent;
 
-export type EpEvent = EpEventInput & {
-  index: number;
-  tau?: TimeIndex;
-};
+export type EpEvent =
+  | (StimulusEvent & EpCoordinates)
+  | (ThoughtEvent & EpCoordinates)
+  | (ActionEvent & EpCoordinates)
+  | (ResultEvent & EpCoordinates);
 
 // Alias per compatibilità con il flusso di traccia
 export type Message = EpEvent;
 export type MessageInput = EpEventInput;
+
+export function createEpEvent(input: MessageInput, index: number, tau: TimeIndex): Message {
+  const base: EpCoordinates = { index, tau };
+  switch (input.type) {
+    case 'stimulus':
+      return { ...base, type: 'stimulus', content: input.content };
+    case 'thought':
+      return { ...base, type: 'thought', content: input.content };
+    case 'action':
+      return { ...base, type: 'action', callId: input.callId, content: input.content };
+    case 'result':
+      return { ...base, type: 'result', callId: input.callId, content: input.content };
+  }
+}
 
 /**
  * ============================================================================
@@ -105,14 +131,36 @@ export interface Concept {
  * 5. DEFINIZIONE DEI TOOL FISICI DEL MONDO (W)
  * ============================================================================
  */
-export interface ToolDefinition<TIn = any> {
+export interface ToolDefinition<TIn = any, TOut = any> {
   id: string;
   description: string;
   parameters: z.ZodType<TIn>;
+  returns?: z.ZodType<TOut>;
 }
 
-export interface WorldTool<TIn = any, TOut extends ToolResult = ToolResult> extends ToolDefinition<TIn> {
+export interface WorldTool<TIn = any, TOut extends ToolResult = ToolResult>
+  extends ToolDefinition<TIn, TOut> {
   execute: (args: TIn) => Promise<TOut> | TOut;
+}
+
+/**
+ * Helper factory per definire un tool di Mondo con inferenza statica rigida di input e output.
+ * Il compilatore TypeScript verifica che l'implementazione 'execute' accetti esattamente
+ * i tipi dedotti dallo schema 'parameters' e restituisca esattamente i tipi dedotti da 'returns'.
+ */
+export function defineWorldTool<
+  TIn,
+  TOut extends ToolResult,
+  TInSchema extends z.ZodType<TIn> = z.ZodType<TIn>,
+  TOutSchema extends z.ZodType<TOut> = z.ZodType<TOut>
+>(tool: {
+  id: string;
+  description: string;
+  parameters: TInSchema;
+  returns?: TOutSchema;
+  execute: (args: z.infer<TInSchema>) => Promise<z.infer<TOutSchema>> | z.infer<TOutSchema>;
+}): WorldTool<z.infer<TInSchema>, z.infer<TOutSchema>> {
+  return tool as WorldTool<z.infer<TInSchema>, z.infer<TOutSchema>>;
 }
 
 /**
@@ -171,7 +219,7 @@ export interface InferenceTriple {
  * ============================================================================
  */
 export interface ValidToolCall {
-  status?: 'valid';
+  status: 'valid';
   id: string;
   name: string;
   payload: DataRecord;
@@ -188,11 +236,27 @@ export interface SyntaxErrorToolCall {
 
 export type ToolCall = ValidToolCall | SyntaxErrorToolCall;
 
+export type ToolCallInput =
+  | { status?: 'valid'; id: string; name: string; payload: DataRecord }
+  | SyntaxErrorToolCall;
+
+export function normalizeToolCall(call: ToolCallInput): ToolCall {
+  if (call.status === 'syntax_error') {
+    return call;
+  }
+  return {
+    status: 'valid',
+    id: call.id,
+    name: call.name,
+    payload: call.payload
+  };
+}
+
 export type NonEmptyArray<T> = [T, ...T[]];
 
 export interface ModelOutput {
   thought?: string;
-  calls: NonEmptyArray<ToolCall>;
+  calls: NonEmptyArray<ToolCallInput>;
 }
 
 /**
@@ -237,6 +301,13 @@ export type FSMControlState =
   | 'q_yield'
   | 'q_repair'
   | 'q_halt';
+
+export type ActiveFSMState<TTerm = DataValue> =
+  | { phase: 'q_sleep' }
+  | { phase: 'q_exec' }
+  | { phase: 'q_yield'; pendingCalls: ValidToolCall[] }
+  | { phase: 'q_repair'; targetToolId: string; targetCallId: string }
+  | { phase: 'q_halt'; exitResult: ExitResult<TTerm> };
 
 /**
  * ============================================================================

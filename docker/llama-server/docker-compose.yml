@@ -1,0 +1,26 @@
+services:
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama-server
+    restart: unless-stopped
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "${PORT:-30000}:${PORT:-30000}"
+    volumes:
+      - ./models:/models:ro
+    command: >
+      -m /models/${MODEL_FILE}
+      --host 0.0.0.0
+      --port ${PORT:-30000}
+      -ngl ${N_GPU_LAYERS:-99}
+      -c ${CTX_SIZE:-8192}
+      -fa ${FLASH_ATTENTION:-on}
+      --jinja
+

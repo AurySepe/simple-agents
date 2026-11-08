@@ -10,12 +10,12 @@ import {
   YieldEvent
 } from '../events.js';
 import { InMemoryTelemetryCollector } from '../collectors/in-memory-collector.js';
-import { DataRecord, Message, ToolDefinition, ToolResult } from '../../types/index.js';
+import { DataRecord, DataValue, Message, ToolDefinition, ToolResult } from '../../types/index.js';
 
-function serializeZodSchema(schema: unknown): unknown {
+function serializeZodSchema(schema: unknown): Record<string, unknown> | string {
   try {
     if (schema instanceof z.ZodType) {
-      return z.toJSONSchema(schema);
+      return z.toJSONSchema(schema) as Record<string, unknown>;
     }
     return String(schema);
   } catch {
@@ -84,7 +84,7 @@ export interface StepAuditData {
     visibleToolsMask: Array<{
       id: string;
       description: string;
-      parametersSchema: unknown;
+      parametersSchema: Record<string, unknown> | string;
     }>;
   };
   outputGrezzoDalModello: {
@@ -100,7 +100,7 @@ export interface StepAuditData {
     toolId: string;
     parametriInviati: DataRecord;
     risultatoRicevuto?: ToolResult;
-    errore?: unknown;
+    errore?: string;
     durataMs: number;
   }>;
   transizioneDiStato?: {
@@ -217,8 +217,8 @@ export class ModularAuditExporter {
             ? stepWorld.map((w) => ({
                 toolId: w.toolId,
                 parametriInviati: w.args,
-                risultatoRicevuto: w.result,
-                errore: w.error,
+                risultatoRicevuto: w.status === 'success' ? w.result : undefined,
+                errore: w.status === 'failure' ? (w.error instanceof Error ? w.error.message : String(w.error)) : undefined,
                 durataMs: w.durationMs
               }))
             : [],
@@ -379,12 +379,41 @@ export class ModularAuditExporter {
   }
 }
 
+export interface AuditIndexData {
+  scenario: string;
+  generatedAt: string;
+  statisticheGenerali: {
+    totalePassi: number;
+    totaleFasiFSM: number;
+    totaleMacroCicli: number;
+    statoTerminazione: string;
+    contrattoUscita: string;
+    datiUscitaFinale: unknown;
+  };
+  statoInizialeGlobale: StateAuditSnapshot | Record<string, never>;
+  statoFinaleGlobale: StateAuditSnapshot | Record<string, never>;
+  mappaFasiFSM: Array<{
+    faseIndex: number;
+    macroCiclo: number;
+    statoFSM: string;
+    etichettaFase: string;
+    cartellaRelativa: string;
+    fileRiepilogo: string;
+    filePassi: string[];
+    deltaStato: {
+      scopo: string;
+      toolMontati: string[];
+    };
+    azioniEseguite: string[];
+  }>;
+}
+
 /**
  * Genera una dashboard HTML monopagina, autonoma (senza server) per navigare
  * a colpo d'occhio e con ispettore JSON su ogni passo e sotto-stato.
  */
 function generateDashboardHtml(
-  indexData: unknown,
+  indexData: AuditIndexData,
   phaseGroups: PhaseGroup[],
   steps: StepAuditData[]
 ): string {

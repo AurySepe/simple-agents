@@ -1,12 +1,12 @@
-import { DiagnosticErrorPayload } from '../../types/index.js';
+import { DiagnosticErrorCode, DiagnosticErrorPayload } from '../../types/index.js';
 
 export interface OperationalPolicy {
   formatSchemaErrorMessage: (targetToolId: string, errorDetail: string) => string;
   formatSyntaxErrorMessage: (targetToolId: string, rawText: string, errorDetail: string) => string;
   formatDiagnosticPayload: (
-    code: DiagnosticErrorPayload['code'],
+    code: DiagnosticErrorCode,
     message: string,
-    details?: unknown
+    details?: Record<string, unknown> | { rawText: string; detail: string } | { toolId: string }
   ) => DiagnosticErrorPayload;
 }
 

@@ -61,9 +61,9 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
       if (pendingThought !== undefined || pendingCalls.length > 0) {
         const assistantMsg: OllamaMessage = {
           role: 'assistant',
-          content: this.includeHistoricalThinking
+          content: (this.includeHistoricalThinking || pendingCalls.length === 0)
             ? (pendingThought ?? '')
-            : (pendingCalls.length === 0 ? (pendingThought ?? '') : '')
+            : ''
         };
 
         if (pendingCalls.length > 0) {

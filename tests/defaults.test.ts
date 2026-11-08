@@ -4,9 +4,14 @@ import {
   AgentManifest,
   AgentState,
   createDefaultFrameworkConfig,
+  createFrameProjector,
   createWorldRegistry,
   defaultEnglishPolicy,
+  defaultEnglishMarkdownProjector,
+  defaultEnglishXmlProjector,
   defaultItalianPolicy,
+  defaultItalianMarkdownProjector,
+  defaultItalianXmlProjector,
   defaultMarkdownProjector,
   defaultXmlProjector,
   FrameworkEngine,
@@ -74,20 +79,55 @@ describe('Standard Library / Defaults di Livello 1', () => {
       Ep: []
     };
 
-    it('dovrebbe proiettare lo stato in Markdown', () => {
-      const output = defaultMarkdownProjector.renderFrame(dummyState);
+    it('dovrebbe proiettare lo stato in Markdown inglese', () => {
+      const output = defaultEnglishMarkdownProjector.renderFrame(dummyState);
       expect(output).toContain('# IDENTITY');
       expect(output).toContain('## MISSION');
+      expect(output).toContain('## STRUCTURED OPERATIONAL DATA');
+      expect(output).toContain('## ACTIVE KNOWLEDGE');
+      expect(output).toContain('### [DOCUMENT: concetto_1] Politica resi');
       expect(output).toContain('ORD-999');
       expect(output).toContain('Politica resi');
     });
 
-    it('dovrebbe proiettare lo stato in XML', () => {
-      const output = defaultXmlProjector.renderFrame(dummyState);
+    it('dovrebbe proiettare lo stato in Markdown italiano', () => {
+      const output = defaultItalianMarkdownProjector.renderFrame(dummyState);
+      expect(output).toContain('# IDENTITÀ');
+      expect(output).toContain('## MISSIONE');
+      expect(output).toContain('## DATI OPERATIVI STRUTTURATI');
+      expect(output).toContain('## CONOSCENZA ATTIVA');
+      expect(output).toContain('### [DOCUMENTO: concetto_1] Politica resi');
+      expect(output).toContain('ORD-999');
+      expect(output).toContain('Politica resi');
+    });
+
+    it('dovrebbe proiettare lo stato in XML inglese', () => {
+      const output = defaultEnglishXmlProjector.renderFrame(dummyState);
       expect(output).toContain('<identity>');
       expect(output).toContain('<mission>');
       expect(output).toContain('<structured_data>');
       expect(output).toContain('<active_concepts>');
+      expect(output).toContain('<concept id="concetto_1" description="Politica resi">');
+    });
+
+    it('dovrebbe proiettare lo stato in XML italiano', () => {
+      const output = defaultItalianXmlProjector.renderFrame(dummyState);
+      expect(output).toContain('<identita>');
+      expect(output).toContain('<missione>');
+      expect(output).toContain('<dati_strutturati>');
+      expect(output).toContain('<concetti_attivi>');
+      expect(output).toContain('<concetto id="concetto_1" descrizione="Politica resi">');
+    });
+
+    it('dovrebbe consentire la creazione combinata tramite createFrameProjector', () => {
+      const itMarkdown = createFrameProjector({ format: 'markdown', language: 'it' });
+      expect(itMarkdown.renderFrame(dummyState)).toContain('# IDENTITÀ');
+
+      const itXml = createFrameProjector({ format: 'xml', language: 'it' });
+      expect(itXml.renderFrame(dummyState)).toContain('<identita>');
+
+      const enXml = createFrameProjector({ format: 'xml', language: 'en' });
+      expect(enXml.renderFrame(dummyState)).toContain('<identity>');
     });
   });
 

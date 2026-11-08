@@ -1,8 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createWorldRegistry, WorldTool, WorldToolError } from '../src/index.js';
+import {
+  computeVisibleTools,
+  createWorldRegistry,
+  defineWorldTool,
+  WorldTool,
+  WorldToolError
+} from '../src/index.js';
 
 describe('World Registry (Livello 2): Validazione automatica ed esecuzione non-invasiva', () => {
+  it('dovrebbe supportare lo schema di ritorno (returns) e propagarlo nella definizione', async () => {
+    const returnSchema = z.object({
+      totale: z.number().describe('Totale ordine'),
+      stato: z.string().describe('Stato ordine')
+    });
+
+    const ordineTool = defineWorldTool({
+      id: 'w_ordine',
+      description: 'Recupera ordine cliente',
+      parameters: z.object({ id: z.number() }),
+      returns: returnSchema,
+      execute: async ({ id }) => ({ totale: 150, stato: `APERTO_${id}` })
+    });
+
+    const world = createWorldRegistry([ordineTool]);
+    const def = world.getToolDefinition('w_ordine');
+    expect(def?.returns).toBe(returnSchema);
+
+    // Esecuzione diretta
+    const res = await world.executeTool('w_ordine', { id: 10 });
+    expect(res).toEqual({ totale: 150, stato: 'APERTO_10' });
+
+    // Verifica formattazione automatica in computeVisibleTools
+    const dummyState = {
+      I: 'Test',
+      Ms: 'Test',
+      Ds: {},
+      Ta: new Set(['w_ordine']),
+      Ka: new Map(),
+      Ep: []
+    };
+    const dummyManifest = { I: 'Test', Ms0: 'Test', A_term: [] };
+
+    const visibleDefault = computeVisibleTools('q_exec', dummyState, dummyManifest, world);
+    expect(visibleDefault[0].description).toContain('Recupera ordine cliente');
+    expect(visibleDefault[0].description).toContain('[VALORE DI RITORNO]: { totale: number (Totale ordine), stato: string (Stato ordine) }');
+
+    // Verifica formattazione personalizzata
+    const visibleCustom = computeVisibleTools('q_exec', dummyState, dummyManifest, world, {
+      formatToolReturnDescription: (id, desc) => `${desc} (Output personalizzato per ${id})`
+    });
+    expect(visibleCustom[0].description).toBe('Recupera ordine cliente (Output personalizzato per w_ordine)');
+  });
   it('dovrebbe catalogare i tool, validare i parametri con Zod ed eseguire con parametri tipizzati', async () => {
     let executedWith: any = null;
 

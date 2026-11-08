@@ -1,8 +1,11 @@
+import { z } from 'zod';
 import { LanguageModelAdapter } from '../adapters/index.js';
 import { AgentEvent, AgentObserver, CompositeObserver } from '../observability/index.js';
 import {
+  ActiveFSMState,
   AgentManifest,
   AgentState,
+  createEpEvent,
   DataRecord,
   DataValue,
   DiagnosticErrorPayload,
@@ -13,11 +16,14 @@ import {
   isDataValue,
   Message,
   MessageInput,
+  normalizeToolCall,
+  SyntaxErrorToolCall,
   ToolCall,
   ToolDefinition,
   ToolResult,
   TransitionReasonCode,
-  UserPayload
+  UserPayload,
+  ValidToolCall
 } from '../types/index.js';
 import { WorldRegistry } from '../world/index.js';
 import { computeVisibleTools, SystemFrameProjector } from './projection.js';
@@ -100,6 +106,18 @@ export interface FrameworkConfig {
   systemFrameProjector?: SystemFrameProjector;
   policy?: OperationalPolicy;
   observers?: AgentObserver[];
+  /**
+   * Formattatore personalizzato per le descrizioni dei contratti di terminazione (A_term).
+   * Consente all'utente di definire come segnalare al modello che l'azione è un'azione terminale.
+   * Se non specificato, usa il default del framework.
+   */
+  formatTerminationDescription?: (id: string, description: string) => string;
+  /**
+   * Formattatore personalizzato per accodare la specifica dello schema di ritorno (returns)
+   * alla descrizione del tool fisico esposta all'LLM.
+   * Se non specificato, usa il default del framework.
+   */
+  formatToolReturnDescription?: (id: string, description: string, returnsSchema: z.ZodTypeAny) => string;
 }
 
 /**
@@ -163,10 +181,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
   private c: number = 0; // Macro-Ciclo del Mondo
   private t: number = 0; // Tick decisionale di inferenza
 
-  private controlState: FSMControlState = 'q_sleep';
-  private targetRepairToolId?: string;
-  private targetRepairCallId?: string;
-  private lastHaltResult: ExitResult<T> | null = null;
+  private fsm: ActiveFSMState<T> = { phase: 'q_sleep' };
   private compositeObserver: CompositeObserver = new CompositeObserver();
 
   private readonly projector: SystemFrameProjector;
@@ -213,20 +228,22 @@ export class AgentInstance<T extends DataValue = DataValue> {
   }
 
   private transitionTo(
-    newState: FSMControlState,
+    nextFsm: ActiveFSMState<T>,
     reasonCode: TransitionReasonCode,
     context?: DataRecord
   ): void {
-    if (this.controlState !== newState) {
-      const from = this.controlState;
-      this.controlState = newState;
+    const from = this.fsm.phase;
+    const to = nextFsm.phase;
+    this.fsm = nextFsm;
+
+    if (from !== to) {
       void this.emitEvent({
         type: 'state_transition',
         timestamp: new Date(),
         macroCycle: this.c,
         tick: this.t,
         from,
-        to: newState,
+        to,
         reasonCode,
         context
       });
@@ -249,23 +266,23 @@ export class AgentInstance<T extends DataValue = DataValue> {
   }
 
   public getControlState(): FSMControlState {
-    return this.controlState;
+    return this.fsm.phase;
+  }
+
+  public getActiveFSMState(): Readonly<ActiveFSMState<T>> {
+    return this.fsm;
   }
 
   public getTimeIndex(): { c: number; t: number } {
     return { c: this.c, t: this.t };
   }
 
-  public setControlState(state: FSMControlState, reasonCode: TransitionReasonCode = 'manual_override'): void {
+  public setControlState(state: ActiveFSMState<T>, reasonCode: TransitionReasonCode = 'manual_override'): void {
     this.transitionTo(state, reasonCode);
   }
 
   public appendMessage(msgInput: MessageInput): Message {
-    const fullMessage: Message = {
-      ...msgInput,
-      index: this.state.Ep.length,
-      tau: { c: this.c, t: this.t }
-    } as Message;
+    const fullMessage = createEpEvent(msgInput, this.state.Ep.length, { c: this.c, t: this.t });
     this.state.Ep.push(fullMessage);
     return fullMessage;
   }
@@ -293,9 +310,9 @@ export class AgentInstance<T extends DataValue = DataValue> {
         });
       }
 
-      if (this.controlState === 'q_yield') {
+      if (this.fsm.phase === 'q_yield') {
         this.c++;
-        this.transitionTo('q_exec', 'post_yield_exec');
+        this.transitionTo({ phase: 'q_exec' }, 'post_yield_exec');
       }
     }
 
@@ -306,8 +323,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
         content: payload.userContent
       });
 
-      if (this.controlState === 'q_sleep' || this.controlState === 'q_halt') {
-        this.transitionTo('q_exec', 'stimulus_received');
+      if (this.fsm.phase === 'q_sleep' || this.fsm.phase === 'q_halt') {
+        this.transitionTo({ phase: 'q_exec' }, 'stimulus_received');
       }
     }
   }
@@ -318,12 +335,17 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
   private buildInferenceTriple(): InferenceTriple {
     const systemFrame = this.projector.renderFrame(this.state);
+    const targetToolId = this.fsm.phase === 'q_repair' ? this.fsm.targetToolId : undefined;
     const visibleTools = computeVisibleTools(
-      this.controlState,
+      this.fsm.phase,
       this.state,
       this.manifest,
       this.world,
-      this.targetRepairToolId
+      {
+        targetRepairToolId: targetToolId,
+        formatTerminationDescription: this.framework.formatTerminationDescription,
+        formatToolReturnDescription: this.framework.formatToolReturnDescription
+      }
     );
 
     return {
@@ -342,11 +364,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
       timestamp: new Date(),
       macroCycle: this.c,
       tick: this.t,
-      controlState: this.controlState,
+      controlState: this.fsm.phase,
       stateSnapshot: this.getSnapshot()
     });
 
-    switch (this.controlState) {
+    switch (this.fsm.phase) {
       case 'q_sleep': {
         throw new Error(
           "L'agente si trova in stato 'q_sleep'. Usa 'feedPayload(payload)' per inviare uno stimolo."
@@ -354,14 +376,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
       }
 
       case 'q_halt': {
-        if (!this.lastHaltResult) {
-          throw new Error("Stato inconsistente: l'agente è in 'q_halt' ma non è presente un risultato di arresto.");
-        }
         return {
           status: 'halt',
           macroCycle: this.c,
           tick: this.t,
-          result: this.lastHaltResult,
+          result: this.fsm.exitResult,
           state: this.state
         };
       }
@@ -373,11 +392,16 @@ export class AgentInstance<T extends DataValue = DataValue> {
       }
 
       case 'q_repair': {
-        return await this.stepRepair();
+        return await this.stepRepair(this.fsm);
       }
 
       case 'q_exec': {
         return await this.stepExec();
+      }
+
+      default: {
+        const _exhaustive: never = this.fsm;
+        throw new Error(`Stato FSM non gestito: ${JSON.stringify(_exhaustive)}`);
       }
     }
   }
@@ -396,7 +420,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
       timestamp: new Date(),
       macroCycle: this.c,
       tick: this.t,
-      controlState: this.controlState,
+      controlState: this.fsm.phase,
       context,
       output,
       durationMs,
@@ -411,11 +435,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
       });
     }
 
-    const calls = output.calls;
+    const calls: ToolCall[] = output.calls.map(normalizeToolCall);
 
     // Sottocaso A: Errore di sintassi JSON generato dal modello
-    const syntaxErrCall = calls.find((c) => c.status === 'syntax_error');
-    if (syntaxErrCall && syntaxErrCall.status === 'syntax_error') {
+    const syntaxErrCall = calls.find((c): c is SyntaxErrorToolCall => c.status === 'syntax_error');
+    if (syntaxErrCall) {
       this.appendMessage({
         type: 'action',
         callId: syntaxErrCall.id,
@@ -438,9 +462,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
         content: errPayload
       });
 
-      this.targetRepairToolId = syntaxErrCall.name;
-      this.targetRepairCallId = syntaxErrCall.id;
-      this.transitionTo('q_repair', 'exec_syntax_error', { toolId: syntaxErrCall.name });
+      this.transitionTo(
+        { phase: 'q_repair', targetToolId: syntaxErrCall.name, targetCallId: syntaxErrCall.id },
+        'exec_syntax_error',
+        { toolId: syntaxErrCall.name }
+      );
       this.t++;
 
       void this.emitEvent({
@@ -455,7 +481,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       return {
         status: 'running',
-        controlState: this.controlState,
+        controlState: this.fsm.phase,
         macroCycle: this.c,
         tick: this.t,
         state: this.state
@@ -496,9 +522,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
           content: errPayload
         });
 
-        this.targetRepairToolId = termCall.name;
-        this.targetRepairCallId = termCall.id;
-        this.transitionTo('q_repair', 'exec_schema_error', { toolId: termCall.name });
+        this.transitionTo(
+          { phase: 'q_repair', targetToolId: termCall.name, targetCallId: termCall.id },
+          'exec_schema_error',
+          { toolId: termCall.name }
+        );
         this.t++;
 
         void this.emitEvent({
@@ -513,7 +541,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
         return {
           status: 'running',
-          controlState: this.controlState,
+          controlState: this.fsm.phase,
           macroCycle: this.c,
           tick: this.t,
           state: this.state
@@ -533,18 +561,18 @@ export class AgentInstance<T extends DataValue = DataValue> {
       });
 
       this.t++;
-      this.transitionTo('q_halt', 'exec_term_success', { toolId: termCall.name });
-      this.lastHaltResult = {
+      const exitResult: ExitResult<T> = {
         type: termCall.name,
-        payload: parsed.data as T
+        payload: parsed.data
       };
+      this.transitionTo({ phase: 'q_halt', exitResult }, 'exec_term_success', { toolId: termCall.name });
 
       void this.emitEvent({
         type: 'halt',
         timestamp: new Date(),
         macroCycle: this.c,
         tick: this.t,
-        result: this.lastHaltResult,
+        result: exitResult,
         stateSnapshot: { ...this.state, Ds: { ...this.state.Ds } }
       });
 
@@ -552,25 +580,20 @@ export class AgentInstance<T extends DataValue = DataValue> {
         status: 'halt',
         macroCycle: this.c,
         tick: this.t,
-        result: this.lastHaltResult,
+        result: exitResult,
         state: this.state
       };
     }
 
     // Sottocaso C: Azioni sul Mondo Fisico (Y ⊆ Ta)
-    const validWorldCalls: ToolCall[] = [];
+    const validWorldCalls: ValidToolCall[] = [];
 
     for (const call of calls) {
       if (!this.state.Ta.has(call.name)) {
-        const rawPayload = isDataValue(call.payload) ? call.payload : String(call.payload);
-        const worldPayload: DataRecord = isDataRecord(rawPayload)
-          ? rawPayload
-          : { value: rawPayload };
-
         this.appendMessage({
           type: 'action',
           callId: call.id,
-          content: { name: call.name, payload: worldPayload }
+          content: { name: call.name, payload: call.payload }
         });
 
         const errPayload = this.policy.formatDiagnosticPayload(
@@ -585,9 +608,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
           content: errPayload
         });
 
-        this.targetRepairToolId = call.name;
-        this.targetRepairCallId = call.id;
-        this.transitionTo('q_repair', 'exec_schema_error', { toolId: call.name });
+        this.transitionTo(
+          { phase: 'q_repair', targetToolId: call.name, targetCallId: call.id },
+          'exec_schema_error',
+          { toolId: call.name }
+        );
         this.t++;
 
         void this.emitEvent({
@@ -602,7 +627,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
         return {
           status: 'running',
-          controlState: this.controlState,
+          controlState: this.fsm.phase,
           macroCycle: this.c,
           tick: this.t,
           state: this.state
@@ -611,15 +636,10 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       const worldDef = this.world.getToolDefinition(call.name);
       if (!worldDef) {
-        const rawPayload = isDataValue(call.payload) ? call.payload : String(call.payload);
-        const worldPayload: DataRecord = isDataRecord(rawPayload)
-          ? rawPayload
-          : { value: rawPayload };
-
         this.appendMessage({
           type: 'action',
           callId: call.id,
-          content: { name: call.name, payload: worldPayload }
+          content: { name: call.name, payload: call.payload }
         });
 
         const errPayload = this.policy.formatDiagnosticPayload(
@@ -634,9 +654,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
           content: errPayload
         });
 
-        this.targetRepairToolId = call.name;
-        this.targetRepairCallId = call.id;
-        this.transitionTo('q_repair', 'exec_schema_error', { toolId: call.name });
+        this.transitionTo(
+          { phase: 'q_repair', targetToolId: call.name, targetCallId: call.id },
+          'exec_schema_error',
+          { toolId: call.name }
+        );
         this.t++;
 
         void this.emitEvent({
@@ -651,7 +673,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
         return {
           status: 'running',
-          controlState: this.controlState,
+          controlState: this.fsm.phase,
           macroCycle: this.c,
           tick: this.t,
           state: this.state
@@ -660,15 +682,10 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       const parsed = worldDef.parameters.safeParse(call.payload);
       if (!parsed.success) {
-        const rawPayload = isDataValue(call.payload) ? call.payload : String(call.payload);
-        const worldPayload: DataRecord = isDataRecord(rawPayload)
-          ? rawPayload
-          : { value: rawPayload };
-
         this.appendMessage({
           type: 'action',
           callId: call.id,
-          content: { name: call.name, payload: worldPayload }
+          content: { name: call.name, payload: call.payload }
         });
 
         const detail = JSON.stringify(parsed.error.format());
@@ -684,9 +701,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
           content: errPayload
         });
 
-        this.targetRepairToolId = call.name;
-        this.targetRepairCallId = call.id;
-        this.transitionTo('q_repair', 'exec_schema_error', { toolId: call.name });
+        this.transitionTo(
+          { phase: 'q_repair', targetToolId: call.name, targetCallId: call.id },
+          'exec_schema_error',
+          { toolId: call.name }
+        );
         this.t++;
 
         void this.emitEvent({
@@ -701,7 +720,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
         return {
           status: 'running',
-          controlState: this.controlState,
+          controlState: this.fsm.phase,
           macroCycle: this.c,
           tick: this.t,
           state: this.state
@@ -709,9 +728,10 @@ export class AgentInstance<T extends DataValue = DataValue> {
       }
 
       validWorldCalls.push({
+        status: 'valid',
         id: call.id,
         name: call.name,
-        payload: parsed.data as DataRecord
+        payload: parsed.data
       });
     }
 
@@ -725,7 +745,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     }
 
     this.t++;
-    this.transitionTo('q_yield', 'exec_world_yield');
+    this.transitionTo({ phase: 'q_yield', pendingCalls: validWorldCalls }, 'exec_world_yield');
 
     void this.emitEvent({
       type: 'yield',
@@ -747,7 +767,11 @@ export class AgentInstance<T extends DataValue = DataValue> {
   /**
    * Micro-passo nello stato di riparazione schema (q_repair)
    */
-  private async stepRepair(): Promise<StepOutcome<T>> {
+  private async stepRepair(repairState: {
+    phase: 'q_repair';
+    targetToolId: string;
+    targetCallId: string;
+  }): Promise<StepOutcome<T>> {
     const context = this.buildInferenceTriple();
     const startInfer = Date.now();
     const output = await this.model.infer(context);
@@ -758,7 +782,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
       timestamp: new Date(),
       macroCycle: this.c,
       tick: this.t,
-      controlState: this.controlState,
+      controlState: this.fsm.phase,
       context,
       output,
       durationMs,
@@ -772,10 +796,10 @@ export class AgentInstance<T extends DataValue = DataValue> {
       });
     }
 
-    const firstCall = output.calls[0];
+    const firstCall = normalizeToolCall(output.calls[0]);
 
     // Se l'agente emette l'azione speciale di abort
-    if (firstCall && firstCall.name === 'a_abort_call') {
+    if (firstCall.name === 'a_abort_call') {
       this.appendMessage({
         type: 'action',
         callId: firstCall.id,
@@ -785,17 +809,15 @@ export class AgentInstance<T extends DataValue = DataValue> {
       this.appendMessage({
         type: 'result',
         callId: firstCall.id,
-        content: { status: 'aborted', target: this.targetRepairToolId ?? null }
+        content: { status: 'aborted', target: repairState.targetToolId }
       });
 
-      this.targetRepairToolId = undefined;
-      this.targetRepairCallId = undefined;
-      this.transitionTo('q_exec', 'repair_abort');
+      this.transitionTo({ phase: 'q_exec' }, 'repair_abort');
       this.t++;
 
       return {
         status: 'running',
-        controlState: this.controlState,
+        controlState: this.fsm.phase,
         macroCycle: this.c,
         tick: this.t,
         state: this.state
@@ -803,7 +825,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     }
 
     // Se l'agente riprova a emettere il tool target corretto
-    if (firstCall && firstCall.name === this.targetRepairToolId) {
+    if (firstCall.name === repairState.targetToolId && firstCall.status === 'valid') {
       // 1. Controlliamo se è un contratto terminale
       const termContract = this.manifest.A_term.find((term) => term.id === firstCall.name);
       if (termContract) {
@@ -820,21 +842,19 @@ export class AgentInstance<T extends DataValue = DataValue> {
             content: { name: firstCall.name, payload: termPayload }
           });
 
-          this.targetRepairToolId = undefined;
-          this.targetRepairCallId = undefined;
           this.t++;
-          this.transitionTo('q_halt', 'exec_term_success', { toolId: firstCall.name });
-          this.lastHaltResult = {
+          const exitResult: ExitResult<T> = {
             type: firstCall.name,
-            payload: parsed.data as T
+            payload: parsed.data
           };
+          this.transitionTo({ phase: 'q_halt', exitResult }, 'exec_term_success', { toolId: firstCall.name });
 
           void this.emitEvent({
             type: 'halt',
             timestamp: new Date(),
             macroCycle: this.c,
             tick: this.t,
-            result: this.lastHaltResult,
+            result: exitResult,
             stateSnapshot: { ...this.state, Ds: { ...this.state.Ds } }
           });
 
@@ -842,7 +862,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
             status: 'halt',
             macroCycle: this.c,
             tick: this.t,
-            result: this.lastHaltResult,
+            result: exitResult,
             state: this.state
           };
         }
@@ -857,19 +877,17 @@ export class AgentInstance<T extends DataValue = DataValue> {
             this.appendMessage({
               type: 'action',
               callId: firstCall.id,
-              content: { name: firstCall.name, payload: parsed.data as DataRecord }
+              content: { name: firstCall.name, payload: parsed.data }
             });
 
-            this.targetRepairToolId = undefined;
-            this.targetRepairCallId = undefined;
             this.t++;
-            this.transitionTo('q_yield', 'exec_world_yield');
-
-            const validCall: ToolCall = {
+            const validCall: ValidToolCall = {
+              status: 'valid',
               id: firstCall.id,
               name: firstCall.name,
-              payload: parsed.data as DataRecord
+              payload: parsed.data
             };
+            this.transitionTo({ phase: 'q_yield', pendingCalls: [validCall] }, 'exec_world_yield');
 
             void this.emitEvent({
               type: 'yield',
@@ -895,7 +913,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     this.t++;
     return {
       status: 'running',
-      controlState: this.controlState,
+      controlState: this.fsm.phase,
       macroCycle: this.c,
       tick: this.t,
       state: this.state
@@ -968,24 +986,42 @@ export class AgentInstance<T extends DataValue = DataValue> {
               await options.beforeToolExecution(call.name, call.payload);
             }
             const startTime = Date.now();
-            const res = await this.world.executeTool(call.name, call.payload);
-            const durationMs = Date.now() - startTime;
+            try {
+              const res = await this.world.executeTool(call.name, call.payload);
+              const durationMs = Date.now() - startTime;
 
-            void this.emitEvent({
-              type: 'world_action',
-              timestamp: new Date(),
-              macroCycle: this.c,
-              tick: this.t,
-              toolId: call.name,
-              args: call.payload,
-              result: res,
-              durationMs
-            });
+              void this.emitEvent({
+                type: 'world_action',
+                timestamp: new Date(),
+                macroCycle: this.c,
+                tick: this.t,
+                toolId: call.name,
+                args: call.payload,
+                status: 'success',
+                result: res,
+                durationMs
+              });
 
-            if (options?.afterToolExecution) {
-              await options.afterToolExecution(call.name, call.payload, res);
+              if (options?.afterToolExecution) {
+                await options.afterToolExecution(call.name, call.payload, res);
+              }
+              return { callId: call.id, result: res };
+            } catch (err: unknown) {
+              const durationMs = Date.now() - startTime;
+              const errorObj = err instanceof Error ? err : new Error(String(err));
+              void this.emitEvent({
+                type: 'world_action',
+                timestamp: new Date(),
+                macroCycle: this.c,
+                tick: this.t,
+                toolId: call.name,
+                args: call.payload,
+                status: 'failure',
+                error: errorObj,
+                durationMs
+              });
+              throw err;
             }
-            return { callId: call.id, result: res };
           })
         );
 

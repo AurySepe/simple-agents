@@ -48,3 +48,11 @@ scratch/
 agent-state-audit.json
 audit/
 
+# Model weights and binaries
+*.gguf
+*.bin
+*.pt
+*.safetensors
+docker/**/models/*
+!docker/**/models/.gitkeep
+

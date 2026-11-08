@@ -39,14 +39,15 @@ export interface ModelInferenceEvent extends BaseAgentEvent {
   stateSnapshot: Readonly<AgentState>;
 }
 
-export interface WorldActionEvent extends BaseAgentEvent {
+export type WorldActionEvent = BaseAgentEvent & {
   type: 'world_action';
   toolId: string;
   args: DataRecord;
-  result?: ToolResult;
-  error?: unknown;
   durationMs: number;
-}
+} & (
+  | { status: 'success'; result: ToolResult; error?: never }
+  | { status: 'failure'; error: string | Error; result?: never }
+);
 
 export interface StateTransitionEvent extends BaseAgentEvent {
   type: 'state_transition';

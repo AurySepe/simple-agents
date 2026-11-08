@@ -1,4 +1,4 @@
-import { DataRecord, ToolDefinition, ToolResult, WorldTool } from '../types/index.js';
+import { DataRecord, DataValue, ToolDefinition, ToolResult, WorldTool } from '../types/index.js';
 
 /**
  * ============================================================================
@@ -38,7 +38,7 @@ export class WorldToolError extends Error {
     public readonly toolId: string,
     public readonly kind: 'not_found' | 'invalid_parameters' | 'execution_failed',
     message: string,
-    public readonly details?: unknown
+    public readonly details?: DataValue | Error
   ) {
     super(message);
     this.name = 'WorldToolError';
@@ -74,7 +74,8 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       return {
         id: tool.id,
         description: tool.description,
-        parameters: tool.parameters
+        parameters: tool.parameters,
+        returns: tool.returns
       };
     },
 
@@ -82,7 +83,8 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       return Array.from(toolsMap.values()).map(tool => ({
         id: tool.id,
         description: tool.description,
-        parameters: tool.parameters
+        parameters: tool.parameters,
+        returns: tool.returns
       }));
     },
 
@@ -111,12 +113,12 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       try {
         return await tool.execute(parseResult.data);
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
+        const errorObj = err instanceof Error ? err : new Error(String(err));
         throw new WorldToolError(
           toolId,
           'execution_failed',
-          `Errore durante l'esecuzione del tool '${toolId}': ${message}`,
-          err
+          `Errore durante l'esecuzione del tool '${toolId}': ${errorObj.message}`,
+          errorObj
         );
       }
     }

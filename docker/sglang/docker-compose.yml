@@ -1,0 +1,34 @@
+services:
+  sglang:
+    image: lmsysorg/sglang:latest
+    container_name: sglang-server
+    restart: unless-stopped
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "${PORT:-30000}:30000"
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+    command: >
+      python3 -m sglang.launch_server
+      --model-path ${MODEL_PATH}
+      --host 0.0.0.0
+      --port 30000
+      --tool-call-parser ${TOOL_CALL_PARSER}
+      --reasoning-parser ${REASONING_PARSER}
+      --grammar-backend ${GRAMMAR_BACKEND}
+      --mem-fraction-static ${MEM_FRACTION_STATIC}
+      --max-running-requests ${MAX_RUNNING_REQUESTS}
+      --context-length ${CONTEXT_LENGTH}
+      ${EXTRA_ARGS}
+
+volumes:
+  huggingface-cache:
+    name: sglang-huggingface-cache
+
