@@ -188,8 +188,10 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
     const rawCalls = rawMessage.tool_calls;
     if (!rawCalls || rawCalls.length === 0) {
       if (choice.finish_reason === 'length') {
+        const thoughtLength = thought ? thought.length : 0;
+        const thoughtTail = thought ? `\nThinking finale (ultimi 1500 caratteri di ${thoughtLength}):\n${thought.slice(-1500)}` : '';
         throw new Error(
-          `Il modello '${response.model}' ha saturato il limite di token (finish_reason='length'). Generazione troncata prima della selezione delle azioni. Incrementare 'max_tokens' o verificare il contesto.`
+          `Il modello '${response.model}' ha saturato il limite di token (finish_reason='length'). Generazione troncata prima della selezione delle azioni. Incrementare 'max_tokens' o verificare il contesto.${thoughtTail}`
         );
       }
       throw new Error(

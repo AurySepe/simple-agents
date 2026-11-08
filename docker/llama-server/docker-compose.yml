@@ -21,6 +21,7 @@ services:
       --port ${PORT:-30000}
       -ngl ${N_GPU_LAYERS:-99}
       -c ${CTX_SIZE:-8192}
+      -np ${PARALLEL_SLOTS:-1}
       -fa ${FLASH_ATTENTION:-on}
       --jinja
 
