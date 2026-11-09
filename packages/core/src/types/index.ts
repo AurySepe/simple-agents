@@ -121,7 +121,7 @@ export function createEpEvent(input: MessageInput, index: number, tau: TimeIndex
  * ============================================================================
  */
 export interface Concept {
-  id: string;
+  name: string;
   descrizione: string;
   corpo: string;
 }
@@ -138,7 +138,7 @@ export interface ToolDefinition<TIn = any, TOut = any> {
   returns?: z.ZodType<TOut>;
 }
 
-export interface WorldTool<TIn = any, TOut extends ToolResult = ToolResult>
+export interface WorldTool<TIn = any, TOut = any>
   extends ToolDefinition<TIn, TOut> {
   execute: (args: TIn) => Promise<TOut> | TOut;
 }
@@ -304,7 +304,7 @@ export interface LanguageModelAdapter {
  * 9. I CONTRATTI DI TERMINAZIONE: A_term e TAGGED UNION
  * ============================================================================
  */
-export interface TerminationContract<T = DataValue> {
+export interface TerminationContract<T = any> {
   id: string;
   description: string;
   schema: z.ZodType<T>;

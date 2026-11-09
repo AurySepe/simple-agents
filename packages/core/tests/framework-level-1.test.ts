@@ -140,7 +140,7 @@ describe('Livello 1: Istanziazione del FrameworkEngine Immutabile (Ω_op)', () =
         Ds0: { token: 'xyz123', count: 42 },
         Ta0: ['tool_a', 'tool_b'],
         Ka0: [
-          { id: 'policy_1', descrizione: 'Politica di sicurezza', corpo: 'Non divulgare token' }
+          { name: 'policy_1', descrizione: 'Politica di sicurezza', corpo: 'Non divulgare token' }
         ],
         A_term: [
           {

@@ -32,7 +32,7 @@ export interface VisibleToolsOptions {
   formatToolReturnDescription?: (
     id: string,
     description: string,
-    returnsSchema: z.ZodTypeAny
+    returnsSchema: z.ZodType
   ) => string;
 }
 
@@ -43,7 +43,7 @@ export function defaultFormatTerminationDescription(_id: string, description: st
 /**
  * Genera una sintetica rappresentazione strutturata dei tipi di un schema Zod.
  */
-export function describeZodSchema(schema: z.ZodTypeAny): string {
+export function describeZodSchema(schema: z.ZodType): string {
   if (
     schema instanceof z.ZodObject ||
     ('shape' in schema && typeof (schema as any).shape === 'object')
@@ -75,7 +75,7 @@ export function describeZodSchema(schema: z.ZodTypeAny): string {
 export function defaultFormatToolReturnDescription(
   _id: string,
   description: string,
-  returnsSchema: z.ZodTypeAny
+  returnsSchema: z.ZodType
 ): string {
   const returnSummary = describeZodSchema(returnsSchema);
   return `${description}\n[VALORE DI RITORNO]: ${returnSummary}`;

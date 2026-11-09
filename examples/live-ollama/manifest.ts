@@ -70,7 +70,7 @@ Il tuo compito è assistere i clienti esaminando le loro richieste, verificando 
   // 3. Conoscenza e Regole di Business Attive (Ka0): pure verità fattuali
   Ka0: [
     {
-      id: 'policy_sconto_vip',
+      name: 'policy_sconto_vip',
       descrizione: 'Condizioni di applicabilità dello sconto commerciale VIP',
       corpo: "Uno sconto del 15% sul totale dell'ordine è applicabile solo ed esclusivamente se il cliente appartiene alla categoria 'VIP' e il suo ordine in corso si trova nello stato 'IN_PREPARAZIONE'."
     }

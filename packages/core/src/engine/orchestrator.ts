@@ -147,7 +147,7 @@ export interface FrameworkConfig {
    * alla descrizione del tool fisico esposta all'LLM.
    * Se non specificato, usa il default del framework.
    */
-  formatToolReturnDescription?: (id: string, description: string, returnsSchema: z.ZodTypeAny) => string;
+  formatToolReturnDescription?: (id: string, description: string, returnsSchema: z.ZodType) => string;
 }
 
 /**
@@ -155,11 +155,63 @@ export interface FrameworkConfig {
  * CLASSE LIVELLO 1: FrameworkEngine (Il Motore di Transizione Immutabile)
  * ============================================================================
  */
+export interface AgentPackage<T = DataValue> {
+  manifest: AgentManifest<T>;
+  world: WorldRegistry;
+}
+
+export function isAgentPackage<T = DataValue>(
+  value: unknown
+): value is AgentPackage<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'manifest' in value &&
+    'world' in value
+  );
+}
+
 export class FrameworkEngine {
   constructor(private readonly config: FrameworkConfig = {}) {}
 
   public bindWorld(world: WorldRegistry): BoundRuntime {
     return new BoundRuntime(this.config, world);
+  }
+
+  /**
+   * Spawna un'istanza dell'agente nel runtime (approccio engine-first).
+   * Accetta un pacchetto agente (dotato di manifest e world) oppure un manifesto puro con world separato.
+   */
+  public spawn<T extends DataValue = DataValue>(
+    agent: AgentPackage<T> | AgentManifest<T>,
+    model: LanguageModelAdapter,
+    world?: WorldRegistry
+  ): AgentInstance<T> {
+    if (isAgentPackage<T>(agent)) {
+      return this.bindWorld(agent.world).spawnAgent(agent.manifest, model);
+    }
+    if (!world) {
+      throw new Error("Per spawnare un AgentManifest puro, è necessario fornire un WorldRegistry come terzo parametro.");
+    }
+    return this.bindWorld(world).spawnAgent(agent, model);
+  }
+
+  /**
+   * Esegue un agente nel runtime (approccio engine-first).
+   * Accetta un pacchetto agente oppure un manifesto puro con world separato.
+   */
+  public async run<T extends DataValue = DataValue>(
+    agent: AgentPackage<T> | AgentManifest<T>,
+    model: LanguageModelAdapter,
+    options?: RunOptions<T> & { world?: WorldRegistry }
+  ): Promise<RunResult<T>> {
+    if (isAgentPackage<T>(agent)) {
+      return await this.bindWorld(agent.world).runAgent(agent.manifest, model, options);
+    }
+    if (!options?.world) {
+      throw new Error("Per eseguire un AgentManifest puro, è necessario fornire un WorldRegistry in options.world.");
+    }
+    return await this.bindWorld(options.world).runAgent(agent, model, options);
   }
 }
 
@@ -239,7 +291,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
       Ds: this.manifest.Ds0 ? { ...this.manifest.Ds0 } : {},
       Ta: this.manifest.Ta0 ? new Set(this.manifest.Ta0) : new Set(),
       Ka: this.manifest.Ka0
-        ? new Map(Array.from(this.manifest.Ka0).map((c) => [c.id, c]))
+        ? new Map(Array.from(this.manifest.Ka0).map((c) => [c.name, c]))
         : new Map(),
       Ep: this.manifest.Ep0 ? [...this.manifest.Ep0] : []
     };

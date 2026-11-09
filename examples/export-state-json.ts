@@ -54,7 +54,7 @@ async function runAndExport() {
     Ta0: ['w_db_ordini', 'w_applica_sconto'],
     Ka0: [
       {
-        id: 'pol_sconti_2026',
+        name: 'pol_sconti_2026',
         descrizione: 'Policy sconti 2026',
         corpo: 'Preventivi oltre 150€ hanno diritto al 15% di sconto.'
       }

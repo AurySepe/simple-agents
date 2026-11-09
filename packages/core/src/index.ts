@@ -24,3 +24,7 @@ export * from './defaults/index.js';
 // 6. Osservabilità, Logger e Telemetria
 export * from './observability/index.js';
 
+// 7. API Dichiarativa e Type-Safe per la Definizione e Binding dell'Agente
+export * from './definition/index.js';
+
+

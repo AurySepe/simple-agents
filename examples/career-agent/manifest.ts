@@ -37,7 +37,7 @@ Il tuo compito è identificare e restituire l'URL della pagina web ufficiale in 
 
   Ka0: [
     {
-      id: "definizione_pagina_carriere",
+      name: "definizione_pagina_carriere",
       descrizione: "Proprietà e criteri di conformità della pagina carriere ufficiale",
       corpo: `Una pagina web è la pagina carriere ufficiale dell'azienda quando soddisfa le seguenti caratteristiche oggettive:
 

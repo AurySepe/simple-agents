@@ -74,7 +74,7 @@ describe('Standard Library / Defaults di Livello 1', () => {
       Ds: { orderId: 'ORD-999' },
       Ta: new Set(['calcola_totale']),
       Ka: new Map([
-        ['concetto_1', { id: 'concetto_1', descrizione: 'Politica resi', corpo: 'Resi entro 30gg' }]
+        ['concetto_1', { name: 'concetto_1', descrizione: 'Politica resi', corpo: 'Resi entro 30gg' }]
       ]),
       Ep: []
     };
@@ -107,7 +107,7 @@ describe('Standard Library / Defaults di Livello 1', () => {
       expect(output).toContain('<mission>');
       expect(output).toContain('<structured_data>');
       expect(output).toContain('<active_concepts>');
-      expect(output).toContain('<concept id="concetto_1" description="Politica resi">');
+      expect(output).toContain('<concept name="concetto_1" description="Politica resi">');
     });
 
     it('dovrebbe proiettare lo stato in XML italiano', () => {
@@ -116,7 +116,7 @@ describe('Standard Library / Defaults di Livello 1', () => {
       expect(output).toContain('<missione>');
       expect(output).toContain('<dati_strutturati>');
       expect(output).toContain('<concetti_attivi>');
-      expect(output).toContain('<concetto id="concetto_1" descrizione="Politica resi">');
+      expect(output).toContain('<concetto name="concetto_1" descrizione="Politica resi">');
     });
 
     it('dovrebbe consentire la creazione combinata tramite createFrameProjector', () => {

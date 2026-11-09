@@ -74,7 +74,7 @@ export function createXmlProjector(options?: XmlProjectorOptions): SystemFramePr
 
       if (state.Ka.size > 0) {
         const conceptsXml = Array.from(state.Ka.values())
-          .map((c) => `  <${tags.concept} id="${c.id}" ${tags.descAttr}="${c.descrizione}">\n    ${c.corpo}\n  </${tags.concept}>`)
+          .map((c) => `  <${tags.concept} name="${c.name}" ${tags.descAttr}="${c.descrizione}">\n    ${c.corpo}\n  </${tags.concept}>`)
           .join('\n');
         parts.push(`<${tags.knowledge}>\n${conceptsXml}\n</${tags.knowledge}>`);
       }
