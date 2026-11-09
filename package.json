@@ -16,7 +16,8 @@
     "demo": "tsx examples/run-walkthrough-demo.ts",
     "export-json": "tsx examples/export-state-json.ts",
     "benchmark": "tsx examples/benchmark-models.ts",
-    "career": "tsx examples/career-agent/index.ts"
+    "career": "tsx examples/career-agent/index.ts",
+    "vision": "tsx examples/image-describer/index.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
