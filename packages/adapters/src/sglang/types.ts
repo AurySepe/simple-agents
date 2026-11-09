@@ -46,6 +46,7 @@ export interface SGLangChatOptions {
   presence_penalty?: number;
   stop?: string | string[];
   tool_choice?: SGLangToolChoice;
+  parallel_tool_calls?: boolean;
   context_limit?: number;
 }
 
@@ -72,6 +73,7 @@ export interface SGLangQwenStrategyOptions {
   reasoningFormat?: SGLangReasoningFormat;
   includeHistoricalThinking?: boolean;
   defaultToolChoice?: 'required' | 'auto';
+  parallelToolCalls?: boolean;
 }
 
 export interface SGLangModelFamilyStrategy {

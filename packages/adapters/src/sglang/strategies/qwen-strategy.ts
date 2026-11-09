@@ -38,11 +38,13 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
   readonly reasoningFormat: SGLangReasoningFormat;
   readonly includeHistoricalThinking: boolean;
   readonly defaultToolChoice: 'required' | 'auto';
+  readonly parallelToolCalls: boolean;
 
   constructor(options?: SGLangQwenStrategyOptions) {
     this.reasoningFormat = options?.reasoningFormat ?? 'native_field';
     this.includeHistoricalThinking = options?.includeHistoricalThinking ?? false;
     this.defaultToolChoice = options?.defaultToolChoice ?? 'required';
+    this.parallelToolCalls = options?.parallelToolCalls ?? false;
   }
 
   formatContext(context: InferenceTriple): {
@@ -314,7 +316,9 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
       );
     }
 
-    const calls: ToolCall[] = rawCalls.map((tc, index) => {
+    const effectiveCalls = this.parallelToolCalls === false ? rawCalls.slice(0, 1) : rawCalls;
+
+    const calls: ToolCall[] = effectiveCalls.map((tc, index) => {
       const callId = tc.id || `call_${index}_${Date.now()}`;
       if (tc.type === 'function') {
         const rawArgs = tc.function.arguments;

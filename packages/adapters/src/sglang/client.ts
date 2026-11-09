@@ -19,6 +19,7 @@ export interface SGLangChatPayload {
   messages: SGLangMessage[];
   tools?: SGLangToolDefinition[];
   tool_choice?: SGLangToolChoice;
+  parallel_tool_calls?: boolean;
   temperature: number;
   max_tokens?: number;
   top_p?: number;
@@ -90,6 +91,9 @@ export class SGLangClient {
           messages: request.messages,
           ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {}),
           ...(request.tool_choice ? { tool_choice: request.tool_choice } : {}),
+          ...(typeof request.parallel_tool_calls === 'boolean'
+            ? { parallel_tool_calls: request.parallel_tool_calls }
+            : {}),
           temperature: request.temperature,
           max_tokens: request.max_tokens,
           top_p: request.top_p,

@@ -10,3 +10,4 @@ import { imageDescriberContract } from './contract.js';
 export const imageDescriberAgent = imageDescriberContract.implement({
   tools: {}
 });
+

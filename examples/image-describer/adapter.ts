@@ -41,7 +41,9 @@ export function createVisionAdapter(options?: VisionAdapterOptions): LanguageMod
     model: modelName,
     options: {
       temperature,
-      max_tokens: maxTokens
+      max_tokens: maxTokens,
+      parallel_tool_calls: false
     }
   });
 }
+

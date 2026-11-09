@@ -1,0 +1,15 @@
+{
+  "name": "example-tourist-guide",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Agente Visuale Guida Turistica: Visione + Chiamata Tool Intermedi + Terminazione o Scuse",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "@formal-agent/core": "workspace:*",
+    "@formal-agent/adapters": "workspace:*",
+    "zod": "^3.23.8"
+  }
+}
+

@@ -169,15 +169,48 @@ export interface Concept {
  * 5. DEFINIZIONE DEI TOOL FISICI DEL MONDO (W)
  * ============================================================================
  */
-export interface ToolDefinition<TIn = any, TOut = any> {
+/**
+ * ============================================================================
+ * 5. DEFINIZIONE DEI TOOL VISIBILI (V_Ω) TRAMITE DISCRIMINATED UNION
+ * ============================================================================
+ * I tool visibili al modello possono appartenere a tre categorie disgiunte:
+ * - 'world': Tool fisici operativi del Mondo (W) montati nel toolbelt Ta.
+ * - 'termination': Contratti terminali irreversibili dell'agente (A_term).
+ * - 'control': Tool interni di controllo e ripristino dell'automa (es. a_abort_call).
+ */
+export interface WorldToolDefinition<TIn = any, TOut = any> {
+  kind: 'world';
   id: string;
   description: string;
   parameters: z.ZodType<TIn>;
   returns?: z.ZodType<TOut>;
 }
 
-export interface WorldTool<TIn = any, TOut = any>
-  extends ToolDefinition<TIn, TOut> {
+export interface TerminationToolDefinition<TIn = any> {
+  kind: 'termination';
+  id: string;
+  description: string;
+  parameters: z.ZodType<TIn>;
+}
+
+export interface ControlToolDefinition {
+  kind: 'control';
+  id: string;
+  description: string;
+  parameters: z.ZodType<any>;
+}
+
+export type ToolDefinition<TIn = any, TOut = any> =
+  | WorldToolDefinition<TIn, TOut>
+  | TerminationToolDefinition<TIn>
+  | ControlToolDefinition;
+
+export interface WorldTool<TIn = any, TOut = any> {
+  kind?: 'world';
+  id: string;
+  description: string;
+  parameters: z.ZodType<TIn>;
+  returns?: z.ZodType<TOut>;
   execute: (args: TIn) => Promise<TOut> | TOut;
 }
 

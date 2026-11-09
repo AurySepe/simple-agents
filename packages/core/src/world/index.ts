@@ -1,4 +1,10 @@
-import { DataRecord, DataValue, ToolDefinition, ToolResult, WorldTool } from '../types/index.js';
+import {
+  DataRecord,
+  DataValue,
+  ToolResult,
+  WorldTool,
+  WorldToolDefinition
+} from '../types/index.js';
 
 /**
  * ============================================================================
@@ -8,9 +14,9 @@ import { DataRecord, DataValue, ToolDefinition, ToolResult, WorldTool } from '..
  */
 export interface WorldRegistry {
   /**
-   * Restituisce la definizione di un tool (per il modello LLM).
+   * Restituisce la definizione di un tool del mondo (per il modello LLM).
    */
-  getToolDefinition(toolId: string): ToolDefinition | undefined;
+  getToolDefinition(toolId: string): WorldToolDefinition | undefined;
 
   /**
    * Esegue un tool fisico verso il mondo esterno W.
@@ -22,7 +28,7 @@ export interface WorldRegistry {
   /**
    * Elenco completo dei tool disponibili nel Mondo W.
    */
-  getAllDefinitions(): ToolDefinition[];
+  getAllDefinitions(): WorldToolDefinition[];
 
   /**
    * Registra opzionalmente un nuovo tool nel registro.
@@ -68,10 +74,11 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       toolsMap.set(tool.id, tool);
     },
 
-    getToolDefinition(toolId: string): ToolDefinition | undefined {
+    getToolDefinition(toolId: string): WorldToolDefinition | undefined {
       const tool = toolsMap.get(toolId);
       if (!tool) return undefined;
       return {
+        kind: 'world',
         id: tool.id,
         description: tool.description,
         parameters: tool.parameters,
@@ -79,8 +86,9 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       };
     },
 
-    getAllDefinitions(): ToolDefinition[] {
+    getAllDefinitions(): WorldToolDefinition[] {
       return Array.from(toolsMap.values()).map(tool => ({
+        kind: 'world',
         id: tool.id,
         description: tool.description,
         parameters: tool.parameters,

@@ -15,8 +15,10 @@ services:
       - "${PORT:-30000}:${PORT:-30000}"
     volumes:
       - ./models:/models:ro
+      - ./templates:/templates:ro
     command: >
       -m /models/${MODEL_FILE}
+      ${MMPROJ_FILE:+--mmproj /models/$MMPROJ_FILE}
       --host 0.0.0.0
       --port ${PORT:-30000}
       -ngl ${N_GPU_LAYERS:-99}
@@ -24,4 +26,5 @@ services:
       -np ${PARALLEL_SLOTS:-1}
       -fa ${FLASH_ATTENTION:-on}
       --jinja
+      ${CHAT_TEMPLATE_FILE:+--chat-template-file /templates/$CHAT_TEMPLATE_FILE}
 

@@ -110,6 +110,7 @@ export function computeVisibleTools(
     options.formatToolReturnDescription ?? defaultFormatToolReturnDescription;
 
   const abortCallDef: ToolDefinition = {
+    kind: 'control',
     id: 'a_abort_call',
     description: 'Annulla la chiamata non valida e riprende la deliberazione ordinaria.',
     parameters: EmptyControlSchema
@@ -128,6 +129,7 @@ export function computeVisibleTools(
             : def.description;
 
           visible.push({
+            kind: 'world',
             id: def.id,
             description,
             parameters: def.parameters,
@@ -139,6 +141,7 @@ export function computeVisibleTools(
       // 2. Contratti di terminazione tipizzati A_term (con formattazione personalizzabile)
       for (const termContract of manifest.A_term) {
         visible.push({
+          kind: 'termination',
           id: termContract.id,
           description: formatTermDesc(termContract.id, termContract.description),
           parameters: termContract.schema
@@ -162,6 +165,7 @@ export function computeVisibleTools(
             : worldDef.description;
 
           visible.push({
+            kind: 'world',
             id: worldDef.id,
             description,
             parameters: worldDef.parameters,
@@ -172,6 +176,7 @@ export function computeVisibleTools(
           const termDef = manifest.A_term.find((t) => t.id === targetToolId);
           if (termDef) {
             visible.push({
+              kind: 'termination',
               id: termDef.id,
               description: formatTermDesc(termDef.id, termDef.description),
               parameters: termDef.schema
