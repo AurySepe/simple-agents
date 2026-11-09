@@ -17,8 +17,8 @@ export const concludiDescrizioneSchema = z.object({
     .describe("Elenco dei soggetti, oggetti, colori predominanti o caratteristiche salienti identificate."),
   testo_rilevato: z
     .string()
-    .optional()
-    .describe("Trascrizione letterale di eventuale testo, scritte, cartelli, loghi o etichette visibili.")
+    .nullable()
+    .describe("Trascrizione letterale di eventuale testo, scritte, cartelli, loghi o etichette visibili, oppure null se non presente.")
 });
 
 export type ConcludiDescrizionePayload = z.infer<typeof concludiDescrizioneSchema>;
@@ -44,3 +44,4 @@ export const imageDescriberContract = defineAgent({
     }
   }
 });
+
