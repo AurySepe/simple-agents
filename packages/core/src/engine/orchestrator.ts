@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { LanguageModelAdapter } from '../adapters/index.js';
 import { AgentEvent, AgentObserver, CompositeObserver } from '../observability/index.js';
 import {
   ActiveFSMState,
@@ -13,6 +12,7 @@ import {
   ExitResult,
   FSMControlState,
   InferenceTriple,
+  LanguageModelAdapter,
   isDataRecord,
   isDataValue,
   Message,

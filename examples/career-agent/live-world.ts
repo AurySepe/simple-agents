@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import { z } from "zod";
-import { createWorldRegistry, type WorldRegistry, type WorldTool } from "../../src/index.js";
+import { createWorldRegistry, type WorldRegistry, type WorldTool } from "@formal-agent/core";
 import type { ExtractedWebPage, WebSearchResult } from "./types.js";
 import { extractWebPage } from "./extractor.js";
 import { cercaWebReturnSchema, leggiPaginaWebReturnSchema } from "./world.js";

@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { extractWebPage } from "../examples/career-agent/extractor.js";
+import { extractWebPage } from "../extractor.js";
 import {
   createCareerWorld,
   MockWebWorldClient,
   MOCK_WEB_DATABASE,
-} from "../examples/career-agent/world.js";
-import { createLiveCareerWorld } from "../examples/career-agent/live-world.js";
+} from "../world.js";
+import { createLiveCareerWorld } from "../live-world.js";
 import {
   careerAgentManifest,
   confermaPaginaCarriereSchema,
   segnalaPaginaInesistenteSchema,
   segnalaRicercaNonConclusivaSchema,
-} from "../examples/career-agent/manifest.js";
-import { CAREER_SCENARIOS } from "../examples/career-agent/scenarios.js";
+} from "../manifest.js";
+import { CAREER_SCENARIOS } from "../scenarios.js";
 
 describe("Career Web Agent - Suite di Test", () => {
   describe("Extractor HTML con Cheerio", () => {

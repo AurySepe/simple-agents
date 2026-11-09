@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentManifest } from '../../src/index.js';
+import { AgentManifest } from '@formal-agent/core';
 
 /**
  * ============================================================================

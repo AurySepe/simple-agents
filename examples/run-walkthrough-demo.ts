@@ -7,7 +7,7 @@ import {
   FrameworkEngine,
   LanguageModelAdapter,
   WorldTool
-} from '../src/index.js';
+} from '@formal-agent/core';
 
 async function main() {
   console.log('='.repeat(80));
@@ -145,8 +145,7 @@ async function main() {
   // 5. OBSERVER & LOGGER CONSOLE A COLORI
   // ==========================================================================
   const consoleObserver = createConsoleObserver({
-    prefix: '[AGENTE-COMMERCIALE]',
-    includeTimestamp: true
+    prefix: '[AGENTE-COMMERCIALE]'
   });
 
   // ==========================================================================
@@ -165,8 +164,16 @@ async function main() {
   console.log('\n' + '='.repeat(80));
   console.log('   RISULTATO FINALE DELL ESECUZIONE');
   console.log('='.repeat(80));
-  console.log(`Esito Contratto: ${runResult.result.type}`);
-  console.log(`Dati Restituiti: ${JSON.stringify(runResult.result.payload, null, 2)}`);
+  switch (runResult.status) {
+    case 'halt':
+      console.log(`Esito Contratto: ${runResult.result.type}`);
+      console.log(`Dati Restituiti: ${JSON.stringify(runResult.result.payload, null, 2)}`);
+      break;
+    case 'stall':
+      console.log(`⚠️ Esito Stallo: ${runResult.stall.reason}`);
+      console.log(`Dettaglio: ${runResult.stall.message}`);
+      break;
+  }
   console.log(`Macro-Cicli di Mondo (c): ${runResult.macroCycles}`);
   console.log(`Tick Decisionali Totali (t): ${runResult.ticks}`);
   console.log(`Tempo Totale Esecuzione: ${duration} ms\n`);

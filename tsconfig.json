@@ -8,9 +8,17 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "outDir": "./dist"
+    "baseUrl": ".",
+    "paths": {
+      "@formal-agent/core": ["./packages/core/src/index.ts"],
+      "@formal-agent/core/*": ["./packages/core/src/*"],
+      "@formal-agent/adapters": ["./packages/adapters/src/index.ts"],
+      "@formal-agent/adapters/*": ["./packages/adapters/src/*"]
+    }
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": [
+    "packages/*/src/**/*",
+    "packages/*/tests/**/*",
+    "examples/**/*"
+  ]
 }
-

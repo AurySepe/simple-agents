@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createWorldRegistry, WorldRegistry, WorldTool } from '../../src/index.js';
+import { createWorldRegistry, DataValue, WorldRegistry, WorldTool } from '@formal-agent/core';
 
 /**
  * ============================================================================
@@ -96,7 +96,7 @@ export function createCommercialWorld(initialData?: CommercialDatabaseState): Wo
       cliente_id: z.number().int().positive().describe('Identificativo univoco del cliente')
     }),
     returns: cercaClienteReturnSchema,
-    execute: async ({ cliente_id }) => {
+    execute: async ({ cliente_id }): Promise<Record<string, DataValue>> => {
       const cliente = dbClienti[cliente_id];
       if (!cliente) {
         return { trovato: false, errore: `Nessun cliente trovato con ID ${cliente_id}` };
@@ -112,7 +112,7 @@ export function createCommercialWorld(initialData?: CommercialDatabaseState): Wo
       cliente_id: z.number().int().positive().describe('Identificativo univoco del cliente')
     }),
     returns: dettaglioOrdiniReturnSchema,
-    execute: async ({ cliente_id }) => {
+    execute: async ({ cliente_id }): Promise<Record<string, DataValue>> => {
       const ordine = dbOrdini[cliente_id];
       if (!ordine) {
         return { trovato: false, messaggio: `Nessun ordine aperto per il cliente ${cliente_id}` };
@@ -129,7 +129,7 @@ export function createCommercialWorld(initialData?: CommercialDatabaseState): Wo
       percentuale: z.number().positive().max(50).describe('Percentuale di sconto da applicare (es. 15 per 15%)')
     }),
     returns: applicaScontoReturnSchema,
-    execute: async ({ ordine_id, percentuale }) => {
+    execute: async ({ ordine_id, percentuale }): Promise<Record<string, DataValue>> => {
       const entry = Object.values(dbOrdini).find((o) => o.ordine_id === ordine_id);
       if (!entry) {
         return { esito: 'ERRORE', messaggio: `Ordine ${ordine_id} non trovato` };

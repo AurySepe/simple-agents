@@ -22,7 +22,7 @@ const COMPANIES: CompanyTest[] = [
 
 interface TestReportItem {
   azienda: string;
-  status: "SUCCESS" | "ERROR";
+  status: "SUCCESS" | "STALL" | "ERROR";
   azioneScelta?: string;
   urlTrovato?: string;
   motivazione?: string;
@@ -51,20 +51,37 @@ async function runBatch() {
       });
 
       const durationSec = Math.round((Date.now() - start) / 1000);
-      const payload = outcome.result.payload as Record<string, unknown>;
 
-      report.push({
-        azienda: item.azienda,
-        status: "SUCCESS",
-        azioneScelta: outcome.result.type,
-        urlTrovato: (payload?.url as string) ?? undefined,
-        motivazione: (payload?.motivazione as string) ?? (payload?.motivo as string) ?? undefined,
-        macroCicli: outcome.macroCycles,
-        ticks: outcome.ticks,
-        durataSecondi: durationSec,
-      });
-
-      console.log(`✅ [${item.azienda}] Completato con ${outcome.result.type} in ${durationSec}s`);
+      switch (outcome.status) {
+        case "halt": {
+          const payload = outcome.result.payload as Record<string, unknown>;
+          report.push({
+            azienda: item.azienda,
+            status: "SUCCESS",
+            azioneScelta: outcome.result.type,
+            urlTrovato: (payload?.url as string) ?? undefined,
+            motivazione: (payload?.motivazione as string) ?? (payload?.motivo as string) ?? undefined,
+            macroCicli: outcome.macroCycles,
+            ticks: outcome.ticks,
+            durataSecondi: durationSec,
+          });
+          console.log(`✅ [${item.azienda}] Completato con ${outcome.result.type} in ${durationSec}s`);
+          break;
+        }
+        case "stall": {
+          report.push({
+            azienda: item.azienda,
+            status: "STALL",
+            azioneScelta: "q_stall",
+            motivazione: outcome.stall.reason,
+            macroCicli: outcome.macroCycles,
+            ticks: outcome.ticks,
+            durataSecondi: durationSec,
+          });
+          console.log(`⚠️ [${item.azienda}] Stallo cognitivo: ${outcome.stall.reason} in ${durationSec}s`);
+          break;
+        }
+      }
     } catch (err: unknown) {
       const durationSec = Math.round((Date.now() - start) / 1000);
       const errMsg = err instanceof Error ? err.message : String(err);

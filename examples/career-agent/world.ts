@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createWorldRegistry, type WorldRegistry, type WorldTool } from "../../src/index.js";
+import { createWorldRegistry, type WorldRegistry, type WorldTool } from "@formal-agent/core";
 import type { ExtractedWebPage, MockWebPage, WebSearchResult } from "./types.js";
 import { extractWebPage } from "./extractor.js";
 

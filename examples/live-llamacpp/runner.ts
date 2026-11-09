@@ -6,7 +6,7 @@ import {
   defaultItalianMarkdownProjector,
   defaultItalianPolicy,
   FrameworkEngine
-} from '../../src/index.js';
+} from '@formal-agent/core';
 import { commercialManifest } from '../live-ollama/manifest.js';
 import { commercialScenarios } from '../live-ollama/scenarios.js';
 import { CommercialDatabaseState, createCommercialWorld } from '../live-ollama/world.js';
@@ -90,18 +90,34 @@ export async function runCommercialAgent(optionsOrPrompt?: string | RunCommercia
   try {
     const outcome = await agent.run({ userContent: prompt });
 
-    dualWriter('='.repeat(80));
-    dualWriter('   ESECUZIONE COMPLETATA CON SUCCESSO!');
-    dualWriter('='.repeat(80));
-    dualWriter(`Macro-cicli impiegati: ${outcome.macroCycles}`);
-    dualWriter(`Micro-tick decisionali: ${outcome.ticks}`);
-    dualWriter(`Stato finale di controllo: ${agent.getControlState()}`);
-    dualWriter(`Azione terminale scelta: ${outcome.result.type}`);
-    if (scenario) {
-      const match = outcome.result.type === scenario.esitoAtteso ? '✅ CONFORME' : '❌ DISCORDE';
-      dualWriter(`Verifica rispetto all'atteso (${scenario.esitoAtteso}): ${match}`);
+    switch (outcome.status) {
+      case 'halt': {
+        dualWriter('='.repeat(80));
+        dualWriter('   ESECUZIONE COMPLETATA CON SUCCESSO!');
+        dualWriter('='.repeat(80));
+        dualWriter(`Macro-cicli impiegati: ${outcome.macroCycles}`);
+        dualWriter(`Micro-tick decisionali: ${outcome.ticks}`);
+        dualWriter(`Stato finale di controllo: ${agent.getControlState()}`);
+        dualWriter(`Azione terminale scelta: ${outcome.result.type}`);
+        if (scenario) {
+          const match = outcome.result.type === scenario.esitoAtteso ? '✅ CONFORME' : '❌ DISCORDE';
+          dualWriter(`Verifica rispetto all'atteso (${scenario.esitoAtteso}): ${match}`);
+        }
+        dualWriter(`Payload terminale:\n${JSON.stringify(outcome.result.payload, null, 2)}`);
+        break;
+      }
+      case 'stall': {
+        dualWriter('='.repeat(80));
+        dualWriter('   ⚠️ AGENTE IN STALLO COGNITIVO (q_stall)');
+        dualWriter('='.repeat(80));
+        dualWriter(`Macro-cicli impiegati: ${outcome.macroCycles}`);
+        dualWriter(`Micro-tick decisionali: ${outcome.ticks}`);
+        dualWriter(`Stato finale di controllo: ${agent.getControlState()}`);
+        dualWriter(`Motivo dello stallo: ${outcome.stall.reason}`);
+        dualWriter(`Dettaglio: ${outcome.stall.message}`);
+        break;
+      }
     }
-    dualWriter(`Payload terminale:\n${JSON.stringify(outcome.result.payload, null, 2)}`);
 
     return outcome;
   } catch (err: unknown) {

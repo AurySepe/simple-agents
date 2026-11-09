@@ -3,7 +3,7 @@ import {
   LlamaCppClient,
   LlamaCppModelAdapter,
   LlamaCppQwenStrategy
-} from '../../src/index.js';
+} from '@formal-agent/adapters';
 
 export interface CreateLlamaCppAdapterOptions {
   baseUrl?: string;
@@ -50,9 +50,7 @@ export function createLlamaCppQwenAdapter(options?: CreateLlamaCppAdapterOptions
     options: {
       temperature,
       max_tokens: maxTokens
-    },
-    contextLimit,
-    writer: write
+    }
   });
 }
 

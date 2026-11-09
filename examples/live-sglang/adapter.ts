@@ -3,7 +3,7 @@ import {
   SGLangClient,
   SGLangModelAdapter,
   SGLangQwenStrategy
-} from '../../src/index.js';
+} from '@formal-agent/adapters';
 
 export interface CreateSGLangAdapterOptions {
   baseUrl?: string;

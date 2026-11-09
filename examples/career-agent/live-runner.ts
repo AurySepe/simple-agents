@@ -6,7 +6,7 @@ import {
   defaultItalianMarkdownProjector,
   defaultItalianPolicy,
   FrameworkEngine,
-} from "../../src/index.js";
+} from "@formal-agent/core";
 import { careerAgentManifest } from "./manifest.js";
 import { createLiveCareerWorld, LiveWebWorldClient } from "./live-world.js";
 import { createCareerLlamaAdapter } from "./adapter.js";
@@ -100,8 +100,13 @@ export async function runLiveCareerAgent(optionsOrAzienda: string | RunLiveCaree
     dualWriter(`Macro-cicli impiegati: ${outcome.macroCycles}`);
     dualWriter(`Micro-tick decisionali: ${outcome.ticks}`);
     dualWriter(`Stato finale di controllo: ${agent.getControlState()}`);
-    dualWriter(`Azione terminale scelta: ${outcome.result.type}`);
-    dualWriter(`Payload terminale:\n${JSON.stringify(outcome.result.payload, null, 2)}`);
+    if (outcome.status === "halt") {
+      dualWriter(`Azione terminale scelta: ${outcome.result.type}`);
+      dualWriter(`Payload terminale:\n${JSON.stringify(outcome.result.payload, null, 2)}`);
+    } else {
+      dualWriter(`Stallo di deliberazione: ${outcome.stall.reason}`);
+      dualWriter(`Dettagli stallo:\n${JSON.stringify(outcome.stall, null, 2)}`);
+    }
 
     return outcome;
   } catch (err: unknown) {

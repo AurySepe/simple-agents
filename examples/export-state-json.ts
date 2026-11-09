@@ -10,7 +10,7 @@ import {
   LanguageModelAdapter,
   ModularAuditExporter,
   WorldTool
-} from '../src/index.js';
+} from '@formal-agent/core';
 
 async function runAndExport() {
   console.log('='.repeat(80));
@@ -138,7 +138,14 @@ async function runAndExport() {
     observers: [collector]
   });
 
-  console.log(`✅ Esecuzione completata con esito '${runResult.result.type}' in ${runResult.macroCycles} macro-cicli.\n`);
+  switch (runResult.status) {
+    case 'halt':
+      console.log(`✅ Esecuzione completata con esito '${runResult.result.type}' in ${runResult.macroCycles} macro-cicli.\n`);
+      break;
+    case 'stall':
+      console.log(`⚠️ Esecuzione terminata in stallo: '${runResult.stall.reason}' in ${runResult.macroCycles} macro-cicli.\n`);
+      break;
+  }
 
   // ==========================================================================
   // 5. Esportazione Modulare tramite ModularAuditExporter

@@ -1,0 +1,18 @@
+{
+  "name": "@formal-agent/example-career-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Esempio applicativo di Livello 3: crawler e agente di investigazione carriere web",
+  "type": "module",
+  "scripts": {
+    "batch": "tsx europe-lowstress-batch.ts",
+    "live": "tsx live-runner.ts"
+  },
+  "dependencies": {
+    "@formal-agent/core": "*",
+    "@formal-agent/adapters": "*",
+    "cheerio": "^1.2.0",
+    "zod": "^4.6.7"
+  }
+}
+

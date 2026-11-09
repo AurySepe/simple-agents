@@ -94,8 +94,54 @@ function scoreLink(text: string, url: string): number {
  * - Cattura azioni di ricerca da form HTML (<form action="...">) e proprietà interattive
  * - Classifica e ordina i link per rilevanza semantica dando precedenza alla consultazione dei lavori
  */
-export function extractWebPage(html: string, baseUrl: string): ExtractedWebPage {
+export function extractWebPage(html: string, baseUrl: string, maxSummaryChars: number = 5000): ExtractedWebPage {
   const $ = cheerio.load(html);
+
+  const extractedJobs: Array<{ title: string; url: string }> = [];
+
+  // 0. Estrai posizioni strutturate da JSON-LD (Schema.org JobPosting) prima di rimuovere gli script
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const raw = $(el).html();
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      const items = Array.isArray(data) ? data : data["@graph"] ? data["@graph"] : [data];
+      for (const item of items) {
+        if (item && item["@type"] === "JobPosting" && item.title) {
+          extractedJobs.push({
+            title: String(item.title).trim(),
+            url: item.url ? String(item.url) : baseUrl,
+          });
+        }
+      }
+    } catch {}
+  });
+
+  // 1. Estrai posizioni strutturate da attributi di idratazione SPA (Vue, Homerun, React, Nuxt)
+  $("[v-bind], [data-job-list], [data-jobs], [data-vacancies], [data-positions]").each((_, el) => {
+    const raw =
+      $(el).attr("v-bind") ||
+      $(el).attr("data-job-list") ||
+      $(el).attr("data-jobs") ||
+      $(el).attr("data-vacancies") ||
+      $(el).attr("data-positions");
+    if (!raw) return;
+    try {
+      const cleanRaw = raw.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+      const data = JSON.parse(cleanRaw);
+      const list = data?.content?.vacancies || data?.vacancies || data?.jobs || [];
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (item?.title) {
+            extractedJobs.push({
+              title: String(item.title).trim(),
+              url: item.url ? String(item.url) : baseUrl,
+            });
+          }
+        }
+      }
+    } catch {}
+  });
 
   // Rimuovi elementi rumorosi o tecnici inutili per il modello
   $("script, style, noscript, svg, img, iframe, video, audio, code, pre, template").remove();
@@ -108,7 +154,19 @@ export function extractWebPage(html: string, baseUrl: string): ExtractedWebPage 
 
   const linksMap = new Map<string, { text: string; url: string; score: number }>();
 
-  // 1. Estrai endpoint di ricerca da moduli <form action="...">
+  // Registra con massima priorità le posizioni lavorative estratte dai metadati e hydration
+  for (const job of extractedJobs) {
+    try {
+      const fullUrl = new URL(job.url, baseUrl).href;
+      linksMap.set(fullUrl, {
+        text: job.title,
+        url: fullUrl,
+        score: 25,
+      });
+    } catch {}
+  }
+
+  // 2. Estrai endpoint di ricerca da moduli <form action="...">
   $("form[action]").each((_, el) => {
     const action = $(el).attr("action");
     if (!action || action.startsWith("#") || action.startsWith("javascript:")) return;
@@ -215,9 +273,18 @@ export function extractWebPage(html: string, baseUrl: string): ExtractedWebPage 
     .replace(/\s+/g, " ")
     .trim();
 
-  // Tronca il testo a un massimo di 1500 caratteri per non saturare la finestra di contesto
-  const summary =
-    bodyText.length > 1500 ? bodyText.slice(0, 1500) + " [...]" : bodyText;
+  // Tronca il testo a un massimo di caratteri (default 5000) per non saturare la finestra di contesto
+  let summary =
+    bodyText.length > maxSummaryChars ? bodyText.slice(0, maxSummaryChars) + " [...]" : bodyText;
+
+  // Se sono state estratte posizioni concrete dai metadati/hydration della pagina, esponile chiaramente in cima
+  if (extractedJobs.length > 0) {
+    const jobsListText = extractedJobs
+      .slice(0, 5)
+      .map((j) => `• ${j.title} (${j.url})`)
+      .join("\n");
+    summary = `[POSIZIONI LAVORATIVE APERTE RILEVATE NELLA PAGINA]:\n${jobsListText}\n\n[INFORMAZIONI GENERALI]:\n${summary}`;
+  }
 
   return {
     url: baseUrl,

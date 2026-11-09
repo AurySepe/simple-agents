@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentManifest } from "../../src/index.js";
+import type { AgentManifest } from "@formal-agent/core";
 
 // ============================================================================
 // 1. Contratto di Uscita Positiva: Pagina con le Posizioni Aperte Trovata
@@ -30,20 +30,27 @@ export type SegnalaRicercaNonConclusivaResult = z.infer<typeof segnalaRicercaNon
 // IL MANIFESTO DELL'AGENTE (Ridotto all'osso, zero gergo tecnico)
 // ============================================================================
 export const careerAgentManifest: AgentManifest = {
-  I: `Sei l'Agente Investigatore Web incaricato di trovare la pagina con le offerte di lavoro dell'azienda target.
-Il tuo unico obiettivo è individuare l'URL della pagina ufficiale in cui sono concretamente elencate e consultabili le posizioni aperte dell'azienda.`,
+  I: `Sei l'Agente Investigatore Web per l'individuazione delle pagine carriere aziendali.
+Il tuo compito è identificare e restituire l'URL della pagina web ufficiale in cui sono elencate le offerte di lavoro attive dell'azienda target.`,
 
-  Ms0: "Trovare la pagina web ufficiale con l'elenco delle posizioni lavorative aperte dell'azienda target.",
+  Ms0: "Individuare la pagina web ufficiale con le offerte di lavoro dell'azienda target.",
 
   Ka0: [
     {
-      id: "regole_ricerca_lavori",
-      descrizione: "Regole essenziali per individuare la pagina con le offerte di lavoro",
-      corpo: `1. OBIETTIVO CONCRETO: Cerchi la pagina che elenca effettivamente le posizioni lavorative aperte. Se una pagina visitata contiene solo testi generali sul lavoro e rimanda a un link per vedere le offerte di lavoro, non fermarti: visita quel link per raggiungere l'elenco concreto dei lavori.
-2. FONTI UFFICIALI E DIVIETO INTERMEDIARI: La pagina deve essere quella a cui l'azienda rimanda direttamente. Non accettare bacheche generiche o aggregatori di terze parti (come LinkedIn o Indeed).
-3. CASI ALTERNATIVI:
-   - Se il sito dell'azienda dichiara esplicitamente che non assume o non ha posizioni aperte, usa 'segnala_pagina_inesistente'.
-   - Se non trovi alcuna presenza o sito ufficiale dell'azienda, usa 'segnala_ricerca_non_conclusiva'.`,
+      id: "definizione_pagina_carriere",
+      descrizione: "Proprietà e criteri di conformità della pagina carriere ufficiale",
+      corpo: `Una pagina web è la pagina carriere ufficiale dell'azienda quando soddisfa le seguenti caratteristiche oggettive:
+
+1. TITOLARITÀ UFFICIALE:
+   La pagina appartiene al dominio dell'azienda o al suo portale di assunzione diretto (es. subdomain dedicati o sistemi ATS ufficiali aziendali come Greenhouse, Lever, Workday integrati dall'azienda). Non costituiscono pagine aziendali le bacheche terze o gli aggregatori generici (es. LinkedIn, Indeed).
+
+2. CONTENUTO RICHIESTO:
+   La pagina presenta concretamente le posizioni lavorative aperte (elenco di ruoli, dipartimenti o schede di candidatura consultabili).
+   Qualsiasi pagina ufficiale che esponga già un elenco consultabile di posizioni aperte è completa e conforme per la conferma.
+
+3. CASI LIMITE:
+   - Assenza esplicita di posizioni: se il sito ufficiale dichiara che non ci sono posizioni aperte o che l'azienda non assume, la situazione corrisponde a 'segnala_pagina_inesistente'.
+   - Assenza di riscontri ufficiali: l'impossibilità di reperire la presenza web ufficiale dell'azienda corrisponde a 'segnala_ricerca_non_conclusiva'.`,
     },
   ],
 
@@ -52,17 +59,17 @@ Il tuo unico obiettivo è individuare l'URL della pagina ufficiale in cui sono c
   A_term: [
     {
       id: "conferma_pagina_carriere",
-      description: "Conclude l'attività confermando l'URL della pagina ufficiale che elenca le posizioni lavorative aperte.",
+      description: "Restituisce l'URL della pagina ufficiale che presenta l'elenco delle offerte di lavoro attive.",
       schema: confermaPaginaCarriereSchema,
     },
     {
       id: "segnala_pagina_inesistente",
-      description: "Conclude l'attività segnalando che l'azienda non possiede una pagina carriere o non ha posizioni aperte.",
+      description: "Segnala che sul sito ufficiale dell'azienda è attestata l'assenza di offerte di lavoro.",
       schema: segnalaPaginaInesistenteSchema,
     },
     {
       id: "segnala_ricerca_non_conclusiva",
-      description: "Conclude l'attività segnalando che non è stato possibile reperire una pagina ufficiale con le posizioni aperte.",
+      description: "Segnala l'assenza di fonti web ufficiali dell'azienda con offerte di lavoro consultabili.",
       schema: segnalaRicercaNonConclusivaSchema,
     },
   ],

@@ -3,12 +3,14 @@ import {
   LlamaCppClient,
   LlamaCppModelAdapter,
   LlamaCppQwenStrategy,
-} from "../../src/index.js";
+} from "@formal-agent/adapters";
 
 export interface CreateCareerLlamaAdapterOptions {
   baseUrl?: string;
   modelName?: string;
   temperature?: number;
+  topP?: number;
+  presencePenalty?: number;
   maxTokens?: number;
   contextLimit?: number;
   timeoutMs?: number;
@@ -22,7 +24,11 @@ export interface CreateCareerLlamaAdapterOptions {
 export function createCareerLlamaAdapter(options?: CreateCareerLlamaAdapterOptions): LanguageModelAdapter {
   const baseUrl = options?.baseUrl ?? "http://localhost:30000";
   const modelName = options?.modelName ?? "qwen3.5-9b";
-  const temperature = options?.temperature ?? 0;
+  // Con i modelli di reasoning (CoT), temperature=0.6 e presence_penalty=0.3 impediscono
+  // gli attrattori ciclici (loop deliberativi infiniti), preservando il vincolo grammaticale GBNF sui tool.
+  const temperature = options?.temperature ?? 0.6;
+  const topP = options?.topP ?? 0.95;
+  const presencePenalty = options?.presencePenalty ?? 0.3;
   const maxTokens = options?.maxTokens ?? 4096;
   const contextLimit = options?.contextLimit ?? 32768;
   const timeoutMs = options?.timeoutMs ?? 180000;
@@ -45,10 +51,10 @@ export function createCareerLlamaAdapter(options?: CreateCareerLlamaAdapterOptio
     model: modelName,
     options: {
       temperature,
+      top_p: topP,
+      presence_penalty: presencePenalty,
       max_tokens: maxTokens,
     },
-    contextLimit,
-    writer: write,
   });
 }
 

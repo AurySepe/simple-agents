@@ -1,4 +1,4 @@
-import type { DataValue } from "../../src/types/index.js";
+import type { DataValue } from "@formal-agent/core";
 
 /**
  * Tipi di dominio per l'agente di ricerca carriere web.

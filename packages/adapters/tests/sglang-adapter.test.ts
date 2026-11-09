@@ -4,8 +4,8 @@ import {
   SGLangClient,
   SGLangModelAdapter,
   SGLangQwenStrategy
-} from '../src/adapters/index.js';
-import { InferenceTriple, ToolDefinition } from '../src/types/index.js';
+} from '../src/index.js';
+import { InferenceTriple, ToolDefinition } from '@formal-agent/core';
 
 describe('SGLang Transport & Qwen Strategy', () => {
   const originalFetch = global.fetch;

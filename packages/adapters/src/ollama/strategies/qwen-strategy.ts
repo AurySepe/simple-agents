@@ -7,7 +7,7 @@ import {
   ModelOutput,
   ModelResult,
   ToolCall
-} from '../../../types/index.js';
+} from '@formal-agent/core';
 import {
   ModelFamilyStrategy,
   OllamaChatResponse,

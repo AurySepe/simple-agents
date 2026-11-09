@@ -1,4 +1,4 @@
-import { DataRecord, InferenceTriple, ModelOutput, ModelResult } from '../../types/index.js';
+import { DataRecord, InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

@@ -3,7 +3,7 @@ import {
   OllamaClient,
   OllamaModelAdapter,
   QwenModelStrategy
-} from '../../src/index.js';
+} from '@formal-agent/adapters';
 
 /**
  * ============================================================================

@@ -290,6 +290,17 @@ export function isModelStall(result: ModelResult): result is ModelStallOutput {
 
 /**
  * ============================================================================
+ * 8.b INTERFACCIA DEL TRASDUTTORE NEURALE (MODELLO LINGUISTICO): M
+ * ============================================================================
+ * Il Framework definisce il Modello come una funzione pura di inferenza:
+ * M: C_Ω -> Promise<ModelResult>
+ */
+export interface LanguageModelAdapter {
+  infer(context: InferenceTriple): Promise<ModelResult>;
+}
+
+/**
+ * ============================================================================
  * 9. I CONTRATTI DI TERMINAZIONE: A_term e TAGGED UNION
  * ============================================================================
  */

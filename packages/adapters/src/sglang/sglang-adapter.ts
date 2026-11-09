@@ -1,4 +1,4 @@
-import { InferenceTriple, ModelOutput, ModelResult } from '../../types/index.js';
+import { InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
 import { LanguageModelAdapter } from '../index.js';
 import { SGLangClient } from './client.js';
 import {

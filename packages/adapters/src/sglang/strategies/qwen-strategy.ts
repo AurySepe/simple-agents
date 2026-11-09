@@ -10,7 +10,7 @@ import {
   SyntaxErrorToolCall,
   ToolCall,
   ValidToolCall
-} from '../../../types/index.js';
+} from '@formal-agent/core';
 import {
   SGLangAssistantMessageParam,
   SGLangChatResponse,

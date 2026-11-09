@@ -1,18 +1,12 @@
-import { InferenceTriple, ModelResult } from '../types/index.js';
+import { InferenceTriple, ModelResult, LanguageModelAdapter } from '@formal-agent/core';
 
 /**
  * ============================================================================
  * INTERFACCIA DEL MODELLO LINGUISTICO: M
  * ============================================================================
- * Il Framework definisce il Modello come una funzione pura di inferenza:
- * M: C_Ω -> Promise<ModelResult>
- *
- * L'implementazione reale (Gemini, Claude, OpenAI, mock di test, ecc.)
- * viene fornita dall'utente del framework tramite dependency injection.
+ * Rilasciata e re-esportata da @formal-agent/core per retrocompatibilità.
  */
-export interface LanguageModelAdapter {
-  infer(context: InferenceTriple): Promise<ModelResult>;
-}
+export { LanguageModelAdapter };
 
 // 1. Client e Tipi di Trasporto Ollama
 export * from './ollama/types.js';
