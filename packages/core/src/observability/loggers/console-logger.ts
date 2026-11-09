@@ -344,3 +344,6 @@ export class ConsoleLoggerObserver implements AgentObserver {
 export function createConsoleObserver(options?: ConsoleLoggerOptions): ConsoleLoggerObserver {
   return new ConsoleLoggerObserver(options);
 }
+
+export const ConsoleLogger = ConsoleLoggerObserver;
+export type ConsoleLogger = ConsoleLoggerObserver;

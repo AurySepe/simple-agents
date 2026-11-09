@@ -1,5 +1,5 @@
 import type { OpenAI } from 'openai';
-import { InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
+import type { DataRecord, InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
 
 /**
  * Estensione fortemente tipizzata del messaggio assistant per supportare

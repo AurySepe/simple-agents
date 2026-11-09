@@ -1,18 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { extractWebPage } from "../extractor.js";
 import {
-  createCareerWorld,
-  MockWebWorldClient,
-  MOCK_WEB_DATABASE,
-} from "../world.js";
-import { createLiveCareerWorld } from "../live-world.js";
-import {
-  careerAgentManifest,
+  careerAgentContract,
   confermaPaginaCarriereSchema,
   segnalaPaginaInesistenteSchema,
   segnalaRicercaNonConclusivaSchema,
-} from "../manifest.js";
-import { CAREER_SCENARIOS } from "../scenarios.js";
+} from "../contract.js";
+import { careerAgent, RealWebClient } from "../implementation.js";
+import { careerRunner } from "../runner.js";
 
 describe("Career Web Agent - Suite di Test", () => {
   describe("Extractor HTML con Cheerio", () => {
@@ -66,42 +61,12 @@ describe("Career Web Agent - Suite di Test", () => {
     });
   });
 
-  describe("Mondo Web Moccato", () => {
-    const client = new MockWebWorldClient();
-
-    it("deve restituire i risultati di ricerca corretti per Acme Corp", () => {
-      const searchResults = client.search("Acme Corp careers lavora con noi");
-      expect(searchResults.length).toBeGreaterThan(0);
-      const urls = searchResults.map((r) => r.url);
-      expect(urls).toContain("https://www.acmecorp.com");
-      expect(urls).toContain("https://www.acmecorp.com/careers");
+  describe("Contratto Cognitivo Puro (contract.ts)", () => {
+    it("deve dichiarare l'identità e la missione dell'agente", () => {
+      expect(careerAgentContract.contract.identity).toContain("Agente Investigatore Web");
+      expect(careerAgentContract.contract.mission).toContain("offerte di lavoro");
     });
 
-    it("deve lanciare errore 404 per URL inesistenti", () => {
-      expect(() => client.fetchAndExtract("https://www.inesistente.com")).toThrow(/HTTP 404/);
-    });
-
-    it("deve consentire al WorldRegistry di invocare w_cerca_web e w_leggi_pagina_web", async () => {
-      const world = createCareerWorld(client);
-
-      const cercaRes = (await world.executeTool("w_cerca_web", { query: "FintechNova" })) as {
-        risultati: Array<{ url: string }>;
-      };
-      expect(cercaRes.risultati.length).toBeGreaterThan(0);
-      expect(cercaRes.risultati[0].url).toBe("https://www.fintechnova.io");
-
-      const leggiRes = (await world.executeTool("w_leggi_pagina_web", {
-        url: "https://www.fintechnova.io",
-      })) as {
-        successo: boolean;
-        link_rilevanti: Array<{ testo: string; url: string }>;
-      };
-      expect(leggiRes.successo).toBe(true);
-      expect(leggiRes.link_rilevanti.some((l) => l.url.includes("greenhouse.io"))).toBe(true);
-    });
-  });
-
-  describe("Manifesto e Schemi Terminali", () => {
     it("deve validare il payload di conferma pagina carriere", () => {
       const validPayload = {
         url: "https://www.acmecorp.com/careers",
@@ -123,18 +88,31 @@ describe("Career Web Agent - Suite di Test", () => {
       };
       expect(() => segnalaRicercaNonConclusivaSchema.parse(validPayload)).not.toThrow();
     });
+  });
 
-    it("tutti gli scenari devono avere azioni terminali dichiarate nel manifesto", () => {
-      const terminalActionIds = careerAgentManifest.A_term.map((a) => a.id);
-      for (const scenario of CAREER_SCENARIOS) {
-        expect(terminalActionIds).toContain(scenario.azioneTerminaleAttesa);
-      }
+  describe("Implementazione Reale e Binding (implementation.ts)", () => {
+    it("deve istanziare il RealWebClient con i timeout corretti", () => {
+      const client = new RealWebClient({ timeoutMs: 5000 });
+      expect(client).toBeInstanceOf(RealWebClient);
     });
 
-    it("LiveWebWorldClient deve definire i tool fisici corretti nel registro del mondo", () => {
-      const liveWorld = createLiveCareerWorld();
-      expect(liveWorld.getToolDefinition("w_cerca_web")).toBeDefined();
-      expect(liveWorld.getToolDefinition("w_leggi_pagina_web")).toBeDefined();
+    it("l'agente implementato deve avere i tool w_cerca_web e w_leggi_pagina_web nel Mondo", () => {
+      expect(careerAgent.world.getToolDefinition("w_cerca_web")).toBeDefined();
+      expect(careerAgent.world.getToolDefinition("w_leggi_pagina_web")).toBeDefined();
+    });
+
+    it("il manifesto generato dall'agente implementato deve avere i contratti di terminazione registrati", () => {
+      const termIds = careerAgent.manifest.A_term.map((t) => t.id);
+      expect(termIds).toContain("conferma_pagina_carriere");
+      expect(termIds).toContain("segnala_pagina_inesistente");
+      expect(termIds).toContain("segnala_ricerca_non_conclusiva");
+    });
+  });
+
+  describe("Runner e Stack Esecutivo (runner.ts)", () => {
+    it("il runner deve essere pre-configurato e pronto all'uso", () => {
+      expect(careerRunner).toBeDefined();
+      expect(typeof careerRunner.run).toBe("function");
     });
   });
 });

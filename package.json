@@ -16,8 +16,7 @@
     "demo": "tsx examples/run-walkthrough-demo.ts",
     "export-json": "tsx examples/export-state-json.ts",
     "benchmark": "tsx examples/benchmark-models.ts",
-    "career:batch": "npm --workspace=@formal-agent/example-career-agent run batch",
-    "career:live": "npm --workspace=@formal-agent/example-career-agent run live"
+    "career": "tsx examples/career-agent/index.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

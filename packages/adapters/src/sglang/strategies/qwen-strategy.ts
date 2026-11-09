@@ -1,15 +1,15 @@
 import type { OpenAI } from 'openai';
 import { zodFunction } from 'openai/helpers/zod';
 import {
-  DataRecord,
-  InferenceTriple,
+  type DataRecord,
+  type InferenceTriple,
   isDataRecord,
   isNonEmptyArray,
-  ModelOutput,
-  ModelResult,
-  SyntaxErrorToolCall,
-  ToolCall,
-  ValidToolCall
+  type ModelOutput,
+  type ModelResult,
+  type SyntaxErrorToolCall,
+  type ToolCall,
+  type ValidToolCall
 } from '@formal-agent/core';
 import {
   SGLangAssistantMessageParam,

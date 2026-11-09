@@ -1,5 +1,5 @@
-import { InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
-import { LanguageModelAdapter } from '../index.js';
+import type { InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
+import type { LanguageModelAdapter } from '../index.js';
 import { OllamaClient } from './client.js';
 import {
   ContextTruncationWarning,

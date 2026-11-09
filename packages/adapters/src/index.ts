@@ -1,4 +1,4 @@
-import { InferenceTriple, ModelResult, LanguageModelAdapter } from '@formal-agent/core';
+import type { InferenceTriple, ModelResult, LanguageModelAdapter } from '@formal-agent/core';
 
 /**
  * ============================================================================
@@ -6,7 +6,7 @@ import { InferenceTriple, ModelResult, LanguageModelAdapter } from '@formal-agen
  * ============================================================================
  * Rilasciata e re-esportata da @formal-agent/core per retrocompatibilità.
  */
-export { LanguageModelAdapter };
+export type { LanguageModelAdapter, InferenceTriple, ModelResult };
 
 // 1. Client e Tipi di Trasporto Ollama
 export * from './ollama/types.js';

@@ -5,8 +5,7 @@
   "description": "Esempio applicativo di Livello 3: crawler e agente di investigazione carriere web",
   "type": "module",
   "scripts": {
-    "batch": "tsx europe-lowstress-batch.ts",
-    "live": "tsx live-runner.ts"
+    "start": "tsx index.ts"
   },
   "dependencies": {
     "@formal-agent/core": "*",

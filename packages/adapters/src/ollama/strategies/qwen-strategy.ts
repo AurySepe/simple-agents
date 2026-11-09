@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import {
-  DataRecord,
-  InferenceTriple,
+  type DataRecord,
+  type InferenceTriple,
   isDataRecord,
   isNonEmptyArray,
-  ModelOutput,
-  ModelResult,
-  ToolCall
+  type ModelOutput,
+  type ModelResult,
+  type ToolCall
 } from '@formal-agent/core';
 import {
   ModelFamilyStrategy,
