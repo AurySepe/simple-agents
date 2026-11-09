@@ -5,12 +5,15 @@ import {
   type InferenceTriple,
   isDataRecord,
   isNonEmptyArray,
+  isUserMessageContent,
   type ModelOutput,
   type ModelResult,
   type SyntaxErrorToolCall,
   type ToolCall,
+  type UserMessageContent,
   type ValidToolCall
 } from '@formal-agent/core';
+import { resolveMediaBase64, resolveTextFileContent } from '../../common/media-resolver.js';
 import {
   SGLangAssistantMessageParam,
   SGLangChatResponse,
@@ -111,10 +114,111 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
           content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         });
       } else if (msg.type === 'stimulus') {
-        messages.push({
-          role: 'user',
-          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        });
+        const rawContent = msg.content;
+        if (typeof rawContent === 'string') {
+          messages.push({
+            role: 'user',
+            content: rawContent
+          });
+        } else if (isUserMessageContent(rawContent)) {
+          switch (rawContent.kind) {
+            case 'text':
+              messages.push({
+                role: 'user',
+                content: rawContent.text
+              });
+              break;
+
+            case 'media':
+            case 'text_with_media': {
+              const parts: OpenAI.Chat.ChatCompletionContentPart[] = [];
+              if (rawContent.kind === 'text_with_media' && rawContent.text) {
+                parts.push({ type: 'text', text: rawContent.text });
+              }
+
+              for (const file of rawContent.files) {
+                if (file.modality === 'text_file') {
+                  const code = resolveTextFileContent(file);
+                  parts.push({
+                    type: 'text',
+                    text: file.filename ? `File ${file.filename}:\n\`\`\`\n${code}\n\`\`\`` : code
+                  });
+                } else if (file.modality === 'image') {
+                  if (file.source.kind === 'url') {
+                    parts.push({
+                      type: 'image_url',
+                      image_url: { url: file.source.url }
+                    });
+                  } else {
+                    const { base64, mimeType } = resolveMediaBase64(file);
+                    parts.push({
+                      type: 'image_url',
+                      image_url: { url: `data:${mimeType};base64,${base64}` }
+                    });
+                  }
+                } else {
+                  parts.push({
+                    type: 'text',
+                    text: `[Allegato ${file.modality}: ${file.filename ?? 'senza nome'}]`
+                  });
+                }
+              }
+
+              messages.push({
+                role: 'user',
+                content: parts
+              });
+              break;
+            }
+
+            case 'interleaved': {
+              const parts: OpenAI.Chat.ChatCompletionContentPart[] = [];
+              for (const block of rawContent.blocks) {
+                if (block.type === 'text') {
+                  parts.push({ type: 'text', text: block.text });
+                } else {
+                  const file = block.media;
+                  if (file.modality === 'text_file') {
+                    const code = resolveTextFileContent(file);
+                    parts.push({
+                      type: 'text',
+                      text: file.filename ? `File ${file.filename}:\n\`\`\`\n${code}\n\`\`\`` : code
+                    });
+                  } else if (file.modality === 'image') {
+                    if (file.source.kind === 'url') {
+                      parts.push({
+                        type: 'image_url',
+                        image_url: { url: file.source.url }
+                      });
+                    } else {
+                      const { base64, mimeType } = resolveMediaBase64(file);
+                      parts.push({
+                        type: 'image_url',
+                        image_url: { url: `data:${mimeType};base64,${base64}` }
+                      });
+                    }
+                  } else {
+                    parts.push({
+                      type: 'text',
+                      text: `[Allegato ${file.modality}: ${file.filename ?? 'senza nome'}]`
+                    });
+                  }
+                }
+              }
+
+              messages.push({
+                role: 'user',
+                content: parts
+              });
+              break;
+            }
+          }
+        } else {
+          messages.push({
+            role: 'user',
+            content: JSON.stringify(rawContent)
+          });
+        }
       }
     }
 

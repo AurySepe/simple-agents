@@ -4,10 +4,13 @@ import {
   type InferenceTriple,
   isDataRecord,
   isNonEmptyArray,
+  isUserMessageContent,
   type ModelOutput,
   type ModelResult,
-  type ToolCall
+  type ToolCall,
+  type UserMessageContent
 } from '@formal-agent/core';
+import { resolveMediaBase64, resolveTextFileContent } from '../../common/media-resolver.js';
 import {
   ModelFamilyStrategy,
   OllamaChatResponse,
@@ -110,10 +113,80 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
           content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         });
       } else if (msg.type === 'stimulus') {
-        messages.push({
-          role: 'user',
-          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        });
+        const rawContent = msg.content;
+        if (typeof rawContent === 'string') {
+          messages.push({
+            role: 'user',
+            content: rawContent
+          });
+        } else if (isUserMessageContent(rawContent)) {
+          switch (rawContent.kind) {
+            case 'text':
+              messages.push({
+                role: 'user',
+                content: rawContent.text
+              });
+              break;
+
+            case 'media':
+            case 'text_with_media': {
+              const images: string[] = [];
+              const textBlocks: string[] = rawContent.kind === 'text_with_media' ? [rawContent.text] : [];
+
+              for (const file of rawContent.files) {
+                if (file.modality === 'text_file') {
+                  const code = resolveTextFileContent(file);
+                  textBlocks.push(file.filename ? `File ${file.filename}:\n\`\`\`\n${code}\n\`\`\`` : code);
+                } else if (file.modality === 'image') {
+                  const { base64 } = resolveMediaBase64(file);
+                  images.push(base64);
+                } else {
+                  textBlocks.push(`[Allegato ${file.modality}: ${file.filename ?? 'senza nome'}]`);
+                }
+              }
+
+              messages.push({
+                role: 'user',
+                content: textBlocks.join('\n\n'),
+                ...(images.length > 0 ? { images } : {})
+              });
+              break;
+            }
+
+            case 'interleaved': {
+              const images: string[] = [];
+              const textBlocks: string[] = [];
+
+              for (const block of rawContent.blocks) {
+                if (block.type === 'text') {
+                  textBlocks.push(block.text);
+                } else {
+                  if (block.media.modality === 'text_file') {
+                    const code = resolveTextFileContent(block.media);
+                    textBlocks.push(block.media.filename ? `File ${block.media.filename}:\n\`\`\`\n${code}\n\`\`\`` : code);
+                  } else if (block.media.modality === 'image') {
+                    const { base64 } = resolveMediaBase64(block.media);
+                    images.push(base64);
+                  } else {
+                    textBlocks.push(`[Allegato ${block.media.modality}: ${block.media.filename ?? 'senza nome'}]`);
+                  }
+                }
+              }
+
+              messages.push({
+                role: 'user',
+                content: textBlocks.join('\n\n'),
+                ...(images.length > 0 ? { images } : {})
+              });
+              break;
+            }
+          }
+        } else {
+          messages.push({
+            role: 'user',
+            content: JSON.stringify(rawContent)
+          });
+        }
       }
     }
 
@@ -249,4 +322,6 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
     };
   }
 }
+
+export { QwenModelStrategy as OllamaQwenStrategy };
 

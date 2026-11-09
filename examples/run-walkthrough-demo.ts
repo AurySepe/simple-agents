@@ -155,8 +155,10 @@ async function main() {
 
   const startTime = Date.now();
   const runResult = await runtime.runAgent(manifest, model, {
-    userContent:
-      "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€.",
+    userContent: {
+      kind: 'text',
+      text: "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€."
+    },
     observers: [consoleObserver]
   });
   const duration = Date.now() - startTime;

@@ -108,7 +108,7 @@ describe('Test Esportazione JSON dello Stato ad Ogni Fase', () => {
     const collector = new InMemoryTelemetryCollector();
 
     const runResult = await runtime.runAgent(manifest, model, {
-      userContent: 'Elabora ordine cliente 42',
+      userContent: { kind: 'text', text: 'Elabora ordine cliente 42' },
       observers: [collector]
     });
 
@@ -186,7 +186,7 @@ describe('Test Esportazione JSON dello Stato ad Ogni Fase', () => {
       context: {
         systemFrame: 'System Prompt F_Omega',
         messages: [
-          { index: 0, tau: { c: 0, t: 0 }, type: 'stimulus', content: 'Richiesta di test' }
+          { index: 0, tau: { c: 0, t: 0 }, type: 'stimulus', content: { kind: 'text', text: 'Richiesta di test' } }
         ],
         visibleTools: []
       },
@@ -257,7 +257,7 @@ describe('Test Esportazione JSON dello Stato ad Ogni Fase', () => {
     const step1Data = JSON.parse(fs.readFileSync(step1File, 'utf8'));
     expect(step1Data.coordinate.stepNumber).toBe(1);
     expect(step1Data.inputGrezzoPassatoAlModello.systemFrame).toBe('System Prompt F_Omega');
-    expect(step1Data.inputGrezzoPassatoAlModello.messagesHistory[0].content).toBe('Richiesta di test');
+    expect(step1Data.inputGrezzoPassatoAlModello.messagesHistory[0].content).toEqual({ kind: 'text', text: 'Richiesta di test' });
     expect(step1Data.outputGrezzoDalModello.thought).toBe('Penso ed eseguo calcolo');
     expect(step1Data.outputGrezzoDalModello.calls[0].payload).toEqual({ query: 'test' });
   });

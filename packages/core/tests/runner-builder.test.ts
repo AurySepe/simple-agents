@@ -81,7 +81,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
 
     // Approccio engine-first: engine.run(agent, model)
     const outcome = await engine.run(implementedEcho, model, {
-      userContent: 'Calcola 10 + 25'
+      userContent: { kind: 'text', text: 'Calcola 10 + 25' }
     });
 
     expect(outcome.status).toBe('halt');
@@ -100,7 +100,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
     const outcome = await createRunner()
       .withModel(model)
       .withAgent(implementedEcho)
-      .run({ userContent: 'Calcola 10 + 25' });
+      .run({ userContent: { kind: 'text', text: 'Calcola 10 + 25' } });
 
     expect(outcome.status).toBe('halt');
     if (outcome.status === 'halt') {
@@ -118,7 +118,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
     const outcome = await createRunner()
       .withAgent(implementedEcho)
       .withModel(model)
-      .run({ userContent: 'Calcola 10 + 25' });
+      .run({ userContent: { kind: 'text', text: 'Calcola 10 + 25' } });
 
     expect(outcome.status).toBe('halt');
     if (outcome.status === 'halt') {
@@ -140,7 +140,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
     // Istanza 1 con echoAgent
     const outcome1 = await baseRunner
       .withAgent(implementedEcho)
-      .run({ userContent: 'Calcolo 1' });
+      .run({ userContent: { kind: 'text', text: 'Calcolo 1' } });
 
     expect(outcome1.status).toBe('halt');
 
@@ -172,7 +172,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
     const outcome2 = await baseRunner
       .withModel(greetingModel) // override del modello per questo specifico agente
       .withAgent(anotherAgent)
-      .run({ userContent: 'Ciao' });
+      .run({ userContent: { kind: 'text', text: 'Ciao' } });
 
     expect(outcome2.status).toBe('halt');
     if (outcome2.status === 'halt') {

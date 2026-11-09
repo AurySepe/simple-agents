@@ -33,7 +33,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
       {
         index: 0,
         type: 'stimulus',
-        content: 'Voglio lo sconto per cliente 55'
+        content: { kind: 'text', text: 'Voglio lo sconto per cliente 55' }
       },
       {
         index: 1,
@@ -227,7 +227,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
           {
             index: 0,
             type: 'stimulus',
-            content: 'Esegui operazione con parametro'
+            content: { kind: 'text', text: 'Esegui operazione con parametro' }
           },
           {
             index: 1,
@@ -637,7 +637,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
         systemFrame: '# SYSTEM',
         visibleTools: [sampleTool],
         messages: [
-          { index: 0, type: 'stimulus', content: 'Cerca per clienti 10 e 20' },
+          { index: 0, type: 'stimulus', content: { kind: 'text', text: 'Cerca per clienti 10 e 20' } },
           { index: 1, type: 'thought', content: 'Controllo entrambi in parallelo' },
           { index: 2, type: 'action', callId: 'call_p1', content: { name: 'w_db_ordini', payload: { cliente_id: 10 } } },
           { index: 3, type: 'action', callId: 'call_p2', content: { name: 'w_db_ordini', payload: { cliente_id: 20 } } },

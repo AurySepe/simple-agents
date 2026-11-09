@@ -177,7 +177,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
     });
 
     const outcome = await agent.run(engine, mockModel, {
-      userContent: 'Verifica lo stato del cliente 42.'
+      userContent: { kind: 'text', text: 'Verifica lo stato del cliente 42.' }
     });
 
     expect(outcome.status).toBe('halt');

@@ -4,6 +4,7 @@ export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content?: string;
   thinking?: string;
+  images?: string[];
   tool_call_id?: string;
   tool_calls?: Array<{
     id?: string;

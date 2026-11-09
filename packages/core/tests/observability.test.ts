@@ -69,7 +69,7 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     const collector = new InMemoryTelemetryCollector();
 
     const result = await runtime.runAgent(manifest, model, {
-      userContent: 'Che tempo fa a Roma?',
+      userContent: { kind: 'text', text: 'Che tempo fa a Roma?' },
       observers: [collector]
     });
 
@@ -142,7 +142,7 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     };
 
     await runtime.runAgent(manifest, model, {
-      userContent: 'Esegui test',
+      userContent: { kind: 'text', text: 'Esegui test' },
       observers: [logger]
     });
 
@@ -182,7 +182,7 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
       })
     };
 
-    await runtime.runAgent(manifest, model, { userContent: 'Go' });
+    await runtime.runAgent(manifest, model, { userContent: { kind: 'text', text: 'Go' } });
 
     expect(collector.getEvents().length).toBeGreaterThan(0);
     expect(collector.filterByType('halt')).toHaveLength(1);

@@ -86,7 +86,12 @@ export async function runCommercialAgent(optionsOrPrompt?: string | RunCommercia
   );
 
   try {
-    const outcome = await agent.run({ userContent: prompt });
+    const outcome = await agent.run({
+      userContent: {
+        kind: 'text',
+        text: prompt
+      }
+    });
 
     switch (outcome.status) {
       case 'halt': {

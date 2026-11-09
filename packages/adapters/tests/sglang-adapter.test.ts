@@ -33,7 +33,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
       {
         index: 0,
         type: 'stimulus',
-        content: 'Voglio lo sconto per cliente 55'
+        content: { kind: 'text', text: 'Voglio lo sconto per cliente 55' }
       },
       {
         index: 1,
@@ -244,7 +244,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
       const formatted = strategy.formatContext({
         systemFrame: 'System',
         visibleTools: [],
-        messages: [{ index: 0, type: 'stimulus', content: 'Ciao' }]
+        messages: [{ index: 0, type: 'stimulus', content: { kind: 'text', text: 'Ciao' } }]
       });
 
       expect(formatted.tools).toBeUndefined();

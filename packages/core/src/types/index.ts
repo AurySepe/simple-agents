@@ -21,14 +21,52 @@ export interface TimeIndex {
  */
 export type Scalar = string | number | boolean | null;
 
+export type NonEmptyArray<T> = [T, ...T[]];
+
+
+/**
+ * ============================================================================
+ * 2.1 SORGENTI E MODALITÀ FILE / MULTIMODALI
+ * ============================================================================
+ */
+export type FileSource =
+  | { kind: 'inline'; data: string; mimeType: string }
+  | { kind: 'path'; filePath: string; mimeType?: string }
+  | { kind: 'url'; url: string; mimeType?: string }
+  | { kind: 'reference'; fileId: string; provider?: string };
+
+export type FileModality = 'image' | 'document' | 'audio' | 'video' | 'text_file';
+
+export interface InputMediaAsset {
+  modality: FileModality;
+  source: FileSource;
+  filename?: string;
+  description?: string;
+}
+
+export type InterleavedBlock =
+  | { type: 'text'; text: string }
+  | { type: 'media'; media: InputMediaAsset };
+
+/**
+ * ============================================================================
+ * 2.2 ONTOLOGIA DELL'INPUT UTENTE (4 COMBINAZIONI ESAUSTIVE NON VUOTE)
+ * ============================================================================
+ */
+export type UserMessageContent =
+  | { kind: 'text'; text: string }
+  | { kind: 'media'; files: NonEmptyArray<InputMediaAsset> }
+  | { kind: 'text_with_media'; text: string; files: NonEmptyArray<InputMediaAsset> }
+  | { kind: 'interleaved'; blocks: NonEmptyArray<InterleavedBlock> };
+
+export type UserPayload = UserMessageContent;
+
 export type DataValue =
   | Scalar
   | DataValue[]
   | { [key: string]: DataValue };
 
 export type DataRecord = { [key: string]: DataValue };
-
-export type UserPayload = string | DataRecord;
 
 export type ToolResult = DataValue | void | undefined;
 
@@ -187,6 +225,26 @@ export function isNonEmptyArray<T>(arr: T[]): arr is NonEmptyArray<T> {
   return arr.length > 0;
 }
 
+export function isUserMessageContent(val: unknown): val is UserMessageContent {
+  if (typeof val !== 'object' || val === null) {
+    return false;
+  }
+  const obj = val as Record<string, unknown>;
+  if (obj.kind === 'text') {
+    return typeof obj.text === 'string';
+  }
+  if (obj.kind === 'media') {
+    return Array.isArray(obj.files) && obj.files.length > 0;
+  }
+  if (obj.kind === 'text_with_media') {
+    return typeof obj.text === 'string' && Array.isArray(obj.files) && obj.files.length > 0;
+  }
+  if (obj.kind === 'interleaved') {
+    return Array.isArray(obj.blocks) && obj.blocks.length > 0;
+  }
+  return false;
+}
+
 /**
  * ============================================================================
  * 6. LO STATO GLOBALE DELL'AGENTE: S = <I, Ms, Ds, Ta, Ka, Ep>
@@ -252,7 +310,6 @@ export function normalizeToolCall(call: ToolCallInput): ToolCall {
   };
 }
 
-export type NonEmptyArray<T> = [T, ...T[]];
 
 /**
  * ============================================================================

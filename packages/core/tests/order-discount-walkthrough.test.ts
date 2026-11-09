@@ -148,8 +148,10 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in 
 
     // CICLO 0 (c = 0): Richiesta iniziale dell'utente
     agent.feedPayload({
-      userContent:
-        "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€."
+      userContent: {
+        kind: 'text',
+        text: "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€."
+      }
     });
 
     const outcome0 = await agent.resume();
@@ -211,8 +213,10 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in 
 
     // Esecuzione autonoma end-to-end con consumazione automatica di tool e risvegli
     const runResult: RunResult = await runtime.runAgent(manifest, model, {
-      userContent:
-        "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€.",
+      userContent: {
+        kind: 'text',
+        text: "Il cliente Mario Rossi (ID: 55) richiede l'applicazione dello sconto speciale sul suo ultimo preventivo di 200€."
+      },
       onMacroCycle: (cycle) => {
         visitedCycles.push(cycle);
       },

@@ -191,7 +191,7 @@ describe('Standard Library / Defaults di Livello 1', () => {
       };
 
       const agent = runtime.spawnAgent(manifest, model);
-      const outcome = await agent.run({ userContent: 'Esegui il task.' });
+      const outcome = await agent.run({ userContent: { kind: 'text', text: 'Esegui il task.' } });
 
       expect(outcome.status).toBe('halt');
       if (outcome.status !== 'halt') throw new Error('Expected halt');
@@ -202,7 +202,7 @@ describe('Standard Library / Defaults di Livello 1', () => {
       const ep = agent.getState().Ep;
       const stimulus = ep.find((e) => e.type === 'stimulus');
       expect(stimulus).toBeDefined();
-      expect(stimulus?.content).toBe('Esegui il task.');
+      expect(stimulus?.content).toEqual({ kind: 'text', text: 'Esegui il task.' });
 
       const thought = ep.find((e) => e.type === 'thought');
       expect(thought).toBeDefined();

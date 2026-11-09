@@ -67,5 +67,10 @@ export async function searchCompanyCareers(company: {
     ? `Trova la pagina carriere ufficiale dell'azienda "${company.name}". Informazioni di contesto: ${company.description}`
     : `Trova la pagina carriere ufficiale dell'azienda "${company.name}".`;
 
-  return await careerRunner.run({ userContent: prompt });
+  return await careerRunner.run({
+    userContent: {
+      kind: 'text',
+      text: prompt
+    }
+  });
 }

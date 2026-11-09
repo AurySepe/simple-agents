@@ -72,7 +72,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
     expect(agent.getControlState()).toBe('q_sleep');
 
     // 1. Invio stimolo utente -> transizione a q_exec
-    agent.feedPayload({ userContent: 'Calcola 10 + 20.' });
+    agent.feedPayload({ userContent: { kind: 'text', text: 'Calcola 10 + 20.' } });
     expect(agent.getControlState()).toBe('q_exec');
     expect(agent.getTimeIndex()).toEqual({ c: 0, t: 0 });
 
@@ -131,7 +131,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
     };
 
     const agent = runtime.spawnAgent(manifest, model);
-    agent.feedPayload({ userContent: 'Inizia.' });
+    agent.feedPayload({ userContent: { kind: 'text', text: 'Inizia.' } });
 
     // resume() si arresta al primo punto di sospensione: q_yield
     const yieldOutcome = await agent.resume();
@@ -181,7 +181,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
     };
 
     const agent = runtime.spawnAgent(manifest, model);
-    agent.feedPayload({ userContent: 'Test errore schema.' });
+    agent.feedPayload({ userContent: { kind: 'text', text: 'Test errore schema.' } });
 
     // Step 1: errore di schema -> transizione a q_repair
     const step1 = await agent.step();
@@ -234,7 +234,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
     };
 
     const agent = runtime.spawnAgent(manifest, model);
-    agent.feedPayload({ userContent: 'Test syntax error.' });
+    agent.feedPayload({ userContent: { kind: 'text', text: 'Test syntax error.' } });
 
     // Step 1: syntax_error -> transita in q_repair
     const step1 = await agent.step();
@@ -265,7 +265,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
       };
 
       const agent = runtime.spawnAgent(manifest, stallModel);
-      agent.feedPayload({ userContent: 'Task ad altissima complessità di ragionamento' });
+      agent.feedPayload({ userContent: { kind: 'text', text: 'Task ad altissima complessità di ragionamento' } });
       expect(agent.getControlState()).toBe('q_exec');
 
       const stepOutcome = await agent.step();
@@ -306,7 +306,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
       };
 
       const agent = runtime.spawnAgent(manifest, stallModel);
-      const runResult = await agent.run({ userContent: 'Elabora richiesta impossibile' });
+      const runResult = await agent.run({ userContent: { kind: 'text', text: 'Elabora richiesta impossibile' } });
 
       expect(runResult.status).toBe('stall');
       if (runResult.status === 'stall') {
@@ -351,7 +351,7 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
       };
 
       const agent = runtime.spawnAgent(manifest, model);
-      agent.feedPayload({ userContent: 'Test repair stall' });
+      agent.feedPayload({ userContent: { kind: 'text', text: 'Test repair stall' } });
 
       // Step 1: transizione a q_repair
       const s1 = await agent.step();

@@ -1,6 +1,6 @@
 import { AgentEvent } from '../events.js';
 import { AgentObserver } from '../observer.js';
-import { AgentState, DataRecord, Message, TransitionReasonCode } from '../../types/index.js';
+import { AgentState, DataRecord, isUserMessageContent, Message, TransitionReasonCode } from '../../types/index.js';
 
 export type LogLevel = 'verbose' | 'info' | 'warn' | 'error';
 
@@ -178,6 +178,37 @@ export class ConsoleLoggerObserver implements AgentObserver {
     }
   }
 
+  private formatUserContent(content: unknown): string {
+    if (typeof content === 'string') {
+      return `"${content}"`;
+    }
+    if (isUserMessageContent(content)) {
+      switch (content.kind) {
+        case 'text':
+          return `"${content.text}"`;
+        case 'media': {
+          const filesSummary = content.files
+            .map((f) => `${f.modality}${f.filename ? ` (${f.filename})` : ''}`)
+            .join(', ');
+          return `[${content.files.length} allegati: ${filesSummary}]`;
+        }
+        case 'text_with_media': {
+          const filesSummary = content.files
+            .map((f) => `${f.modality}${f.filename ? ` (${f.filename})` : ''}`)
+            .join(', ');
+          return `"${content.text}" [${content.files.length} allegati: ${filesSummary}]`;
+        }
+        case 'interleaved': {
+          const partsSummary = content.blocks
+            .map((b) => (b.type === 'text' ? `"${b.text.slice(0, 30)}..."` : `[${b.media.modality}]`))
+            .join(' -> ');
+          return `[Flusso interfogliato: ${partsSummary}]`;
+        }
+      }
+    }
+    return this.formatData(content, 3);
+  }
+
   public onEvent(event: AgentEvent): void {
     const pfx = this.prefix ? `${this.prefix} ` : '';
 
@@ -185,7 +216,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
       case 'macro_cycle_start': {
         // Mostra solo la richiesta utente iniziale senza banner o duplicazioni degli esiti di mondo
         if (event.userContent !== undefined) {
-          this.write(pfx + `👤 ${this.bold('Utente:')} ${this.cyan(this.formatData(event.userContent, 3))}`);
+          this.write(pfx + `👤 ${this.bold('Utente:')} ${this.cyan(this.formatUserContent(event.userContent))}`);
         }
         break;
       }
