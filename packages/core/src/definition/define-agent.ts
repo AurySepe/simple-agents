@@ -6,6 +6,7 @@ import {
   ImplementedAgent,
   TerminationContractDef,
   ToolContract,
+  TypedAgentState,
   ValidateContractTerminations,
   ValidateContractTools
 } from './types.js';
@@ -46,8 +47,8 @@ export function defineAgent<
     parseState(raw: unknown) {
       return parser(raw);
     },
-    extractTrajectory(rawState: unknown) {
-      return extractBehavioralTrajectory(this, rawState);
+    extractTrajectory(state: TypedAgentState<TTools, TStateSchema>) {
+      return extractBehavioralTrajectory(this, state);
     },
     implement(
       binding: AgentBinding<TTools, TStateSchema>

@@ -211,10 +211,10 @@ export interface AgentDefinition<
   createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations>;
 
   /**
-   * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S
-   * senza rieseguire l'agente o avviare il runtime.
+   * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S fortemente tipizzato (TypedAgentState)
+   * senza rieseguire l'agente o avviare il runtime. Per stati grezzi o JSON, usare prima 'parseState(raw)'.
    */
-  extractTrajectory(rawState: unknown): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
+  extractTrajectory(state: TypedAgentState<TTools, TStateSchema>): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
 }
 
 /**
@@ -235,10 +235,10 @@ export interface ImplementedAgent<
   createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations>;
 
   /**
-   * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S
-   * senza rieseguire l'agente o avviare il runtime.
+   * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S fortemente tipizzato (TypedAgentState)
+   * senza rieseguire l'agente o avviare il runtime. Per stati grezzi o JSON, usare prima 'parseState(raw)'.
    */
-  extractTrajectory(rawState: unknown): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
+  extractTrajectory(state: TypedAgentState<TTools, TStateSchema>): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
 
   /**
    * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON

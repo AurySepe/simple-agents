@@ -133,8 +133,8 @@ export class ImplementedAgentImpl<
     return this.parser(raw);
   }
 
-  public extractTrajectory(rawState: unknown): BehavioralTrajectory<TTools, TStateSchema, TTerminations> {
-    return extractBehavioralTrajectory(this, rawState);
+  public extractTrajectory(state: TypedAgentState<TTools, TStateSchema>): BehavioralTrajectory<TTools, TStateSchema, TTerminations> {
+    return extractBehavioralTrajectory(this, state);
   }
 
   public spawn(

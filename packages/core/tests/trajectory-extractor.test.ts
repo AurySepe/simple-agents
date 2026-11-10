@@ -50,7 +50,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     }
   });
 
-  it('dovrebbe estrarre una traiettoria comportamentale completa e tipizzata dallo stato S', async () => {
+  it('dovrebbe estrarre una traiettoria comportamentale completa a partire da uno stato già parsato e tipizzato', async () => {
     let inferStep = 0;
     const model: LanguageModelAdapter = {
       infer: async () => {
@@ -81,8 +81,11 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
 
     expect(runResult.status).toBe('halt');
 
-    // 1. Estrazione della traiettoria direttamente dallo stato dell'agente
-    const trajectory = implemented.extractTrajectory(runResult.state);
+    // 1. Validazione e tipizzazione dello stato mediante parseState
+    const typedState = implemented.parseState(runResult.state);
+
+    // 2. Estrazione della traiettoria dallo stato tipizzato
+    const trajectory = implemented.extractTrajectory(typedState);
 
     // Verifiche sul Summary
     expect(trajectory.summary.isTerminated).toBe(true);
@@ -127,7 +130,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     expect(trajectory.steps[2].results).toHaveLength(0); // Nessun tool result per terminazione
   });
 
-  it('dovrebbe funzionare offline da uno stato serializzato in JSON (Post-Mortem / Database Audit)', async () => {
+  it('dovrebbe funzionare offline: prima parseState(jsonString) e poi extractTrajectory(typedState)', async () => {
     let inferStep = 0;
     const model: LanguageModelAdapter = {
       infer: async () => {
@@ -150,12 +153,15 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
       userContent: 'Volo per Londra'
     });
 
-    // Simulazione: serializzazione in JSON e salvataggio su DB
+    // Simulazione salvataggio DB: serializzazione in JSON
     const serialized = serializeAgentState(runResult.state);
     const jsonString = JSON.stringify(serialized);
 
-    // 2. Estrazione offline senza alcun runtime, a partire dalla sola definizione o contratto
-    const offlineTrajectory = agentDef.extractTrajectory(jsonString);
+    // Passo 1: validazione contro il contratto dell'agente
+    const typedState = agentDef.parseState(jsonString);
+
+    // Passo 2: extractTrajectory accetta SOLO l'oggetto tipizzato (TypedAgentState)
+    const offlineTrajectory = agentDef.extractTrajectory(typedState);
 
     expect(offlineTrajectory.summary.isTerminated).toBe(true);
     expect(offlineTrajectory.summary.exitContract).toBe('plan_aborted');
@@ -163,25 +169,23 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     expect(offlineTrajectory.tools.callSequence).toEqual(['check_flight']);
     expect(offlineTrajectory.steps).toHaveLength(2);
 
-    // Anche via funzione standalone extractBehavioralTrajectory
-    const standalone = extractBehavioralTrajectory(agentDef, JSON.parse(jsonString));
+    // Anche via funzione standalone
+    const standalone = extractBehavioralTrajectory(agentDef, typedState);
     expect(standalone.summary.exitContract).toBe('plan_aborted');
   });
 
-  it('dovrebbe rilevare chiamate ridondanti (loop) e tentativi di errore diagnostico', async () => {
+  it('dovrebbe rilevare chiamate ridondanti (loop) su uno stato tipizzato', async () => {
     let inferStep = 0;
     const model: LanguageModelAdapter = {
       infer: async () => {
         inferStep++;
         if (inferStep === 1) {
-          // Chiamata 1
           return {
             thought: 'Provo volo',
             calls: [{ id: 'c1', name: 'check_flight', payload: { from: 'Rome', to: 'Paris' } }]
           };
         }
         if (inferStep === 2) {
-          // Chiamata 2 identica (ridondante)
           return {
             thought: 'Riprovo identico volo',
             calls: [{ id: 'c2', name: 'check_flight', payload: { from: 'Rome', to: 'Paris' } }]
@@ -197,7 +201,8 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
     const runResult = await implemented.run(engine, model, { userContent: 'Test loop' });
 
-    const trajectory = implemented.extractTrajectory(runResult.state);
+    const typedState = implemented.parseState(runResult.state);
+    const trajectory = implemented.extractTrajectory(typedState);
 
     expect(trajectory.summary.redundantCallsCount).toBe(1);
     expect(trajectory.tools.usageCounts.check_flight).toBe(2);

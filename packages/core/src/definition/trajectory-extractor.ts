@@ -16,7 +16,7 @@ import {
   ToolContract,
   TypedAgentState
 } from './types.js';
-import { createAgentStateParser, deriveFSMState, deriveTimeIndex } from './state-parser.js';
+import { deriveFSMState, deriveTimeIndex } from './state-parser.js';
 
 /**
  * ============================================================================
@@ -88,12 +88,16 @@ export interface BehavioralTrajectory<
  * ============================================================================
  * ESTRATTORE DI TRAIETTORIA COMPORTAMENTALE: extractBehavioralTrajectory
  * ============================================================================
- * Analizza uno Stato S (vivo, serializzato o caricato da DB) e sintetizza una
+ * Analizza uno Stato S già validato e tipizzato (TypedAgentState) e sintetizza una
  * rappresentazione strutturata e oggettiva del comportamento dell'agente
  * senza alcun giudizio o scoring imposto.
  *
+ * NOTA ARCHITETTURALE: Questa funzione non accetta stringhe JSON grezze o tipi unknown.
+ * Qualsiasi stato serializzato o esterno DEVE essere prima convalidato tramite
+ * 'agent.parseState(rawState)' prima di essere fornito all'estrattore.
+ *
  * @param target Il contratto, la definizione o l'istanza implementata dell'agente.
- * @param rawState Lo stato S dell'agente (TypedAgentState, AgentState o JSON serializzato).
+ * @param state Lo stato S già validato e fortemente tipizzato (TypedAgentState).
  * @returns La BehavioralTrajectory tipizzata conforme al contratto dell'agente.
  */
 export function extractBehavioralTrajectory<
@@ -105,16 +109,12 @@ export function extractBehavioralTrajectory<
     | ImplementedAgent<TTools, TStateSchema, TTerminations>
     | AgentDefinition<TTools, TStateSchema, TTerminations>
     | AgentContract<TTools, TStateSchema, TTerminations>,
-  rawState: unknown
+  state: TypedAgentState<TTools, TStateSchema>
 ): BehavioralTrajectory<TTools, TStateSchema, TTerminations> {
   const contract: AgentContract<TTools, TStateSchema, TTerminations> =
     'contract' in target ? target.contract : target;
 
-  // 1. Validazione e tipizzazione dello stato S mediante il parser del contratto
-  const parser = createAgentStateParser(contract);
-  const state: TypedAgentState<TTools, TStateSchema> = parser(rawState);
-
-  // 2. Costruzione dei contratti di terminazione per la derivazione FSM
+  // 1. Costruzione dei contratti di terminazione per la derivazione deterministica FSM
   const terminationEntries = Object.entries(contract.terminations) as [
     string,
     TerminationContractDef
@@ -303,3 +303,4 @@ export function extractBehavioralTrajectory<
     steps
   };
 }
+
