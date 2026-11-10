@@ -15,8 +15,7 @@ export type GeminiModelErrorCode =
   | 'SERVICE_UNAVAILABLE'
   | 'SAFETY_BLOCKED'
   | 'RECITATION_BLOCKED'
-  | 'CONTEXT_WINDOW_EXCEEDED'
-  | 'NO_ACTION_SELECTED';
+  | 'CONTEXT_WINDOW_EXCEEDED';
 
 export type GeminiModelError =
   | {
@@ -64,11 +63,6 @@ export type GeminiModelError =
   | {
       type: 'CONTEXT_WINDOW_EXCEEDED';
       message: string;
-    }
-  | {
-      type: 'NO_ACTION_SELECTED';
-      message: string;
-      rawResponseText?: string;
     };
 
 /**

@@ -339,7 +339,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       }
     });
 
-    it('ritorna NO_ACTION_SELECTED se il modello termina normalmente senza selezionare azioni', async () => {
+    it('ritorna NETWORK_ERROR se il server termina in modo anomalo senza tool calls in mode ANY', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',
         model: 'gemini-3.5-flash'
@@ -352,12 +352,12 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
               {
                 finishReason: FinishReason.STOP,
                 content: {
-                  parts: [{ text: 'Risposta conversazionale senza tool' }]
+                  parts: [{ text: 'Risposta anomala senza tool' }]
                 }
               }
             ],
             functionCalls: undefined,
-            text: 'Risposta conversazionale senza tool'
+            text: 'Risposta anomala senza tool'
           })
         }
       };
@@ -366,10 +366,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.type).toBe('NO_ACTION_SELECTED');
-        if (result.error.type === 'NO_ACTION_SELECTED') {
-          expect(result.error.rawResponseText).toBe('Risposta conversazionale senza tool');
-        }
+        expect(result.error.type).toBe('NETWORK_ERROR');
+        expect(result.error.message).toContain('completed without required tool calls in mode ANY');
       }
     });
 

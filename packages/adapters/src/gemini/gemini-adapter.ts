@@ -206,11 +206,10 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
           return modelOk(stallOutput);
         }
 
-        // Altrimenti il modello non ha selezionato alcuna azione: errore formale controllato
+        // Con mode: ANY forzato, l'assenza di chiamate indica un'interruzione anomala del protocollo
         return modelFail<GeminiModelError>({
-          type: 'NO_ACTION_SELECTED',
-          message: `Model '${this.model}' completed deliberation without selecting any tool actions.`,
-          rawResponseText: response.text
+          type: 'NETWORK_ERROR',
+          message: `Model '${this.model}' completed without required tool calls in mode ANY: ${response.text ?? 'empty response'}`
         });
       }
 
