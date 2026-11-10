@@ -67,28 +67,25 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       expect(cleaned).toHaveProperty('properties');
     });
 
-    it('NON impone toolConfig se toolChoice non è configurato esplicitamente', () => {
+    it('forza sempre mode: ANY in toolConfig quando ci sono strumenti visibili per garantire la deliberazione', () => {
       const strategy = new GeminiStrategy();
       const formatted = strategy.format(sampleTriple);
 
       expect(formatted.tools).toBeDefined();
       expect(formatted.tools?.[0].functionDeclarations).toHaveLength(1);
-      // Nessun default arbitrario toolConfig imposto
-      expect(formatted.toolConfig).toBeUndefined();
+      expect(formatted.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.ANY);
+      expect(formatted.toolConfig?.functionCallingConfig?.allowedFunctionNames).toEqual(['cerca_documenti']);
     });
 
-    it('configura toolConfig SOLO quando toolChoice viene specificato esplicitamente', () => {
-      const strategyRequired = new GeminiStrategy({ toolChoice: 'required' });
-      const formattedRequired = strategyRequired.format(sampleTriple);
-      expect(formattedRequired.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.ANY);
-
-      const strategyAuto = new GeminiStrategy({ toolChoice: 'auto' });
-      const formattedAuto = strategyAuto.format(sampleTriple);
-      expect(formattedAuto.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.AUTO);
-
-      const strategyNone = new GeminiStrategy({ toolChoice: 'none' });
-      const formattedNone = strategyNone.format(sampleTriple);
-      expect(formattedNone.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.NONE);
+    it('non crea toolConfig se non sono presenti strumenti visibili', () => {
+      const strategy = new GeminiStrategy();
+      const tripleWithoutTools: InferenceTriple = {
+        ...sampleTriple,
+        visibleTools: []
+      };
+      const formatted = strategy.format(tripleWithoutTools);
+      expect(formatted.tools).toBeUndefined();
+      expect(formatted.toolConfig).toBeUndefined();
     });
 
     it('NON aggiunge default a thinkingConfig se non esplicitamente richiesto', () => {

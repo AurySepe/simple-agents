@@ -171,7 +171,7 @@ export class GeminiStrategy {
       }
     }
 
-    // 3. Tools V_Ω: conversione degli schemi Zod
+    // 3. Tools V_Ω: conversione degli schemi Zod e forzatura tool calling nativo
     let tools: FormattedGeminiContext['tools'] = undefined;
     let toolConfig: FormattedGeminiContext['toolConfig'] = undefined;
 
@@ -184,28 +184,14 @@ export class GeminiStrategy {
 
       tools = [{ functionDeclarations }];
 
-      // Modalità di function calling: configurata esclusivamente se richiesta esplicitamente dall'utente
-      if (this.options?.toolChoice !== undefined) {
-        const choice = this.options.toolChoice;
-        let mode: FunctionCallingConfigMode;
-
-        if (choice === 'auto' || choice === FunctionCallingConfigMode.AUTO) {
-          mode = FunctionCallingConfigMode.AUTO;
-        } else if (choice === 'none' || choice === FunctionCallingConfigMode.NONE) {
-          mode = FunctionCallingConfigMode.NONE;
-        } else if (choice === 'required' || choice === FunctionCallingConfigMode.ANY) {
-          mode = FunctionCallingConfigMode.ANY;
-        } else {
-          mode = choice;
+      // Nel framework ad automa a stati finiti, l'agente deve sempre deliberare
+      // selezionando almeno un tool tra quelli visibili (mode: ANY invariante)
+      toolConfig = {
+        functionCallingConfig: {
+          mode: FunctionCallingConfigMode.ANY,
+          allowedFunctionNames: functionDeclarations.map((f) => f.name)
         }
-
-        toolConfig = {
-          functionCallingConfig: {
-            mode,
-            allowedFunctionNames: functionDeclarations.map((f) => f.name)
-          }
-        };
-      }
+      };
     }
 
     // 4. Configurazione Thinking / Reasoning (Gemini 3/4)

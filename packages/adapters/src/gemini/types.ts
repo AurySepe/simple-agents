@@ -1,5 +1,5 @@
 import type { DataRecord } from '@formal-agent/core';
-import type { FunctionCallingConfigMode, ThinkingLevel } from '@google/genai';
+import type { ThinkingLevel } from '@google/genai';
 
 /**
  * ============================================================================
@@ -100,13 +100,6 @@ export interface GeminiChatOptions {
   topK?: number;
   maxOutputTokens?: number;
   stopSequences?: string[];
-  /**
-   * Modalità di function calling:
-   * - 'required' / 'ANY': richiede l'invocazione di almeno un tool
-   * - 'auto' / 'AUTO': lascia la scelta al modello
-   * - 'none' / 'NONE': disattiva il tool calling
-   */
-  toolChoice?: 'required' | 'auto' | 'none' | FunctionCallingConfigMode;
   /**
    * Configurazione reasoning/thinking (Gemini 3/4).
    */
