@@ -19,29 +19,29 @@ export interface ConsoleLoggerOptions {
 }
 
 /**
- * Traduce gli identificatori tecnici FSM in espressioni chiare in linguaggio naturale.
+ * Translates technical FSM identifiers into human-readable English expressions.
  */
 function humanizeFSMState(state: string): string {
   switch (state) {
     case 'q_sleep':
-      return 'In attesa di stimolo';
+      return 'Waiting for stimulus';
     case 'q_exec':
-      return 'Deliberazione operativa';
+      return 'Operational deliberation';
     case 'q_repair':
-      return 'Riparazione schema';
+      return 'Schema repair';
     case 'q_yield':
-      return 'Attesa servizi esterni';
+      return 'Awaiting external services';
     case 'q_halt':
-      return 'Completato';
+      return 'Completed';
     case 'q_stall':
-      return 'Stallo deliberativo';
+      return 'Deliberation stall';
     default:
       return state;
   }
 }
 
 /**
- * Traduce i codici simbolici di transizione in descrizioni concise.
+ * Translates symbolic transition codes into concise English descriptions.
  */
 function humanizeTransitionReason(
   code: TransitionReasonCode,
@@ -50,25 +50,25 @@ function humanizeTransitionReason(
   const toolId = context?.toolId ? `'${context.toolId}'` : '';
   switch (code) {
     case 'stimulus_received':
-      return 'ricezione stimolo utente';
+      return 'user stimulus received';
     case 'exec_world_yield':
-      return 'invio chiamate a tool di mondo e attesa esiti';
+      return 'world tool calls dispatched, awaiting results';
     case 'exec_term_success':
-      return toolId ? `terminazione con contratto ${toolId}` : 'terminazione con contratto';
+      return toolId ? `terminated via contract ${toolId}` : 'terminated via contract';
     case 'exec_schema_error':
-      return toolId ? `parametri non conformi per: ${toolId}` : 'errore parametri schema';
+      return toolId ? `schema validation error for: ${toolId}` : 'schema validation error';
     case 'exec_syntax_error':
-      return toolId ? `sintassi JSON non valida per: ${toolId}` : 'errore sintassi JSON';
+      return toolId ? `invalid JSON syntax for: ${toolId}` : 'invalid JSON syntax';
     case 'repair_success':
-      return 'riparazione schema completata con successo';
+      return 'schema repair succeeded';
     case 'repair_abort':
-      return 'chiamata non valida annullata';
+      return 'invalid call aborted';
     case 'post_yield_exec':
-      return 'ricezione esiti da servizi esterni e ripresa deliberazione';
+      return 'received external results, resuming deliberation';
     case 'manual_override':
-      return 'modifica manuale di stato';
+      return 'manual state override';
     case 'exec_deliberation_stall':
-      return 'stallo deliberativo: thinking budget esaurito';
+      return 'deliberation stall: thinking budget exhausted';
     default:
       return code;
   }
@@ -156,7 +156,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
   }
 
   private formatData(data: unknown, indent = 5): string {
-    if (data === undefined) return this.dim('nessun dato');
+    if (data === undefined) return this.dim('no data');
     if (data === null) return this.dim('null');
     if (typeof data === 'string') return `"${data}"`;
     if (typeof data === 'number' || typeof data === 'boolean') return String(data);
@@ -190,19 +190,19 @@ export class ConsoleLoggerObserver implements AgentObserver {
           const filesSummary = content.files
             .map((f) => `${f.modality}${f.filename ? ` (${f.filename})` : ''}`)
             .join(', ');
-          return `[${content.files.length} allegati: ${filesSummary}]`;
+          return `[${content.files.length} attachments: ${filesSummary}]`;
         }
         case 'text_with_media': {
           const filesSummary = content.files
             .map((f) => `${f.modality}${f.filename ? ` (${f.filename})` : ''}`)
             .join(', ');
-          return `"${content.text}" [${content.files.length} allegati: ${filesSummary}]`;
+          return `"${content.text}" [${content.files.length} attachments: ${filesSummary}]`;
         }
         case 'interleaved': {
           const partsSummary = content.blocks
             .map((b) => (b.type === 'text' ? `"${b.text.slice(0, 30)}..."` : `[${b.media.modality}]`))
             .join(' -> ');
-          return `[Flusso interfogliato: ${partsSummary}]`;
+          return `[Interleaved stream: ${partsSummary}]`;
         }
       }
     }
@@ -214,9 +214,8 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
     switch (event.type) {
       case 'macro_cycle_start': {
-        // Mostra solo la richiesta utente iniziale senza banner o duplicazioni degli esiti di mondo
         if (event.userContent !== undefined) {
-          this.write(pfx + `👤 ${this.bold('Utente:')} ${this.cyan(this.formatUserContent(event.userContent))}`);
+          this.write(pfx + `👤 ${this.bold('User:')} ${this.cyan(this.formatUserContent(event.userContent))}`);
         }
         break;
       }
@@ -224,11 +223,9 @@ export class ConsoleLoggerObserver implements AgentObserver {
       case 'step_start': {
         const stepNum = event.tick + 1;
 
-        // Indicatore discreto e minimale per l'avanzamento dei passi
         this.write('');
-        this.write(pfx + this.bold(this.cyan(`▶ [Passo ${stepNum}]`)));
+        this.write(pfx + this.bold(this.cyan(`▶ [Step ${stepNum}]`)));
 
-        // Lo stato dell'agente si stampa solo all'avvio o in caso di mutazione reale
         if (this.showState && event.stateSnapshot) {
           const s = event.stateSnapshot;
           const currentSig = this.getStateSignature(s);
@@ -238,26 +235,26 @@ export class ConsoleLoggerObserver implements AgentObserver {
           if (isInitial || hasChanged || !this.showStateChangesOnly) {
             this.lastStateSignature = currentSig;
             const stateHeader = isInitial
-              ? 'Stato Iniziale:'
-              : 'Stato Aggiornato:';
+              ? 'Initial State:'
+              : 'Updated State:';
 
             this.write(pfx + `  🧠 ${this.bold(stateHeader)}`);
-            this.write(pfx + `     • ${this.bold('Missione:')} ${this.cyan(`"${s.Ms}"`)}`);
+            this.write(pfx + `     • ${this.bold('Mission:')} ${this.cyan(`"${s.Ms}"`)}`);
 
             const dsKeys = Object.keys(s.Ds);
             if (dsKeys.length > 0) {
               const compactDs = JSON.stringify(s.Ds);
-              this.write(pfx + `     • ${this.bold('Dati:')} ${this.cyan(compactDs)}`);
+              this.write(pfx + `     • ${this.bold('Data:')} ${this.cyan(compactDs)}`);
             }
 
             const taList = Array.from(s.Ta);
             if (taList.length > 0) {
-              this.write(pfx + `     • ${this.bold('Tool:')} ${this.cyan(`[ ${taList.join(', ')} ]`)}`);
+              this.write(pfx + `     • ${this.bold('Tools:')} ${this.cyan(`[ ${taList.join(', ')} ]`)}`);
             }
 
             if (s.Ka && s.Ka.size > 0) {
               const kaList = Array.from(s.Ka.keys());
-              this.write(pfx + `     • ${this.bold('Conoscenza:')} ${this.cyan(`[ ${kaList.join(', ')} ]`)}`);
+              this.write(pfx + `     • ${this.bold('Knowledge:')} ${this.cyan(`[ ${kaList.join(', ')} ]`)}`);
             }
           }
         }
@@ -267,32 +264,30 @@ export class ConsoleLoggerObserver implements AgentObserver {
       case 'model_inference': {
         if (event.output.status === 'stall') {
           if (this.showThoughts && event.output.stall.partialThought) {
-            this.write(pfx + `  💭 ${this.yellow(this.bold('Pensiero parziale fino allo stallo:'))}`);
+            this.write(pfx + `  💭 ${this.yellow(this.bold('Partial thought before stall:'))}`);
             const lines = event.output.stall.partialThought.split('\n');
             for (const l of lines) {
               this.write(pfx + `     ${this.yellow(l)}`);
             }
           }
-          this.write(pfx + `  🛑 ${this.red(this.bold('Stallo deliberativo:'))} ${this.red(event.output.stall.message)}`);
+          this.write(pfx + `  🛑 ${this.red(this.bold('Deliberation stall:'))} ${this.red(event.output.stall.message)}`);
           break;
         }
 
-        // Pensiero deliberativo dell'agente (se presente)
         if (this.showThoughts && event.output.thought) {
-          this.write(pfx + `  💭 ${this.yellow(this.bold('Pensiero:'))}`);
+          this.write(pfx + `  💭 ${this.yellow(this.bold('Thought:'))}`);
           const lines = event.output.thought.split('\n');
           for (const l of lines) {
             this.write(pfx + `     ${this.yellow(l)}`);
           }
         }
 
-        // Azione/i decise dal modello
         if (event.output.calls.length > 0) {
           for (const call of event.output.calls) {
-            this.write(pfx + `  ⚡ ${this.green(this.bold('Azione:'))} ${this.green(formatCall(call.name, call.payload))}`);
+            this.write(pfx + `  ⚡ ${this.green(this.bold('Action:'))} ${this.green(formatCall(call.name, call.payload))}`);
           }
         } else {
-          this.write(pfx + `  ⚡ ${this.dim('Nessuna azione emessa')}`);
+          this.write(pfx + `  ⚡ ${this.dim('No action emitted')}`);
         }
         break;
       }
@@ -310,7 +305,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
           const reasonStr = reasonText ? ` ${this.dim(`(${reasonText})`)}` : '';
           this.write(
             pfx +
-              `  🔀 ${this.bold('Transizione:')} ${this.bold(this.cyan(toName))}${reasonStr}`
+              `  🔀 ${this.bold('Transition:')} ${this.bold(this.cyan(toName))}${reasonStr}`
           );
         }
         break;
@@ -321,7 +316,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
         if (event.error) {
           this.write(
             pfx +
-              `  🌍 ${this.bold(event.toolId)}${ms} ${this.red('→ Errore:')} ${this.red(
+              `  🌍 ${this.bold(event.toolId)}${ms} ${this.red('→ Error:')} ${this.red(
                 this.formatData(event.error, 5)
               )}`
           );
@@ -339,7 +334,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
       case 'tool_error': {
         this.write(
           pfx +
-            `  ⚠️  ${this.red(this.bold('Errore Tool'))} ${this.dim(
+            `  ⚠️  ${this.red(this.bold('Tool Error'))} ${this.dim(
               `'${event.targetToolId}':`
             )} ${this.red(event.errorPayload.message)}`
         );
@@ -348,7 +343,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
       case 'halt': {
         this.write('');
-        this.write(pfx + this.bold(this.green(`🎉 [Completato - ${event.result.type}]`)));
+        this.write(pfx + this.bold(this.green(`🎉 [Completed - ${event.result.type}]`)));
         const formattedResult = JSON.stringify(event.result.payload, null, 2);
         for (const line of formattedResult.split('\n')) {
           this.write(pfx + `   ${this.green(line)}`);
@@ -359,7 +354,7 @@ export class ConsoleLoggerObserver implements AgentObserver {
 
       case 'stall': {
         this.write('');
-        this.write(pfx + this.bold(this.red(`🛑 [Stallo Deliberativo - ${event.stall.reason}]`)));
+        this.write(pfx + this.bold(this.red(`🛑 [Deliberation Stall - ${event.stall.reason}]`)));
         this.write(pfx + `   ${this.red(event.stall.message)}`);
         this.write('');
         break;

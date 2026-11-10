@@ -43,7 +43,7 @@ export function resolveMediaBase64(asset: InputMediaAsset): { base64: string; mi
 
     case 'path': {
       if (!fs.existsSync(source.filePath)) {
-        throw new Error(`File non trovato al percorso: ${source.filePath}`);
+        throw new Error(`File not found at path: ${source.filePath}`);
       }
       const buffer = fs.readFileSync(source.filePath);
       const mimeType = source.mimeType ?? inferMimeType(source.filePath);
@@ -54,10 +54,10 @@ export function resolveMediaBase64(asset: InputMediaAsset): { base64: string; mi
     }
 
     case 'url':
-      throw new Error(`Impossibile convertire un URL HTTP sincrono in Base64 per l'asset ${asset.filename ?? source.url}. Usa la modalità URL diretta.`);
+      throw new Error(`Cannot synchronously convert HTTP URL to Base64 for asset ${asset.filename ?? source.url}. Use direct URL mode.`);
 
     case 'reference':
-      throw new Error(`Riferimento remoto (${source.fileId}) non supportato per conversione Base64 locale.`);
+      throw new Error(`Remote file reference (${source.fileId}) is not supported for local Base64 conversion.`);
   }
 }
 
@@ -73,16 +73,16 @@ export function resolveTextFileContent(asset: InputMediaAsset): string {
 
     case 'path': {
       if (!fs.existsSync(source.filePath)) {
-        throw new Error(`File testuale non trovato al percorso: ${source.filePath}`);
+        throw new Error(`Text file not found at path: ${source.filePath}`);
       }
       return fs.readFileSync(source.filePath, 'utf-8');
     }
 
     case 'url':
-      return `[Contenuto disponibile all'URL: ${source.url}]`;
+      return `[Content available at URL: ${source.url}]`;
 
     case 'reference':
-      return `[Riferimento provider file: ${source.fileId}]`;
+      return `[Provider file reference: ${source.fileId}]`;
   }
 }
 

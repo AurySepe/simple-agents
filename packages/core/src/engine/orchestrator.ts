@@ -30,9 +30,9 @@ import {
 import { WorldRegistry } from '../world/index.js';
 import { computeVisibleTools, SystemFrameProjector } from './projection.js';
 import { defaultMarkdownProjector } from '../defaults/projectors/markdown-projector.js';
-import { defaultItalianPolicy, OperationalPolicy } from '../defaults/policies/italian-policy.js';
+import { defaultOperationalPolicy, OperationalPolicy } from '../defaults/policies/operational-policy.js';
 
-export type { OperationalPolicy as OrchestratorPolicy } from '../defaults/policies/italian-policy.js';
+export type { OperationalPolicy as OrchestratorPolicy } from '../defaults/policies/operational-policy.js';
 
 /**
  * ============================================================================
@@ -191,7 +191,7 @@ export class FrameworkEngine {
       return this.bindWorld(agent.world).spawnAgent(agent.manifest, model);
     }
     if (!world) {
-      throw new Error("Per spawnare un AgentManifest puro, è necessario fornire un WorldRegistry come terzo parametro.");
+      throw new Error("To spawn a pure AgentManifest, a WorldRegistry must be provided as the third parameter.");
     }
     return this.bindWorld(world).spawnAgent(agent, model);
   }
@@ -209,7 +209,7 @@ export class FrameworkEngine {
       return await this.bindWorld(agent.world).runAgent(agent.manifest, model, options);
     }
     if (!options?.world) {
-      throw new Error("Per eseguire un AgentManifest puro, è necessario fornire un WorldRegistry in options.world.");
+      throw new Error("To run a pure AgentManifest, a WorldRegistry must be provided in options.world.");
     }
     return await this.bindWorld(options.world).runAgent(agent, model, options);
   }
@@ -276,7 +276,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     private readonly model: LanguageModelAdapter
   ) {
     this.projector = this.framework.systemFrameProjector ?? defaultMarkdownProjector;
-    this.policy = this.framework.policy ?? defaultItalianPolicy;
+    this.policy = this.framework.policy ?? defaultOperationalPolicy;
 
     if (this.framework.observers) {
       for (const obs of this.framework.observers) {
@@ -453,7 +453,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     switch (this.fsm.phase) {
       case 'q_sleep': {
         throw new Error(
-          "L'agente si trova in stato 'q_sleep'. Usa 'feedPayload(payload)' per inviare uno stimolo."
+          "Agent is in 'q_sleep' state. Use 'feedPayload(payload)' to provide a stimulus."
         );
       }
 
@@ -479,7 +479,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       case 'q_yield': {
         throw new Error(
-          "L'agente si trova in attesa asincrona 'q_yield'. Fornisci i risultati con 'feedPayload({ worldResults })'."
+          "Agent is awaiting external world results in 'q_yield'. Provide results using 'feedPayload({ worldResults })'."
         );
       }
 
@@ -493,7 +493,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       default: {
         const _exhaustive: never = this.fsm;
-        throw new Error(`Stato FSM non gestito: ${JSON.stringify(_exhaustive)}`);
+        throw new Error(`Unhandled FSM state: ${JSON.stringify(_exhaustive)}`);
       }
     }
   }
@@ -1087,7 +1087,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     while (true) {
       if (++steps > maxSteps) {
         throw new Error(
-          `Raggiunto limite massimo di step (${maxSteps}) durante resume() senza raggiungere yield o halt.`
+          `Reached maximum step limit (${maxSteps}) during resume() without reaching yield, halt, or stall.`
         );
       }
       const outcome = await this.step();
@@ -1117,10 +1117,10 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       while (true) {
         if (this.c > maxMacroCycles) {
-          throw new Error(`Raggiunto limite massimo di macro-cicli (${maxMacroCycles}).`);
+          throw new Error(`Reached maximum macro-cycle limit (${maxMacroCycles}).`);
         }
         if (this.t > maxTicks) {
-          throw new Error(`Raggiunto limite massimo di tick decisionali (${maxTicks}).`);
+          throw new Error(`Reached maximum decision tick limit (${maxTicks}).`);
         }
 
         const outcome = await this.resume();

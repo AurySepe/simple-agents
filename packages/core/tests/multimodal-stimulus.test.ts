@@ -173,7 +173,7 @@ describe('Multimodal & File Input Ontology - Livello 1 Core', () => {
 
       const joined = logs.join('\n');
       expect(joined).toContain('Analizza il grafico');
-      expect(joined).toContain('1 allegati: image (chart.png)');
+      expect(joined).toContain('1 attachments: image (chart.png)');
     });
   });
 });

@@ -150,9 +150,9 @@ describe('Sistema di Osservabilità, Telemetria e Logging', () => {
     const joinedLogs = logs.join('\n');
 
     expect(joinedLogs).toContain('[TEST-LOGGER]');
-    expect(joinedLogs).toContain('Pensiero:');
+    expect(joinedLogs).toContain('Thought:');
     expect(joinedLogs).toContain('Penso e termino subito.');
-    expect(joinedLogs).toContain('Completato - termina');
+    expect(joinedLogs).toContain('Completed - termina');
   });
 
   it('dovrebbe consentire la registrazione di un observer a livello di BoundRuntime per tutti gli agenti', async () => {

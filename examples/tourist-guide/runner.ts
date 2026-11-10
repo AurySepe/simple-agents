@@ -4,20 +4,13 @@ import {
   ConsoleLogger,
   createDefaultFrameworkConfig,
   createRunner,
-  defaultItalianMarkdownProjector,
-  defaultItalianPolicy,
   FrameworkEngine,
   type UserMessageContent
 } from '@formal-agent/core';
 import { createTouristGuideModelAdapter } from './adapter.js';
 import { touristGuideAgent } from './implementation.js';
 
-const engine = new FrameworkEngine(
-  createDefaultFrameworkConfig({
-    systemFrameProjector: defaultItalianMarkdownProjector,
-    policy: defaultItalianPolicy
-  })
-);
+const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
 const model = createTouristGuideModelAdapter();
 

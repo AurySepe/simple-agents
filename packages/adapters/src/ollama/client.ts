@@ -24,7 +24,7 @@ export class OllamaClient {
 
   constructor(config: OllamaClientConfig) {
     if (!config.baseUrl || config.baseUrl.trim().length === 0) {
-      throw new Error("OllamaClient richiede un parametro 'baseUrl' esplicito e non vuoto.");
+      throw new Error("OllamaClient requires an explicit, non-empty 'baseUrl' parameter.");
     }
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.timeoutMs = config.timeoutMs;
@@ -64,19 +64,19 @@ export class OllamaClient {
       });
     } catch (err: unknown) {
       if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-        throw new Error(`Chiamata Ollama interrotta per timeout (${effectiveTimeoutMs}ms).`);
+        throw new Error(`Ollama request timed out (${effectiveTimeoutMs}ms).`);
       }
       throw err;
     }
 
     if (!res.ok) {
       const errorBody = await res.text();
-      throw new Error(`Errore chiamata Ollama HTTP ${res.status}: ${errorBody}`);
+      throw new Error(`Ollama HTTP error ${res.status}: ${errorBody}`);
     }
 
     const raw = await res.json();
     if (!isOllamaChatResponse(raw)) {
-      throw new Error(`Risposta Ollama non valida: ${JSON.stringify(raw)}`);
+      throw new Error(`Invalid Ollama response: ${JSON.stringify(raw)}`);
     }
     const reqDurationMs = Date.now() - startWallTime;
 

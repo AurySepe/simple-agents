@@ -248,7 +248,7 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
 
   parseResponse(response: SGLangChatResponse): ModelResult {
     if (!response.choices || response.choices.length === 0) {
-      throw new Error(`Risposta SGLang priva di scelte (choices vuoto): ${JSON.stringify(response)}`);
+      throw new Error(`SGLang response has no choices (empty choices): ${JSON.stringify(response)}`);
     }
 
     const choice = response.choices[0];
@@ -307,12 +307,12 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
           stall: {
             reason: 'thinking_budget_exhausted',
             partialThought: thought || rawMessage.content || '',
-            message: `Il modello '${response.model}' ha saturato il budget di token di pensiero (finish_reason='length') prima di selezionare un'azione.${thoughtTail}`
+            message: `Model '${response.model}' exhausted its thinking token budget (finish_reason='length') before selecting an action.${thoughtTail}`
           }
         };
       }
       throw new Error(
-        `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Thinking: "${thought || ''}". Contenuto: "${rawMessage.content || ''}"`
+        `Model '${response.model}' selected no action. The automaton strictly requires at least one action to be selected. Thinking: "${thought || ''}". Content: "${rawMessage.content || ''}"`
       );
     }
 
@@ -368,7 +368,7 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
 
     if (!isNonEmptyArray(calls)) {
       throw new Error(
-        `Invariante violato: l'array delle tool calls per il modello '${response.model}' è inaspettatamente vuoto.`
+        `Invariant violated: tool calls array for model '${response.model}' is unexpectedly empty.`
       );
     }
 

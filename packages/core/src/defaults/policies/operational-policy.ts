@@ -10,13 +10,13 @@ export interface OperationalPolicy {
   ) => DiagnosticErrorPayload;
 }
 
-export const defaultItalianPolicy: OperationalPolicy = {
+export const defaultOperationalPolicy: OperationalPolicy = {
   formatSchemaErrorMessage: (targetToolId, errorDetail) => {
-    return `Parametri non conformi allo schema per il tool '${targetToolId}': ${errorDetail}`;
+    return `Invalid parameters for tool '${targetToolId}': ${errorDetail}`;
   },
 
   formatSyntaxErrorMessage: (targetToolId, rawText, errorDetail) => {
-    return `Sintassi JSON non valida negli argomenti per il tool '${targetToolId}': ${errorDetail}. Testo ricevuto: "${rawText}"`;
+    return `Invalid JSON syntax in arguments for tool '${targetToolId}': ${errorDetail}. Received raw text: "${rawText}"`;
   },
 
   formatDiagnosticPayload: (code, message, details) => ({
@@ -26,3 +26,5 @@ export const defaultItalianPolicy: OperationalPolicy = {
     details
   })
 };
+
+export const defaultPolicy: OperationalPolicy = defaultOperationalPolicy;

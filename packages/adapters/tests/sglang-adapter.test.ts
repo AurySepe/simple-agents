@@ -359,7 +359,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
       if (output.status === 'stall') {
         expect(output.stall.reason).toBe('thinking_budget_exhausted');
         expect(output.stall.partialThought).toBe('Risposta parzialmente generata...');
-        expect(output.stall.message).toContain('budget di token');
+        expect(output.stall.message).toContain('token budget');
       }
     });
 

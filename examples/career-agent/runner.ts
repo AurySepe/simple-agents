@@ -2,8 +2,6 @@ import {
   ConsoleLogger,
   createDefaultFrameworkConfig,
   createRunner,
-  defaultItalianMarkdownProjector,
-  defaultItalianPolicy,
   FrameworkEngine,
 } from "@formal-agent/core";
 import { createCareerLlamaAdapter } from "./adapter.js";
@@ -14,19 +12,14 @@ import { careerAgent } from "./implementation.js";
  * CONFIGURAZIONE DEL RUNNER E DEL MODELLO QWEN
  * ============================================================================
  * Il runner è pre-configurato con:
- * - FrameworkEngine (Livello 1) con policy e proiettore Markdown italiano
+ * - FrameworkEngine (Livello 1) con policy e proiettore Markdown standard
  * - Modello Qwen via llama-server (con vincolo grammaticale GBNF sui tool)
  * - ConsoleLogger (per stampare i passi dell'agente in tempo reale in console)
  * - Agente delle carriere già collegato e pronto
  */
 
 // 1. Motore invariante di transizione
-const engine = new FrameworkEngine(
-  createDefaultFrameworkConfig({
-    systemFrameProjector: defaultItalianMarkdownProjector,
-    policy: defaultItalianPolicy,
-  })
-);
+const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
 // 2. Modello linguistico Qwen (llama-server su porta 30000 o da variabile d'ambiente)
 const qwenModel = createCareerLlamaAdapter({

@@ -3,8 +3,6 @@ import * as path from 'path';
 import {
   createConsoleObserver,
   createDefaultFrameworkConfig,
-  defaultItalianMarkdownProjector,
-  defaultItalianPolicy,
   FrameworkEngine
 } from '@formal-agent/core';
 import { commercialManifest } from '../live-ollama/manifest.js';
@@ -63,12 +61,7 @@ export async function runCommercialAgent(optionsOrPrompt?: string | RunCommercia
   dualWriter('='.repeat(80));
 
   // 1. Inizializzazione Livello 1 (Framework Engine)
-  const framework = new FrameworkEngine(
-    createDefaultFrameworkConfig({
-      systemFrameProjector: defaultItalianMarkdownProjector,
-      policy: defaultItalianPolicy
-    })
-  );
+  const framework = new FrameworkEngine(createDefaultFrameworkConfig());
 
   // 2. Inizializzazione Livello 2 (Mondo Aziendale W con Database Parametrizzato)
   const world = createCommercialWorld(database);

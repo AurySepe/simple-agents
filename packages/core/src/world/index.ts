@@ -102,7 +102,7 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
         throw new WorldToolError(
           toolId,
           'not_found',
-          `Il tool '${toolId}' non esiste nel catalogo del Mondo W.`
+          `Tool '${toolId}' was not found in World catalog W.`
         );
       }
 
@@ -112,7 +112,7 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
         throw new WorldToolError(
           toolId,
           'invalid_parameters',
-          `I parametri forniti per il tool '${toolId}' non rispettano lo schema previsto.`,
+          `Parameters provided for tool '${toolId}' do not conform to expected schema.`,
           parseResult.error.format()
         );
       }
@@ -125,7 +125,7 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
         throw new WorldToolError(
           toolId,
           'execution_failed',
-          `Errore durante l'esecuzione del tool '${toolId}': ${errorObj.message}`,
+          `Error during execution of tool '${toolId}': ${errorObj.message}`,
           errorObj
         );
       }

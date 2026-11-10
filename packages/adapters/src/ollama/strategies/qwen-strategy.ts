@@ -35,7 +35,7 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
   constructor(options: QwenStrategyOptions) {
     if (!options || !options.reasoningFormat) {
       throw new Error(
-        "Configurazione incompleta per QwenModelStrategy: 'reasoningFormat' ('native_field' | 'think_tags' | 'none') è obbligatorio."
+        "Incomplete configuration for QwenModelStrategy: 'reasoningFormat' ('native_field' | 'think_tags' | 'none') is required."
       );
     }
     this.reasoningFormat = options.reasoningFormat;
@@ -261,12 +261,12 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
           stall: {
             reason: 'thinking_budget_exhausted',
             partialThought: thought || rawMessage.content || '',
-            message: `Il modello '${response.model}' ha saturato il budget di token di pensiero (done_reason='length') prima di selezionare un'azione.${thoughtTail}`
+            message: `Model '${response.model}' exhausted its thinking token budget (done_reason='length') before selecting an action.${thoughtTail}`
           }
         };
       }
       throw new Error(
-        `Il modello '${response.model}' non ha selezionato alcuna azione. L'automa richiede obbligatoriamente almeno un'azione selezionata. Thinking: "${thought || ''}". Contenuto: "${rawMessage.content || ''}"`
+        `Model '${response.model}' selected no action. The automaton strictly requires at least one action to be selected. Thinking: "${thought || ''}". Content: "${rawMessage.content || ''}"`
       );
     }
 
@@ -312,7 +312,7 @@ export class QwenModelStrategy implements ModelFamilyStrategy {
 
     if (!isNonEmptyArray(calls)) {
       throw new Error(
-        `Il modello '${response.model}' non ha selezionato alcuna azione valida.`
+        `Model '${response.model}' selected no valid action.`
       );
     }
 

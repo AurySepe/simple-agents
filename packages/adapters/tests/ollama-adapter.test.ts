@@ -117,7 +117,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
           options: { temperature: 0 },
           messages: [{ role: 'user', content: 'test' }]
         })
-      ).rejects.toThrowError(/Errore chiamata Ollama HTTP 500/);
+      ).rejects.toThrowError(/Ollama HTTP error 500/);
     });
 
     it('deve interrompere la richiesta e sollevare errore se viene superato il timeoutMs configurato', async () => {
@@ -141,7 +141,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
           options: { temperature: 0 },
           messages: [{ role: 'user', content: 'test' }]
         })
-      ).rejects.toThrowError(/interrotta per timeout \(50ms\)/);
+      ).rejects.toThrowError(/timed out \(50ms\)/);
     });
   });
 
@@ -462,7 +462,7 @@ describe('Ollama Transport & Qwen Strategy', () => {
           },
           done: true
         })
-      ).toThrowError(/non ha selezionato alcuna azione/);
+      ).toThrowError(/selected no action/);
     });
   });
 

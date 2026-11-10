@@ -32,49 +32,49 @@ export class ImplementedAgentImpl<
     readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
     readonly binding: AgentBinding<TTools, TStateSchema>
   ) {
-    // 1. Validazione fail-fast dell'Identità ontologica (I)
+    // 1. Fail-fast validation of ontological Identity (I)
     if (!contract.identity || contract.identity.trim().length === 0) {
-      throw new Error("L'identità (identity) dell'agente è obbligatoria e non può essere vuota.");
+      throw new Error("Agent identity is required and cannot be empty.");
     }
 
-    // 2. Validazione fail-fast dei contratti di terminazione (A_term)
+    // 2. Fail-fast validation of termination contracts (A_term)
     const terminationEntries = Object.entries(contract.terminations);
     if (terminationEntries.length === 0) {
-      throw new Error("L'agente deve definire almeno un contratto di terminazione in 'terminations'.");
+      throw new Error("Agent must define at least one termination contract in 'terminations'.");
     }
 
-    // 3. Validazione fail-fast dell'implementazione di tutti i tool dichiarati
+    // 3. Fail-fast validation of implementations for all declared tools
     for (const toolId of Object.keys(contract.tools)) {
       const executor = (binding.tools as Record<string, unknown>)[toolId];
       if (typeof executor !== 'function') {
-        throw new Error(`Esecutore mancante o non valido per il tool dichiarato '${toolId}'.`);
+        throw new Error(`Missing or invalid executor for declared tool '${toolId}'.`);
       }
     }
 
-    // 4. Validazione fail-fast dello stato iniziale rispetto a stateSchema
+    // 4. Fail-fast validation of initial state against stateSchema
     let validatedInitialState: DataRecord = {};
     if (contract.stateSchema) {
       const rawInitialState = (binding as { initialState?: unknown }).initialState;
       if (rawInitialState === undefined || rawInitialState === null) {
         throw new Error(
-          `È stato definito uno 'stateSchema' per l'agente '${contract.identity}', ma 'initialState' non è stato fornito nel binding.`
+          `'stateSchema' was defined for agent '${contract.identity}', but 'initialState' was not provided in binding.`
         );
       }
       const parsed = contract.stateSchema.safeParse(rawInitialState);
       if (!parsed.success) {
         throw new Error(
-          `Lo stato iniziale fornito per l'agente '${contract.identity}' non rispetta 'stateSchema': ${parsed.error.message}`
+          `Initial state provided for agent '${contract.identity}' does not satisfy 'stateSchema': ${parsed.error.message}`
         );
       }
       validatedInitialState = parsed.data as DataRecord;
     }
 
-    // 5. Validazione fail-fast dei concetti di conoscenza (Ka0)
+    // 5. Fail-fast validation of knowledge concepts (Ka0)
     if (contract.knowledge) {
       for (const [idx, item] of contract.knowledge.entries()) {
         if (!item || !item.name?.trim() || !item.descrizione?.trim() || !item.corpo?.trim()) {
           throw new Error(
-            `Il concetto #${idx + 1} per l'agente '${contract.identity}' deve definire 'name', 'descrizione' e 'corpo' non vuoti.`
+            `Knowledge concept #${idx + 1} for agent '${contract.identity}' must define non-empty 'name', 'descrizione' and 'corpo'.`
           );
         }
       }

@@ -4,8 +4,6 @@ import {
   ConsoleLogger,
   createDefaultFrameworkConfig,
   createRunner,
-  defaultItalianMarkdownProjector,
-  defaultItalianPolicy,
   FrameworkEngine,
   type UserMessageContent
 } from '@formal-agent/core';
@@ -13,12 +11,7 @@ import { createVisionAdapter } from './adapter.js';
 import { imageDescriberAgent } from './implementation.js';
 
 // 1. Motore invariante di livello 1
-const engine = new FrameworkEngine(
-  createDefaultFrameworkConfig({
-    systemFrameProjector: defaultItalianMarkdownProjector,
-    policy: defaultItalianPolicy
-  })
-);
+const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
 // 2. Modello VLM con capacità visuali
 const visionModel = createVisionAdapter();

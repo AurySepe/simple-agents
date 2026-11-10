@@ -204,7 +204,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    expect(() => badAgent.implement({ tools: {} })).toThrowError(/identità/i);
+    expect(() => badAgent.implement({ tools: {} })).toThrowError(/identity/i);
   });
 
   it('rifiuta a tempo di compilazione ed esecuzione se terminations è vuoto', () => {
@@ -216,7 +216,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       terminations: {}
     });
 
-    expect(() => noTermAgent.implement({ tools: {} })).toThrowError(/terminazione/i);
+    expect(() => noTermAgent.implement({ tools: {} })).toThrowError(/termination/i);
   });
 
   it('rifiuta la costruzione se un tool dichiarato manca di esecutore nel binding', () => {
@@ -274,7 +274,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    expect(() => badConceptAgent.implement({ tools: {} })).toThrowError(/concetto #1/i);
+    expect(() => badConceptAgent.implement({ tools: {} })).toThrowError(/concept #1/i);
   });
 
   it('rifiuta a tempo di compilazione schemi che non appartengono allo spazio discreto DataValue', () => {

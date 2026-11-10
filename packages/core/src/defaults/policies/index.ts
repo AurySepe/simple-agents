@@ -1,2 +1,1 @@
-export * from './italian-policy.js';
-export * from './english-policy.js';
+export * from './operational-policy.js';

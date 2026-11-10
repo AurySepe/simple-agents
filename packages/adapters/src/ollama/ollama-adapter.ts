@@ -33,10 +33,10 @@ export class OllamaModelAdapter implements LanguageModelAdapter {
 
   constructor(config: OllamaModelAdapterConfig) {
     if (!config.model || config.model.trim().length === 0) {
-      throw new Error("OllamaModelAdapter richiede il nome del modello ('model') esplicito.");
+      throw new Error("OllamaModelAdapter requires an explicit 'model' name.");
     }
     if (config.options?.temperature === undefined) {
-      throw new Error("OllamaModelAdapter richiede 'options.temperature' esplicita fornita dall'utente.");
+      throw new Error("OllamaModelAdapter requires an explicit 'options.temperature' provided by user.");
     }
 
     this.client = config.client;

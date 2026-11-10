@@ -47,7 +47,7 @@ export class SGLangClient {
 
   constructor(config: SGLangClientConfig) {
     if (!config.baseUrl || config.baseUrl.trim().length === 0) {
-      throw new Error("SGLangClient richiede un parametro 'baseUrl' esplicito e non vuoto.");
+      throw new Error("SGLangClient requires an explicit, non-empty 'baseUrl' parameter.");
     }
 
     let url = config.baseUrl.trim().replace(/\/$/, '');
@@ -106,13 +106,13 @@ export class SGLangClient {
       );
     } catch (err: unknown) {
       if (err instanceof OpenAI.APIConnectionTimeoutError) {
-        throw new Error(`Chiamata SGLang interrotta per timeout (${effectiveTimeoutMs}ms): ${err.message}`);
+        throw new Error(`SGLang request timed out (${effectiveTimeoutMs}ms): ${err.message}`);
       }
       if (err instanceof OpenAI.APIError) {
-        throw new Error(`Errore chiamata SGLang HTTP ${err.status}: ${err.message}`);
+        throw new Error(`SGLang HTTP error ${err.status}: ${err.message}`);
       }
       if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-        throw new Error(`Chiamata SGLang interrotta per timeout (${effectiveTimeoutMs}ms).`);
+        throw new Error(`SGLang request timed out (${effectiveTimeoutMs}ms).`);
       }
       throw err;
     }

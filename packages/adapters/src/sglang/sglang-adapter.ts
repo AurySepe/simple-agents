@@ -31,10 +31,10 @@ export class SGLangModelAdapter implements LanguageModelAdapter {
 
   constructor(config: SGLangModelAdapterConfig) {
     if (!config.model || config.model.trim().length === 0) {
-      throw new Error("SGLangModelAdapter richiede il nome del modello ('model') esplicito.");
+      throw new Error("SGLangModelAdapter requires an explicit 'model' name.");
     }
     if (config.options?.temperature === undefined) {
-      throw new Error("SGLangModelAdapter richiede 'options.temperature' esplicita fornita dall'utente.");
+      throw new Error("SGLangModelAdapter requires an explicit 'options.temperature' provided by user.");
     }
 
     this.client = config.client;
