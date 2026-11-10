@@ -22,6 +22,7 @@ import {
   TypedAgentState
 } from './types.js';
 import { createAgentStateParser } from './state-parser.js';
+import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 
 export class ImplementedAgentImpl<
   TTools extends Record<string, ToolContract>,
@@ -121,6 +122,10 @@ export class ImplementedAgentImpl<
 
     // 9. Sintesi automatica del parser di stato type-safe conforme al contratto
     this.parser = createAgentStateParser(contract);
+  }
+
+  public createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations> {
+    return new EvaluationCollector<TTools, TStateSchema, TTerminations>();
   }
 
   public parseState(raw: unknown): TypedAgentState<TTools, TStateSchema> {

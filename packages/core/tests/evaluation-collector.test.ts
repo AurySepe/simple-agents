@@ -5,6 +5,7 @@ import {
   createEvaluationCollector,
   createRunner,
   defineAgent,
+  EvaluationCollector,
   FrameworkEngine,
   LanguageModelAdapter
 } from '../src/index.js';
@@ -161,4 +162,75 @@ describe('EvaluationCollector & Scorecard System', () => {
     expect(p3.worldResults).toHaveLength(0); // L'azione terminale non è un tool di mondo
     expect(p3.usage?.totalTokens).toBe(220);
   });
+
+  it('dovrebbe generare un EvaluationReport con tipi inferiti automaticamente dal contratto', async () => {
+    const contract = {
+      identity: 'typed_agent',
+      mission: 'Missione con tipi forti',
+      stateSchema: z.object({
+        score: z.number(),
+        category: z.enum(['A', 'B'])
+      }),
+      tools: {
+        calc_score: {
+          description: 'Calcola punteggio',
+          parameters: z.object({ delta: z.number() }),
+          returns: z.object({ newScore: z.number() })
+        }
+      },
+      terminations: {
+        done: {
+          description: 'Finito',
+          schema: z.object({ finalCategory: z.enum(['A', 'B']) })
+        }
+      }
+    };
+
+    const agentDef = defineAgent(contract);
+    const implemented = agentDef.implement({
+      initialState: { score: 10, category: 'A' },
+      tools: {
+        calc_score: async ({ delta }) => ({ newScore: 10 + delta })
+      }
+    });
+
+    // 1. Istanziazione tipizzata direttamente dall'agente
+    const collector = implemented.createEvaluationCollector();
+
+    const model: LanguageModelAdapter = {
+      infer: async () => ({
+        thought: 'Termino',
+        calls: [{ id: 'c1', name: 'done', payload: { finalCategory: 'A' } }]
+      })
+    };
+
+    const engine = new FrameworkEngine(createDefaultFrameworkConfig());
+    await implemented.run(engine, model, {
+      userContent: 'Go',
+      observers: [collector]
+    });
+
+    const report = collector.generateReport();
+
+    // Verifiche a tempo di compilazione e runtime:
+    if (report.summary.status === 'halt') {
+      // report.summary.exitContract è strettamente 'done'
+      const contractUsed: 'done' = report.summary.exitContract;
+      expect(contractUsed).toBe('done');
+      // report.summary.exitPayload è tipizzato con { finalCategory: 'A' | 'B' }
+      const finalCat: 'A' | 'B' = report.summary.exitPayload.finalCategory;
+      expect(finalCat).toBe('A');
+    }
+
+    // report.timeline[0].state.Ds è tipizzato con { score: number, category: 'A' | 'B' }
+    const currentScore: number = report.timeline[0].state.Ds.score;
+    const currentCategory: 'A' | 'B' = report.timeline[0].state.Ds.category;
+    expect(currentScore).toBe(10);
+    expect(currentCategory).toBe('A');
+
+    // Anche via helper createEvaluationCollector(implemented) o createEvaluationCollector(agentDef)
+    const fromHelper = createEvaluationCollector(implemented);
+    expect(fromHelper).toBeInstanceOf(EvaluationCollector);
+  });
 });
+

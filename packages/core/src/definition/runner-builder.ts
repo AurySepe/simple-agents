@@ -7,6 +7,7 @@ import {
 import { DataValue, LanguageModelAdapter } from '../types/index.js';
 import { createDefaultFrameworkConfig } from '../defaults/index.js';
 import { AgentRunResult, ImplementedAgent, TypedAgentState } from './types.js';
+import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 
 type InferAgentRunResult<TAgent> = TAgent extends ImplementedAgent<any, any, infer TTerminations>
   ? AgentRunResult<TTerminations>
@@ -100,6 +101,15 @@ export class RunnerBuilder<
       : TypedAgentState<any, any>
   ): AgentInstance<DataValue> {
     return this.state.agent!.spawnFromState(this.state.engine!, this.state.model!, state as any);
+  }
+
+  /**
+   * Crea un EvaluationCollector tipizzato sull'agente associato a questo runner.
+   */
+  public createEvaluationCollector(): TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, infer TTerminations>
+    ? EvaluationCollector<TTools, TStateSchema, TTerminations>
+    : EvaluationCollector {
+    return new EvaluationCollector() as any;
   }
 
   /**

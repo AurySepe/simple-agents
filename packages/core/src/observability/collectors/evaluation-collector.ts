@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   AgentState,
   DataRecord,
@@ -15,19 +16,41 @@ import {
   WorldActionEvent
 } from '../events.js';
 import { AgentObserver } from '../observer.js';
+import type {
+  AgentContract,
+  AgentDefinition,
+  ImplementedAgent,
+  TerminationContractDef,
+  ToolContract
+} from '../../definition/types.js';
 
 /**
- * Profilo di audit dettagliato per un singolo passo decisionale.
+ * ============================================================================
+ * TIPI STRUTTURATI E PARAMETRICI SUL CONTRATTO DELL'AGENTE
+ * ============================================================================
  */
-export interface StepEvaluationRecord {
+
+/**
+ * Record di audit dettagliato per un singolo passo decisionale, fortemente tipizzato
+ * sullo schema di stato (Ds), sui tool (Ta) e sulle terminazioni.
+ */
+export interface StepEvaluationRecord<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>
+> {
   step: number;
   macroCycle: number;
   tick: number;
   phase: FSMControlState;
   thought?: string;
-  actions: Array<{ id: string; name: string; payload: DataRecord }>;
+  actions: Array<{
+    id: string;
+    name: (keyof TTools & string) | (keyof TTerminations & string);
+    payload: DataRecord;
+  }>;
   worldResults: Array<{
-    toolId: string;
+    toolId: keyof TTools & string;
     durationMs: number;
     status: 'success' | 'failure';
     result?: unknown;
@@ -35,8 +58,8 @@ export interface StepEvaluationRecord {
   }>;
   state: {
     Ms: string;
-    Ds: DataRecord;
-    Ta: string[];
+    Ds: TStateSchema extends z.ZodType ? z.infer<TStateSchema> : DataRecord;
+    Ta: Array<keyof TTools & string>;
     messagesCount: number;
   };
   durationMs: number;
@@ -44,20 +67,63 @@ export interface StepEvaluationRecord {
 }
 
 /**
- * Sintesi complessiva e aggregata della sessione dell'agente.
+ * Unione discriminata sui possibili esiti di uscita da A_term per l'esito 'halt'.
  */
-export interface EvaluationSummary {
-  status: 'halt' | 'stall' | 'suspended' | 'running';
-  exitContract?: string;
-  exitPayload?: unknown;
-  suspensionReason?: 'aborted' | 'cycle_limit' | 'tick_limit';
+export type EvaluationHaltSummary<
+  TTerminations extends Record<string, TerminationContractDef>
+> = {
+  [K in keyof TTerminations & string]: {
+    status: 'halt';
+    exitContract: K;
+    exitPayload: TTerminations[K]['schema'] extends z.ZodType
+      ? z.infer<TTerminations[K]['schema']>
+      : unknown;
+    suspensionReason?: never;
+  };
+}[keyof TTerminations & string];
+
+export type EvaluationNonHaltSummary =
+  | {
+      status: 'stall';
+      exitContract?: never;
+      exitPayload?: never;
+      suspensionReason?: never;
+    }
+  | {
+      status: 'suspended';
+      exitContract?: never;
+      exitPayload?: never;
+      suspensionReason: 'aborted' | 'cycle_limit' | 'tick_limit';
+    }
+  | {
+      status: 'running';
+      exitContract?: never;
+      exitPayload?: never;
+      suspensionReason?: never;
+    };
+
+/**
+ * Sintesi complessiva e aggregata della sessione dell'agente.
+ * Se lo status è 'halt', exitContract e exitPayload sono fortemente tipizzati
+ * sulle terminazioni A_term dichiarate nel contratto dell'agente.
+ */
+export type EvaluationSummary<
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>
+> = ([keyof TTerminations] extends [never]
+  ? {
+      status: 'halt';
+      exitContract?: string;
+      exitPayload?: unknown;
+      suspensionReason?: never;
+    } | EvaluationNonHaltSummary
+  : EvaluationHaltSummary<TTerminations> | EvaluationNonHaltSummary) & {
   totalMacroCycles: number;
   totalTicks: number;
   totalInferences: number;
   totalWorldActions: number;
   repairCount: number;
   selfRepairedSuccessfully: boolean;
-}
+};
 
 /**
  * Metriche prestazionali e consumi fisici dell'esecuzione.
@@ -77,22 +143,30 @@ export interface PerformanceMetrics {
 
 /**
  * Metriche di qualità comportamentale e traiettoria operativa.
+ * I nomi dei tool e le sequenze sono vincolati al toolbelt del contratto.
  */
-export interface BehavioralMetrics {
-  toolUsageCounts: Record<string, number>;
-  toolCallsSequence: string[];
+export interface BehavioralMetrics<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>
+> {
+  toolUsageCounts: Partial<Record<keyof TTools & string, number>>;
+  toolCallsSequence: Array<keyof TTools & string>;
   redundantCallsCount: number;
   hadRepairOccurrences: boolean;
 }
 
 /**
- * Report di valutazione completo e strutturato che incrocia stato e performance.
+ * Report di valutazione completo e strutturato che incrocia stato e performance,
+ * parametrizzato sui contratti e sugli schemi Zod dell'agente.
  */
-export interface EvaluationReport {
-  summary: EvaluationSummary;
+export interface EvaluationReport<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>
+> {
+  summary: EvaluationSummary<TTerminations>;
   performance: PerformanceMetrics;
-  behavior: BehavioralMetrics;
-  timeline: StepEvaluationRecord[];
+  behavior: BehavioralMetrics<TTools>;
+  timeline: StepEvaluationRecord<TTools, TStateSchema, TTerminations>[];
 }
 
 /**
@@ -103,7 +177,11 @@ export interface EvaluationReport {
  * un EvaluationReport completo incrociando lo stato cognitivo dell'agente
  * con le metriche di performance e di consumo token.
  */
-export class EvaluationCollector implements AgentObserver {
+export class EvaluationCollector<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>
+> implements AgentObserver {
   private events: AgentEvent[] = [];
   private startTime: number = Date.now();
   private endTime?: number;
@@ -132,7 +210,7 @@ export class EvaluationCollector implements AgentObserver {
   /**
    * Genera il report di valutazione incrociando lo stato cognitivo con le performance.
    */
-  public generateReport(): EvaluationReport {
+  public generateReport(): EvaluationReport<TTools, TStateSchema, TTerminations> {
     const inferences = this.events.filter((e): e is ModelInferenceEvent => e.type === 'model_inference');
     const worldActions = this.events.filter((e): e is WorldActionEvent => e.type === 'world_action');
     const toolErrors = this.events.filter((e): e is ToolErrorEvent => e.type === 'tool_error');
@@ -140,55 +218,49 @@ export class EvaluationCollector implements AgentObserver {
     const stallEvent = this.events.find((e): e is StallEvent => e.type === 'stall');
     const suspendEvent = this.events.find((e): e is SuspendEvent => e.type === 'suspend');
 
-    // 1. Determinazione dello status
-    let status: EvaluationSummary['status'] = 'running';
-    let exitContract: string | undefined;
-    let exitPayload: unknown | undefined;
-    let suspensionReason: EvaluationSummary['suspensionReason'];
-
-    if (haltEvent) {
-      status = 'halt';
-      exitContract = haltEvent.result.type;
-      exitPayload = haltEvent.result.payload;
-    } else if (stallEvent) {
-      status = 'stall';
-    } else if (suspendEvent) {
-      status = 'suspended';
-      suspensionReason = suspendEvent.reason;
-    }
-
-    // 2. Calcolo metriche temporali
-    const end = this.endTime ?? Date.now();
-    const wallClockDurationMs = Math.max(0, end - this.startTime);
-
-    let totalInferenceDurationMs = 0;
+    // 1. Calcolo metriche di performance & token
     let promptTokens = 0;
     let completionTokens = 0;
     let totalTokens = 0;
     const tpsList: number[] = [];
 
+    let totalInferenceDurationMs = 0;
     for (const inf of inferences) {
       totalInferenceDurationMs += inf.durationMs;
       if (inf.output.usage) {
-        promptTokens += inf.output.usage.promptTokens ?? 0;
-        completionTokens += inf.output.usage.completionTokens ?? 0;
-        totalTokens += inf.output.usage.totalTokens ?? (promptTokens + completionTokens);
-        if (inf.output.usage.tokensPerSecond) {
+        if (inf.output.usage.promptTokens !== undefined) {
+          promptTokens += inf.output.usage.promptTokens;
+        }
+        if (inf.output.usage.completionTokens !== undefined) {
+          completionTokens += inf.output.usage.completionTokens;
+        }
+        if (inf.output.usage.totalTokens !== undefined) {
+          totalTokens += inf.output.usage.totalTokens;
+        }
+        if (inf.output.usage.tokensPerSecond !== undefined) {
           tpsList.push(inf.output.usage.tokensPerSecond);
         }
       }
     }
 
     let totalWorldDurationMs = 0;
-    const toolUsageCounts: Record<string, number> = {};
-    const toolCallsSequence: string[] = [];
-    const seenCallSignatures = new Set<string>();
-    let redundantCallsCount = 0;
-
     for (const w of worldActions) {
       totalWorldDurationMs += w.durationMs;
-      toolUsageCounts[w.toolId] = (toolUsageCounts[w.toolId] ?? 0) + 1;
-      toolCallsSequence.push(w.toolId);
+    }
+
+    const wallClockEnd = this.endTime ?? Date.now();
+    const wallClockDurationMs = Math.max(0, wallClockEnd - this.startTime);
+
+    // 2. Calcolo metriche comportamentali
+    const toolUsageCounts: Partial<Record<keyof TTools & string, number>> = {};
+    const toolCallsSequence: Array<keyof TTools & string> = [];
+    let redundantCallsCount = 0;
+    const seenCallSignatures = new Set<string>();
+
+    for (const w of worldActions) {
+      const toolId = w.toolId as keyof TTools & string;
+      toolUsageCounts[toolId] = ((toolUsageCounts[toolId] ?? 0) + 1);
+      toolCallsSequence.push(toolId);
 
       const signature = `${w.toolId}:${JSON.stringify(w.args)}`;
       if (seenCallSignatures.has(signature)) {
@@ -207,12 +279,12 @@ export class EvaluationCollector implements AgentObserver {
       : undefined;
 
     // 3. Calcolo timeline passo-passo
-    const timeline: StepEvaluationRecord[] = inferences.map((inf, idx) => {
+    const timeline: StepEvaluationRecord<TTools, TStateSchema, TTerminations>[] = inferences.map((inf, idx) => {
       const stepActions = inf.output.status === 'stall'
         ? []
         : inf.output.calls.map((c) => ({
             id: c.id,
-            name: c.name,
+            name: c.name as (keyof TTools & string) | (keyof TTerminations & string),
             payload: c.payload
           }));
 
@@ -225,7 +297,7 @@ export class EvaluationCollector implements AgentObserver {
         .slice(infEventIndex + 1, nextInfEventIndex)
         .filter((e): e is WorldActionEvent => e.type === 'world_action')
         .map((w) => ({
-          toolId: w.toolId,
+          toolId: w.toolId as keyof TTools & string,
           durationMs: w.durationMs,
           status: w.status,
           result: w.result,
@@ -242,8 +314,8 @@ export class EvaluationCollector implements AgentObserver {
         worldResults: stepWorldResults,
         state: {
           Ms: inf.stateSnapshot.Ms,
-          Ds: { ...inf.stateSnapshot.Ds },
-          Ta: Array.from(inf.stateSnapshot.Ta),
+          Ds: { ...inf.stateSnapshot.Ds } as any,
+          Ta: Array.from(inf.stateSnapshot.Ta) as Array<keyof TTools & string>,
           messagesCount: inf.stateSnapshot.Ep.length
         },
         durationMs: inf.durationMs,
@@ -252,21 +324,44 @@ export class EvaluationCollector implements AgentObserver {
     });
 
     const repairCount = toolErrors.length;
-    const selfRepairedSuccessfully = repairCount > 0 && status === 'halt';
+    const lastEvent = this.events[this.events.length - 1];
+    const totalMacroCycles = lastEvent ? lastEvent.macroCycle + 1 : 0;
+    const totalTicks = lastEvent ? lastEvent.tick + 1 : 0;
+
+    let baseSummary: any;
+    if (haltEvent) {
+      baseSummary = {
+        status: 'halt',
+        exitContract: haltEvent.result.type,
+        exitPayload: haltEvent.result.payload
+      };
+    } else if (stallEvent) {
+      baseSummary = {
+        status: 'stall'
+      };
+    } else if (suspendEvent) {
+      baseSummary = {
+        status: 'suspended',
+        suspensionReason: suspendEvent.reason
+      };
+    } else {
+      baseSummary = {
+        status: 'running'
+      };
+    }
+
+    const summary: EvaluationSummary<TTerminations> = {
+      ...baseSummary,
+      totalMacroCycles,
+      totalTicks,
+      totalInferences: inferences.length,
+      totalWorldActions: worldActions.length,
+      repairCount,
+      selfRepairedSuccessfully: repairCount > 0 && baseSummary.status === 'halt'
+    };
 
     return {
-      summary: {
-        status,
-        exitContract,
-        exitPayload,
-        suspensionReason,
-        totalMacroCycles: this.events.length > 0 ? this.events[this.events.length - 1].macroCycle : 0,
-        totalTicks: this.events.length > 0 ? this.events[this.events.length - 1].tick : 0,
-        totalInferences: inferences.length,
-        totalWorldActions: worldActions.length,
-        repairCount,
-        selfRepairedSuccessfully
-      },
+      summary,
       performance: {
         wallClockDurationMs,
         totalInferenceDurationMs,
@@ -292,7 +387,29 @@ export class EvaluationCollector implements AgentObserver {
 
 /**
  * Factory helper per istanziare un EvaluationCollector.
+ * Quando viene passato un agente implementato o la sua definizione,
+ * i generics sono inferiti automaticamente e il report risulta tipizzato al 100%.
  */
-export function createEvaluationCollector(): EvaluationCollector {
-  return new EvaluationCollector();
+export function createEvaluationCollector(): EvaluationCollector;
+export function createEvaluationCollector<
+  TTools extends Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>
+>(
+  target:
+    | ImplementedAgent<TTools, TStateSchema, TTerminations>
+    | AgentDefinition<TTools, TStateSchema, TTerminations>
+    | AgentContract<TTools, TStateSchema, TTerminations>
+): EvaluationCollector<TTools, TStateSchema, TTerminations>;
+export function createEvaluationCollector<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>
+>(
+  _target?:
+    | ImplementedAgent<TTools, TStateSchema, TTerminations>
+    | AgentDefinition<TTools, TStateSchema, TTerminations>
+    | AgentContract<TTools, TStateSchema, TTerminations>
+): EvaluationCollector<TTools, TStateSchema, TTerminations> {
+  return new EvaluationCollector<TTools, TStateSchema, TTerminations>();
 }

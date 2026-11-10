@@ -11,6 +11,7 @@ import {
 } from '../types/index.js';
 import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult, SuspendedRunResult } from '../engine/orchestrator.js';
 import { WorldRegistry } from '../world/index.js';
+import type { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 
 /**
  * ============================================================================
@@ -202,6 +203,11 @@ export interface AgentDefinition<
    * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
    */
   parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;
+
+  /**
+   * Crea un EvaluationCollector fortemente tipizzato sullo stato (Ds), tool (Ta) e terminazioni di questo agente.
+   */
+  createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations>;
 }
 
 /**
@@ -215,6 +221,11 @@ export interface ImplementedAgent<
   readonly contract: AgentContract<TTools, TStateSchema, TTerminations>;
   readonly manifest: AgentManifest<DataValue>;
   readonly world: WorldRegistry;
+
+  /**
+   * Crea un EvaluationCollector fortemente tipizzato sullo stato (Ds), tool (Ta) e terminazioni di questo agente.
+   */
+  createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations>;
 
   /**
    * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON

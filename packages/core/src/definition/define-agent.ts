@@ -11,6 +11,7 @@ import {
 } from './types.js';
 import { ImplementedAgentImpl } from './implemented-agent.js';
 import { createAgentStateParser } from './state-parser.js';
+import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 
 /**
  * ============================================================================
@@ -38,6 +39,9 @@ export function defineAgent<
 
   return {
     contract,
+    createEvaluationCollector() {
+      return new EvaluationCollector<TTools, TStateSchema, TTerminations>();
+    },
     parseState(raw: unknown) {
       return parser(raw);
     },
