@@ -3,7 +3,7 @@ import {
   type InferenceTriple,
   type ModelDeliberateResult,
   type ModelOutput,
-  type ModelResult,
+  type ModelStallOutput,
   type NonEmptyArray,
   type ToolCallInput,
   modelFail,
@@ -25,8 +25,11 @@ export function parseGeminiError(err: unknown, timeoutMs?: number): GeminiModelE
     if ('name' in err && (err as { name: string }).name === 'AbortError') {
       return {
         type: 'NETWORK_TIMEOUT',
-        message: `Gemini inference request timed out after ${timeoutMs ?? 60000}ms`,
-        timeoutMs: timeoutMs ?? 60000
+        message:
+          timeoutMs !== undefined
+            ? `Gemini inference request timed out after ${timeoutMs}ms`
+            : 'Gemini inference request timed out',
+        timeoutMs
       };
     }
 
@@ -90,6 +93,9 @@ export function parseGeminiError(err: unknown, timeoutMs?: number): GeminiModelE
 /**
  * Adapter formale di prima classe per la famiglia di modelli Google Gemini
  * (Gemini 3 Pro/Flash, Gemini 4 Argon/Carbon) conforme all'interfaccia LanguageModelAdapter.
+ *
+ * Tutte le configurazioni (modello, chiave API, opzioni di generazione, timeout)
+ * devono essere fornite esplicitamente senza default impliciti.
  */
 export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError> {
   private readonly client: GoogleGenAI;
@@ -98,36 +104,47 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
   readonly options: GeminiChatOptions;
   readonly onMetrics?: (metrics: GeminiMetrics) => void;
 
-  constructor(config?: GeminiAdapterConfig) {
-    const apiKey = config?.apiKey ?? process.env.GEMINI_API_KEY;
-    this.client = new GoogleGenAI(apiKey ? { apiKey } : {});
-    this.model = config?.model ?? 'gemini-3.5-flash';
-    this.options = config?.options ?? {};
+  constructor(config: GeminiAdapterConfig) {
+    if (!config) {
+      throw new Error('GeminiAdapterConfig must be provided explicitly.');
+    }
+    if (!config.apiKey || typeof config.apiKey !== 'string' || config.apiKey.trim().length === 0) {
+      throw new Error('Gemini API key must be explicitly provided in config.apiKey.');
+    }
+    if (!config.model || typeof config.model !== 'string' || config.model.trim().length === 0) {
+      throw new Error('Gemini model name must be explicitly provided in config.model.');
+    }
+
+    this.client = new GoogleGenAI({ apiKey: config.apiKey });
+    this.model = config.model;
+    this.options = config.options ?? {};
     this.strategy = new GeminiStrategy(this.options);
-    this.onMetrics = config?.onMetrics;
+    this.onMetrics = config.onMetrics;
   }
 
   public async infer(context: InferenceTriple): Promise<ModelDeliberateResult<GeminiModelError>> {
     const formatted = this.strategy.format(context);
-    const timeoutMs = this.options.timeoutMs ?? 60000;
+    const timeoutMs = this.options.timeoutMs;
+    const abortSignal = timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined;
     const startTime = Date.now();
 
     try {
+      const generateConfig: Record<string, unknown> = {};
+      if (formatted.systemInstruction) generateConfig.systemInstruction = formatted.systemInstruction;
+      if (formatted.tools) generateConfig.tools = formatted.tools;
+      if (formatted.toolConfig) generateConfig.toolConfig = formatted.toolConfig;
+      if (formatted.thinkingConfig) generateConfig.thinkingConfig = formatted.thinkingConfig;
+      if (this.options.temperature !== undefined) generateConfig.temperature = this.options.temperature;
+      if (this.options.topP !== undefined) generateConfig.topP = this.options.topP;
+      if (this.options.topK !== undefined) generateConfig.topK = this.options.topK;
+      if (this.options.maxOutputTokens !== undefined) generateConfig.maxOutputTokens = this.options.maxOutputTokens;
+      if (this.options.stopSequences !== undefined) generateConfig.stopSequences = this.options.stopSequences;
+      if (abortSignal) generateConfig.abortSignal = abortSignal;
+
       const response = await this.client.models.generateContent({
         model: this.model,
         contents: formatted.contents as any,
-        config: {
-          systemInstruction: formatted.systemInstruction as any,
-          tools: formatted.tools as any,
-          toolConfig: formatted.toolConfig as any,
-          thinkingConfig: formatted.thinkingConfig as any,
-          temperature: this.options.temperature,
-          topP: this.options.topP,
-          topK: this.options.topK,
-          maxOutputTokens: this.options.maxOutputTokens,
-          stopSequences: this.options.stopSequences,
-          abortSignal: AbortSignal.timeout(timeoutMs)
-        }
+        config: generateConfig as any
       });
 
       const durationMs = Date.now() - startTime;
@@ -169,15 +186,31 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
         payload: (fc.args as DataRecord) ?? {}
       }));
 
-      // Se non ci sono chiamate a tool ma c'è testo diretto
+      // 4. Gestione assenza di tool calls (Stall vs Nessuna Azione)
       if (calls.length === 0) {
-        // Fallback: se il modello ha risposto testualmente senza chiamare tool contrattuali
-        const directText = response.text ?? '';
-        calls.push({
-          status: 'valid' as const,
-          id: `gemini_text_${Date.now()}`,
-          name: 'direct_response',
-          payload: { text: directText }
+        // Se il modello ha esaurito il proprio budget di token prima di completare la deliberazione
+        if (candidate?.finishReason === FinishReason.MAX_TOKENS) {
+          const stallOutput: ModelStallOutput = {
+            status: 'stall',
+            stall: {
+              reason: 'thinking_budget_exhausted',
+              partialThought: extractedThought ?? response.text ?? '',
+              message: `Model '${this.model}' exhausted its token budget (MAX_TOKENS) before selecting an action.`
+            },
+            usage: {
+              promptTokens: response.usageMetadata?.promptTokenCount,
+              completionTokens: response.usageMetadata?.candidatesTokenCount,
+              totalTokens: response.usageMetadata?.totalTokenCount
+            }
+          };
+          return modelOk(stallOutput);
+        }
+
+        // Altrimenti il modello non ha selezionato alcuna azione: errore formale controllato
+        return modelFail<GeminiModelError>({
+          type: 'NO_ACTION_SELECTED',
+          message: `Model '${this.model}' completed deliberation without selecting any tool actions.`,
+          rawResponseText: response.text
         });
       }
 
@@ -217,8 +250,9 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
 }
 
 /**
- * Factory helper per istanziare rapidamente il GeminiModelAdapter.
+ * Factory helper per istanziare il GeminiModelAdapter.
+ * Richiede la configurazione esplicita di apiKey e model.
  */
-export function createGeminiAdapter(config?: GeminiAdapterConfig): GeminiModelAdapter {
+export function createGeminiAdapter(config: GeminiAdapterConfig): GeminiModelAdapter {
   return new GeminiModelAdapter(config);
 }

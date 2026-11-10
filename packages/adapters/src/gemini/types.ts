@@ -15,7 +15,8 @@ export type GeminiModelErrorCode =
   | 'SERVICE_UNAVAILABLE'
   | 'SAFETY_BLOCKED'
   | 'RECITATION_BLOCKED'
-  | 'CONTEXT_WINDOW_EXCEEDED';
+  | 'CONTEXT_WINDOW_EXCEEDED'
+  | 'NO_ACTION_SELECTED';
 
 export type GeminiModelError =
   | {
@@ -37,7 +38,7 @@ export type GeminiModelError =
   | {
       type: 'NETWORK_TIMEOUT';
       message: string;
-      timeoutMs: number;
+      timeoutMs?: number;
     }
   | {
       type: 'NETWORK_ERROR';
@@ -63,10 +64,16 @@ export type GeminiModelError =
   | {
       type: 'CONTEXT_WINDOW_EXCEEDED';
       message: string;
+    }
+  | {
+      type: 'NO_ACTION_SELECTED';
+      message: string;
+      rawResponseText?: string;
     };
 
 /**
  * Configurazione per il reasoning interno dei modelli Gemini 3 e 4.
+ * Tutti i campi sono opzionali e vengono applicati solo se specificati esplicitamente dall'utente.
  */
 export interface GeminiThinkingOptions {
   /**
@@ -74,19 +81,18 @@ export interface GeminiThinkingOptions {
    */
   thinkingLevel?: ThinkingLevel | 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
   /**
-   * Budget numerico di token per retrocompatibilità (Gemini 2.5).
-   * Mutuamente esclusivo con thinkingLevel.
+   * Budget numerico di token per retrocompatibilità.
    */
   thinkingBudget?: number;
   /**
-   * Se true, estrae e restituisce i pensieri intermedi nel campo `thought` di ModelOutput.
-   * Default: true.
+   * Se specificato, indica se includere i pensieri intermedi nel payload di risposta.
    */
   includeThoughts?: boolean;
 }
 
 /**
  * Opzioni di generazione e inferenza per l'adapter Gemini.
+ * Nessun valore viene assunto di default: vengono passate solo le opzioni fornite esplicitamente.
  */
 export interface GeminiChatOptions {
   temperature?: number;
@@ -96,8 +102,8 @@ export interface GeminiChatOptions {
   stopSequences?: string[];
   /**
    * Modalità di function calling:
-   * - 'required' / 'ANY': costringe il modello a invocare sempre un tool se disponibili
-   * - 'auto' / 'AUTO': lascia libera scelta al modello
+   * - 'required' / 'ANY': richiede l'invocazione di almeno un tool
+   * - 'auto' / 'AUTO': lascia la scelta al modello
    * - 'none' / 'NONE': disattiva il tool calling
    */
   toolChoice?: 'required' | 'auto' | 'none' | FunctionCallingConfigMode;
@@ -106,7 +112,8 @@ export interface GeminiChatOptions {
    */
   thinking?: GeminiThinkingOptions;
   /**
-   * Timeout in millisecondi per singola chiamata di inferenza (default: 60000).
+   * Timeout esplicito in millisecondi per singola chiamata di inferenza.
+   * Se non specificato, nessun timeout artificiale viene applicato.
    */
   timeoutMs?: number;
 }
@@ -124,16 +131,15 @@ export interface GeminiMetrics {
 
 export interface GeminiAdapterConfig {
   /**
-   * API Key di Google AI Studio (default: process.env.GEMINI_API_KEY).
+   * API Key di Google AI Studio richiesta esplicitamente.
    */
-  apiKey?: string;
+  apiKey: string;
   /**
-   * Nome del modello (es. 'gemini-3.5-flash', 'gemini-3.1-pro', 'gemini-4-argon').
-   * Default: 'gemini-3.5-flash'.
+   * Nome del modello richiesto esplicitamente (es. 'gemini-3.5-flash', 'gemini-3.5-pro', 'gemini-4-argon').
    */
-  model?: string;
+  model: string;
   /**
-   * Opzioni di generazione predefinite.
+   * Opzioni di generazione opzionali.
    */
   options?: GeminiChatOptions;
   /**

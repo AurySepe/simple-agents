@@ -184,34 +184,39 @@ export class GeminiStrategy {
 
       tools = [{ functionDeclarations }];
 
-      // Modalità di function calling
-      const choice = this.options?.toolChoice ?? 'required';
-      let mode: FunctionCallingConfigMode = FunctionCallingConfigMode.ANY;
+      // Modalità di function calling: configurata esclusivamente se richiesta esplicitamente dall'utente
+      if (this.options?.toolChoice !== undefined) {
+        const choice = this.options.toolChoice;
+        let mode: FunctionCallingConfigMode;
 
-      if (choice === 'auto' || choice === FunctionCallingConfigMode.AUTO) {
-        mode = FunctionCallingConfigMode.AUTO;
-      } else if (choice === 'none' || choice === FunctionCallingConfigMode.NONE) {
-        mode = FunctionCallingConfigMode.NONE;
-      } else {
-        mode = FunctionCallingConfigMode.ANY;
-      }
-
-      toolConfig = {
-        functionCallingConfig: {
-          mode,
-          allowedFunctionNames: functionDeclarations.map((f) => f.name)
+        if (choice === 'auto' || choice === FunctionCallingConfigMode.AUTO) {
+          mode = FunctionCallingConfigMode.AUTO;
+        } else if (choice === 'none' || choice === FunctionCallingConfigMode.NONE) {
+          mode = FunctionCallingConfigMode.NONE;
+        } else if (choice === 'required' || choice === FunctionCallingConfigMode.ANY) {
+          mode = FunctionCallingConfigMode.ANY;
+        } else {
+          mode = choice;
         }
-      };
+
+        toolConfig = {
+          functionCallingConfig: {
+            mode,
+            allowedFunctionNames: functionDeclarations.map((f) => f.name)
+          }
+        };
+      }
     }
 
     // 4. Configurazione Thinking / Reasoning (Gemini 3/4)
+    // Nessun default imposto: solo le proprietà esplicitamente configurate vengono incluse
     let thinkingConfig: FormattedGeminiContext['thinkingConfig'] = undefined;
     if (this.options?.thinking) {
       const t = this.options.thinking;
       let level: ThinkingLevel | undefined = undefined;
-      if (t.thinkingLevel) {
+      if (t.thinkingLevel !== undefined) {
         if (typeof t.thinkingLevel === 'string') {
-          level = (ThinkingLevel as Record<string, ThinkingLevel>)[t.thinkingLevel] ?? ThinkingLevel.MEDIUM;
+          level = (ThinkingLevel as Record<string, ThinkingLevel>)[t.thinkingLevel];
         } else {
           level = t.thinkingLevel;
         }
@@ -220,7 +225,7 @@ export class GeminiStrategy {
       thinkingConfig = {
         thinkingLevel: level,
         thinkingBudget: t.thinkingBudget,
-        includeThoughts: t.includeThoughts ?? true
+        includeThoughts: t.includeThoughts
       };
     }
 
@@ -233,3 +238,4 @@ export class GeminiStrategy {
     };
   }
 }
+

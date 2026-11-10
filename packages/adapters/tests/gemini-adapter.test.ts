@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   GeminiModelAdapter,
@@ -14,7 +14,7 @@ import type {
 } from '@formal-agent/core';
 import { FinishReason, FunctionCallingConfigMode, ThinkingLevel } from '@google/genai';
 
-describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
+describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
   const sampleTool: ToolDefinition = {
     id: 'cerca_documenti',
     description: 'Cerca tra i documenti aziendali',
@@ -56,7 +56,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
     ]
   };
 
-  describe('cleanZodSchemaForGemini & GeminiStrategy', () => {
+  describe('cleanZodSchemaForGemini & GeminiStrategy (Nessun default implicito)', () => {
     it('rimuove $schema dalla serializzazione zod per compatibilità OpenAPI Gemini', () => {
       const schema = z.object({
         testo: z.string()
@@ -67,38 +67,45 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
       expect(cleaned).toHaveProperty('properties');
     });
 
-    it('formatta correttamente gli strumenti, le istruzioni di sistema e la cronologia episodica', () => {
-      const strategy = new GeminiStrategy({
-        toolChoice: 'required',
-        thinking: {
-          thinkingLevel: ThinkingLevel.HIGH,
-          includeThoughts: true
-        }
-      });
-
+    it('NON impone toolConfig se toolChoice non è configurato esplicitamente', () => {
+      const strategy = new GeminiStrategy();
       const formatted = strategy.format(sampleTriple);
 
-      // System instruction
-      expect(formatted.systemInstruction).toBeDefined();
-      expect(formatted.systemInstruction?.parts[0].text).toContain('Sei un assistente per la ricerca');
-
-      // Tools declarations
       expect(formatted.tools).toBeDefined();
       expect(formatted.tools?.[0].functionDeclarations).toHaveLength(1);
-      expect(formatted.tools?.[0].functionDeclarations[0].name).toBe('cerca_documenti');
+      // Nessun default arbitrario toolConfig imposto
+      expect(formatted.toolConfig).toBeUndefined();
+    });
 
-      // Tool config mode: ANY quando required
-      expect(formatted.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.ANY);
+    it('configura toolConfig SOLO quando toolChoice viene specificato esplicitamente', () => {
+      const strategyRequired = new GeminiStrategy({ toolChoice: 'required' });
+      const formattedRequired = strategyRequired.format(sampleTriple);
+      expect(formattedRequired.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.ANY);
 
-      // Thinking config
-      expect(formatted.thinkingConfig?.thinkingLevel).toBe(ThinkingLevel.HIGH);
-      expect(formatted.thinkingConfig?.includeThoughts).toBe(true);
+      const strategyAuto = new GeminiStrategy({ toolChoice: 'auto' });
+      const formattedAuto = strategyAuto.format(sampleTriple);
+      expect(formattedAuto.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.AUTO);
 
-      // Contents (history)
-      expect(formatted.contents.length).toBeGreaterThan(0);
-      const userMsg = formatted.contents.find((c) => c.role === 'user');
-      expect(userMsg).toBeDefined();
-      expect(userMsg?.parts[0]).toEqual({ text: 'Trova il bilancio 2025' });
+      const strategyNone = new GeminiStrategy({ toolChoice: 'none' });
+      const formattedNone = strategyNone.format(sampleTriple);
+      expect(formattedNone.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.NONE);
+    });
+
+    it('NON aggiunge default a thinkingConfig se non esplicitamente richiesto', () => {
+      const strategy = new GeminiStrategy();
+      const formatted = strategy.format(sampleTriple);
+      expect(formatted.thinkingConfig).toBeUndefined();
+
+      const strategyExplicit = new GeminiStrategy({
+        thinking: {
+          thinkingLevel: ThinkingLevel.HIGH
+        }
+      });
+      const formattedExplicit = strategyExplicit.format(sampleTriple);
+      expect(formattedExplicit.thinkingConfig?.thinkingLevel).toBe(ThinkingLevel.HIGH);
+      // Nessun default forzato su includeThoughts o budget
+      expect(formattedExplicit.thinkingConfig?.includeThoughts).toBeUndefined();
+      expect(formattedExplicit.thinkingConfig?.thinkingBudget).toBeUndefined();
     });
 
     it('supporta stimoli multimodali (immagini base64, audio, file di testo)', () => {
@@ -143,18 +150,13 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
       const formatted = strategy.format(triple);
       const userParts = formatted.contents[0].parts;
 
-      // 1. testo stimolo
       expect(userParts[0]).toEqual({ text: 'Descrivi questa scansione' });
-
-      // 2. inlineData per immagine
       expect(userParts[1]).toEqual({
         inlineData: {
           mimeType: 'image/png',
           data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
         }
       });
-
-      // 3. text file formattato come blocco di testo
       expect(userParts[2]).toHaveProperty('text');
       expect((userParts[2] as { text: string }).text).toContain('[File: dati.csv]');
       expect((userParts[2] as { text: string }).text).toContain('id,nome\n1,Mario');
@@ -162,14 +164,21 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
   });
 
   describe('parseGeminiError', () => {
-    it('gestisce timeout di rete (AbortError)', () => {
+    it('gestisce timeout di rete (AbortError) senza inventare default se timeoutMs è omesso', () => {
       const abortErr = new Error('The operation was aborted');
       abortErr.name = 'AbortError';
 
-      const parsed = parseGeminiError(abortErr, 5000);
-      expect(parsed.type).toBe('NETWORK_TIMEOUT');
-      if (parsed.type === 'NETWORK_TIMEOUT') {
-        expect(parsed.timeoutMs).toBe(5000);
+      const parsedWithMs = parseGeminiError(abortErr, 5000);
+      expect(parsedWithMs.type).toBe('NETWORK_TIMEOUT');
+      if (parsedWithMs.type === 'NETWORK_TIMEOUT') {
+        expect(parsedWithMs.timeoutMs).toBe(5000);
+        expect(parsedWithMs.message).toContain('5000ms');
+      }
+
+      const parsedWithoutMs = parseGeminiError(abortErr);
+      expect(parsedWithoutMs.type).toBe('NETWORK_TIMEOUT');
+      if (parsedWithoutMs.type === 'NETWORK_TIMEOUT') {
+        expect(parsedWithoutMs.timeoutMs).toBeUndefined();
       }
     });
 
@@ -233,14 +242,19 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
     });
   });
 
-  describe('GeminiModelAdapter', () => {
+  describe('GeminiModelAdapter (Rigorosa configurazione esplicita)', () => {
+    it('lancia errore esplicito se apiKey o model sono omessi', () => {
+      expect(() => new GeminiModelAdapter(undefined as any)).toThrow('GeminiAdapterConfig must be provided explicitly');
+      expect(() => new GeminiModelAdapter({ apiKey: '', model: 'gemini-3.5-pro' })).toThrow('Gemini API key must be explicitly provided');
+      expect(() => new GeminiModelAdapter({ apiKey: 'fake-key', model: '' })).toThrow('Gemini model name must be explicitly provided');
+    });
+
     it('inferisce invocazioni di tool con successo ritornando modelOk', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-test-key',
         model: 'gemini-3.5-pro'
       });
 
-      // Mock client.models.generateContent
       const mockGenerateContent = vi.fn().mockResolvedValue({
         candidates: [
           {
@@ -280,7 +294,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
       const result = await adapter.infer(sampleTriple);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
+      if (result.ok && !('status' in result.data && result.data.status === 'stall')) {
         expect(result.data.thought).toBe('Rifletto sul documento da ricercare...');
         expect(result.data.calls).toHaveLength(1);
         expect(result.data.calls[0].name).toBe('cerca_documenti');
@@ -290,8 +304,49 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
       }
     });
 
-    it('ritorna fallback direct_response se il modello risponde con solo testo', async () => {
-      const adapter = createGeminiAdapter({ apiKey: 'fake-key' });
+    it('ritorna uno stall formale quando il modello esaurisce il budget di token (finishReason = MAX_TOKENS)', async () => {
+      const adapter = createGeminiAdapter({
+        apiKey: 'fake-key',
+        model: 'gemini-3.5-flash'
+      });
+
+      (adapter as any).client = {
+        models: {
+          generateContent: vi.fn().mockResolvedValue({
+            candidates: [
+              {
+                finishReason: FinishReason.MAX_TOKENS,
+                content: {
+                  parts: [{ thought: true, text: 'Stavo elaborando la query...' }]
+                }
+              }
+            ],
+            functionCalls: undefined,
+            usageMetadata: {
+              promptTokenCount: 100,
+              candidatesTokenCount: 8192,
+              totalTokenCount: 8292
+            }
+          })
+        }
+      };
+
+      const result = await adapter.infer(sampleTriple);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && 'status' in result.data && result.data.status === 'stall') {
+        expect(result.data.stall.reason).toBe('thinking_budget_exhausted');
+        expect(result.data.stall.partialThought).toBe('Stavo elaborando la query...');
+      } else {
+        expect.unreachable('Atteso risultato di tipo stall');
+      }
+    });
+
+    it('ritorna NO_ACTION_SELECTED se il modello termina normalmente senza selezionare azioni', async () => {
+      const adapter = createGeminiAdapter({
+        apiKey: 'fake-key',
+        model: 'gemini-3.5-flash'
+      });
 
       (adapter as any).client = {
         models: {
@@ -300,28 +355,32 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
               {
                 finishReason: FinishReason.STOP,
                 content: {
-                  parts: [{ text: 'Risposta diretta testuale' }]
+                  parts: [{ text: 'Risposta conversazionale senza tool' }]
                 }
               }
             ],
             functionCalls: undefined,
-            text: 'Risposta diretta testuale'
+            text: 'Risposta conversazionale senza tool'
           })
         }
       };
 
       const result = await adapter.infer(sampleTriple);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.data.calls).toHaveLength(1);
-        expect(result.data.calls[0].name).toBe('direct_response');
-        expect(result.data.calls[0].payload).toEqual({ text: 'Risposta diretta testuale' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('NO_ACTION_SELECTED');
+        if (result.error.type === 'NO_ACTION_SELECTED') {
+          expect(result.error.rawResponseText).toBe('Risposta conversazionale senza tool');
+        }
       }
     });
 
     it('intercetta SAFETY_BLOCKED e ritorna modelFail tipizzato', async () => {
-      const adapter = createGeminiAdapter({ apiKey: 'fake-key' });
+      const adapter = createGeminiAdapter({
+        apiKey: 'fake-key',
+        model: 'gemini-3.5-pro'
+      });
 
       (adapter as any).client = {
         models: {
@@ -348,7 +407,10 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
     });
 
     it('intercetta RECITATION_BLOCKED e ritorna modelFail tipizzato', async () => {
-      const adapter = createGeminiAdapter({ apiKey: 'fake-key' });
+      const adapter = createGeminiAdapter({
+        apiKey: 'fake-key',
+        model: 'gemini-3.5-pro'
+      });
 
       (adapter as any).client = {
         models: {
@@ -374,6 +436,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
       const onMetrics = vi.fn();
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',
+        model: 'gemini-3.5-flash',
         onMetrics
       });
 
@@ -381,6 +444,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4)', () => {
         models: {
           generateContent: vi.fn().mockResolvedValue({
             candidates: [{ finishReason: FinishReason.STOP }],
+            functionCalls: [{ name: 'cerca_documenti', args: {} }],
             usageMetadata: {
               promptTokenCount: 50,
               candidatesTokenCount: 20,
