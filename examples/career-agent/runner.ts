@@ -6,6 +6,7 @@ import {
 } from "@formal-agent/core";
 import { createCareerLlamaAdapter } from "./adapter.js";
 import { careerAgent } from "./implementation.js";
+import { abort } from "process";
 
 /**
  * ============================================================================
@@ -43,6 +44,14 @@ export const careerRunner = createRunner({ defaultEngine: false })
   .withRecovery({
     // Gestione resiliente automatica degli errori di rete dei tool
     onToolError: {
+
+      w_leggi_pagina_web: async (error, context) => {
+        if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+          console.warn(`[Recovery] Timeout pagina web (tentativo ${context.attempt}), ritento...`);
+          return { action: 'retry' };
+        }
+        return { action: 'abort' };
+      },
       w_cerca_web: async (error, context) => {
         if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
           console.warn(`[Recovery] Timeout ricerca web (tentativo ${context.attempt}), ritento...`);
@@ -50,14 +59,11 @@ export const careerRunner = createRunner({ defaultEngine: false })
         }
         return { action: 'abort' };
       },
-      w_leggi_pagina_web: async (error, context) => {
-        if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
-          console.warn(`[Recovery] Timeout pagina web (tentativo ${context.attempt}), ritento...`);
-          return { action: 'retry' };
-        }
-        return { action: 'abort' };
-      }
-    }
+
+    },
+    onModelError(error, context) {
+      return { action: "abort" };
+    },
   })
   .withOptions({
     observers: [consoleLogger],

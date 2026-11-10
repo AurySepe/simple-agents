@@ -38,23 +38,46 @@ async function main() {
     });
 
     console.log('\n' + '='.repeat(70));
-    if (outcome.status === 'halt') {
-      const payload = outcome.result.payload;
-      console.log('   ESITO: DESCRIZIONE COMPLETATA');
+    if (!outcome.ok) {
+      console.log('   ❌ ESECUZIONE FALLITA PER ERRORE INFRASTRUTTURALE');
       console.log('='.repeat(70));
-      console.log(`\n📋 Descrizione Generale:\n${payload.descrizione_generale}\n`);
+      console.log(`Tipo errore: ${outcome.error.kind}`);
+      console.log(`Dettaglio:   ${outcome.error.message}`);
+      console.log('='.repeat(70));
+      return;
+    }
 
-      console.log('🔍 Elementi Chiave Rilevati:');
-      for (const elemento of payload.elementi_chiave) {
-        console.log(`  • ${elemento}`);
+    switch (outcome.status) {
+      case 'halt': {
+        const payload = outcome.result.payload;
+        console.log('   ESITO: DESCRIZIONE COMPLETATA');
+        console.log('='.repeat(70));
+        console.log(`\n📋 Descrizione Generale:\n${payload.descrizione_generale}\n`);
+
+        console.log('🔍 Elementi Chiave Rilevati:');
+        for (const elemento of payload.elementi_chiave) {
+          console.log(`  • ${elemento}`);
+        }
+
+        if (payload.testo_rilevato) {
+          console.log(`\n📝 Testo Rilevato:\n${payload.testo_rilevato}`);
+        }
+        break;
       }
 
-      if (payload.testo_rilevato) {
-        console.log(`\n📝 Testo Rilevato:\n${payload.testo_rilevato}`);
+      case 'stall': {
+        console.log('   ⚠️ ESITO: STALLO DELIBERATIVO');
+        console.log('='.repeat(70));
+        console.log(`Dettaglio: ${outcome.stall.message}`);
+        break;
       }
-    } else {
-      console.log(`   ESITO: STALLO O INTERRUZIONE (${outcome.status})`);
-      console.log(`Dettaglio: ${outcome.stall?.message}`);
+
+      case 'suspended': {
+        console.log('   ⏸️ ESITO: INTERRUZIONE / SOSPENSIONE');
+        console.log('='.repeat(70));
+        console.log(`Motivo: ${outcome.reason}`);
+        break;
+      }
     }
     console.log('='.repeat(70));
   } catch (error) {

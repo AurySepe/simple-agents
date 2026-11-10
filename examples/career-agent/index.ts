@@ -29,34 +29,71 @@ async function main() {
   });
 
   console.log("\n" + "=".repeat(70));
-  if (outcome.status === "halt") {
-    switch (outcome.result.type) {
-      case "conferma_pagina_carriere": {
-        console.log("   ESITO: PAGINA CARRIERE TROVATA E CONFERMATA!");
-        console.log("=".repeat(70));
-        console.log(`URL Ufficiale:  ${outcome.result.payload.url}`);
-        console.log(`Motivazione:    ${outcome.result.payload.motivazione}`);
-        break;
-      }
-      case "segnala_pagina_inesistente": {
-        console.log("   ESITO: NESSUNA POSIZIONE APERTA SUL SITO UFFICIALE");
-        console.log("=".repeat(70));
-        console.log(`Dettaglio:      ${outcome.result.payload.motivo}`);
-        break;
-      }
-      case "segnala_ricerca_non_conclusiva": {
-        console.log("   ESITO: RICERCA NON CONCLUSIVA");
-        console.log("=".repeat(70));
-        console.log(`Motivo:         ${outcome.result.payload.motivo}`);
-        break;
-      }
-    }
-    console.log(`Macro-cicli:    ${outcome.macroCycles} | Micro-tick: ${outcome.ticks}`);
-  } else {
-    console.log("   ⚠️ ESECUZIONE TERMINATA IN STALLO");
+  if (!outcome.ok) {
+    console.log("   ❌ ESECUZIONE FALLITA PER ERRORE INFRASTRUTTURALE");
     console.log("=".repeat(70));
-    console.log(`Motivo:         ${outcome.stall.reason}`);
-    console.log(`Dettaglio:      ${outcome.stall.message}`);
+    switch (outcome.error.kind) {
+      case "TOOL_ERROR":
+        console.log(`Tool fallito:    ${outcome.error.toolName}`);
+        console.log(`Tipo errore:     ${outcome.error.error.type}`);
+        console.log(`Dettaglio:       ${outcome.error.message}`);
+        break;
+      case "MODEL_ERROR":
+        console.log(`Modello fallito: ${outcome.error.error.type}`);
+        console.log(`Dettaglio:       ${outcome.error.message}`);
+        break;
+      case "QUIESCENCE_VIOLATION":
+        console.log(`Violazione:      Quiescenza violata in stato ${outcome.error.currentState}`);
+        console.log(`Dettaglio:       ${outcome.error.message}`);
+        break;
+    }
+    console.log(`Stato intatto preservato in q_yield/checkpoint.`);
+    console.log("=".repeat(70));
+    return;
+  }
+
+  // Qui TypeScript sa al 100% che outcome.ok === true
+  switch (outcome.status) {
+    case "halt": {
+      switch (outcome.result.type) {
+        case "conferma_pagina_carriere": {
+          console.log("   ESITO: PAGINA CARRIERE TROVATA E CONFERMATA!");
+          console.log("=".repeat(70));
+          console.log(`URL Ufficiale:  ${outcome.result.payload.url}`);
+          console.log(`Motivazione:    ${outcome.result.payload.motivazione}`);
+          break;
+        }
+        case "segnala_pagina_inesistente": {
+          console.log("   ESITO: NESSUNA POSIZIONE APERTA SUL SITO UFFICIALE");
+          console.log("=".repeat(70));
+          console.log(`Dettaglio:      ${outcome.result.payload.motivo}`);
+          break;
+        }
+        case "segnala_ricerca_non_conclusiva": {
+          console.log("   ESITO: RICERCA NON CONCLUSIVA");
+          console.log("=".repeat(70));
+          console.log(`Motivo:         ${outcome.result.payload.motivo}`);
+          break;
+        }
+      }
+      console.log(`Macro-cicli:    ${outcome.macroCycles} | Micro-tick: ${outcome.ticks}`);
+      break;
+    }
+
+    case "stall": {
+      console.log("   ⚠️ ESECUZIONE TERMINATA IN STALLO");
+      console.log("=".repeat(70));
+      console.log(`Motivo:         ${outcome.stall.reason}`);
+      console.log(`Dettaglio:      ${outcome.stall.message}`);
+      break;
+    }
+
+    case "suspended": {
+      console.log("   ⏸️ ESECUZIONE SOSPESA");
+      console.log("=".repeat(70));
+      console.log(`Motivo:         ${outcome.reason}`);
+      break;
+    }
   }
   console.log("=".repeat(70));
 }

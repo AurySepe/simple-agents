@@ -27,33 +27,56 @@ async function main() {
     });
 
     console.log('\n' + '='.repeat(70));
-    if (outcome.status === 'halt') {
-      const termType = outcome.result.type;
-      const payload = outcome.result.payload as any;
+    if (!outcome.ok) {
+      console.log('   ❌ ESECUZIONE FALLITA PER ERRORE INFRASTRUTTURALE');
+      console.log('='.repeat(70));
+      console.log(`Tipo errore: ${outcome.error.kind}`);
+      console.log(`Dettaglio:   ${outcome.error.message}`);
+      console.log('='.repeat(70));
+      return;
+    }
 
-      if (termType === 'concludi_guida') {
-        console.log('   ESITO: GUIDA TURISTICA COMPLETATA CON SUCCESSO 🏛️');
-        console.log('='.repeat(70));
-        console.log(`\n📍 Monumento: ${payload.monumento} (${payload.citta})`);
-        console.log(`\n👁️  Descrizione Visiva:\n${payload.descrizione_visiva}`);
-        console.log(`\n🕒 Orari di Apertura:\n${payload.orari}`);
-        console.log(`\n🎟️  Biglietti:\n${payload.prezzo}`);
-        console.log(`\n☀️  Meteo e Consigli Pratici:\n${payload.meteo_e_consigli}`);
-      } else if (termType === 'guida_non_disponibile') {
-        console.log('   ESITO: GUIDA NON DISPONIBILE ⚠️');
-        console.log('='.repeat(70));
-        console.log(`\n🚫 Motivo:\n${payload.motivo}`);
-        console.log(`\n🙏 Messaggio di Scuse:\n${payload.messaggio_scuse}`);
-        if (payload.soggetto_rilevato) {
-          console.log(`\n🔍 Soggetto Rilevato:\n${payload.soggetto_rilevato}`);
+    switch (outcome.status) {
+      case 'halt': {
+        const termType = outcome.result.type;
+        const payload = outcome.result.payload as any;
+
+        if (termType === 'concludi_guida') {
+          console.log('   ESITO: GUIDA TURISTICA COMPLETATA CON SUCCESSO 🏛️');
+          console.log('='.repeat(70));
+          console.log(`\n📍 Monumento: ${payload.monumento} (${payload.citta})`);
+          console.log(`\n👁️  Descrizione Visiva:\n${payload.descrizione_visiva}`);
+          console.log(`\n🕒 Orari di Apertura:\n${payload.orari}`);
+          console.log(`\n🎟️  Biglietti:\n${payload.prezzo}`);
+          console.log(`\n☀️  Meteo e Consigli Pratici:\n${payload.meteo_e_consigli}`);
+        } else if (termType === 'guida_non_disponibile') {
+          console.log('   ESITO: GUIDA NON DISPONIBILE ⚠️');
+          console.log('='.repeat(70));
+          console.log(`\n🚫 Motivo:\n${payload.motivo}`);
+          console.log(`\n🙏 Messaggio di Scuse:\n${payload.messaggio_scuse}`);
+          if (payload.soggetto_rilevato) {
+            console.log(`\n🔍 Soggetto Rilevato:\n${payload.soggetto_rilevato}`);
+          }
+        } else {
+          console.log(`   ESITO TERMINALE SCONOSCIUTO: ${termType}`);
+          console.log(JSON.stringify(payload, null, 2));
         }
-      } else {
-        console.log(`   ESITO TERMINALE SCONOSCIUTO: ${termType}`);
-        console.log(JSON.stringify(payload, null, 2));
+        break;
       }
-    } else {
-      console.log(`   ESITO: STALLO O INTERRUZIONE (${outcome.status})`);
-      console.log(`Dettaglio: ${outcome.stall?.message}`);
+
+      case 'stall': {
+        console.log('   ⚠️ ESITO: STALLO DELIBERATIVO');
+        console.log('='.repeat(70));
+        console.log(`Dettaglio: ${outcome.stall.message}`);
+        break;
+      }
+
+      case 'suspended': {
+        console.log('   ⏸️ ESITO: INTERRUZIONE / SOSPENSIONE');
+        console.log('='.repeat(70));
+        console.log(`Motivo: ${outcome.reason}`);
+        break;
+      }
     }
     console.log('='.repeat(70));
   } catch (error) {
