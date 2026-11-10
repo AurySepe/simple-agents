@@ -118,8 +118,8 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
     const resMock = await mockAgent.world.executeTool('cerca_cliente', { cliente_id: 1 });
     const resLive = await liveAgent.world.executeTool('cerca_cliente', { cliente_id: 1 });
 
-    expect(resMock).toEqual({ nome: 'Mock User', categoria: 'STANDARD' });
-    expect(resLive).toEqual({ nome: 'Utente 1', categoria: 'VIP' });
+    expect(resMock).toEqual({ ok: true, data: { nome: 'Mock User', categoria: 'STANDARD' } });
+    expect(resLive).toEqual({ ok: true, data: { nome: 'Utente 1', categoria: 'VIP' } });
   });
 
   it('deve eseguire con successo il flusso end-to-end con run()', async () => {

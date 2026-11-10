@@ -9,7 +9,7 @@ import {
   AgentManifest,
   AgentState
 } from '../types/index.js';
-import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult, SuspendedRunResult } from '../engine/orchestrator.js';
+import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult, SuspendedRunResult, ErrorRunResult } from '../engine/orchestrator.js';
 import { WorldRegistry } from '../world/index.js';
 import type { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 import type { BehavioralTrajectory } from './trajectory-extractor.js';
@@ -136,9 +136,38 @@ export type AgentRunResult<TTerminations extends Record<string, TerminationContr
       result: InferTerminationsUnion<TTerminations>;
       stall?: never;
       reason?: never;
+      error?: never;
     }
   | StallRunResult
-  | SuspendedRunResult;
+  | SuspendedRunResult
+  | ErrorRunResult;
+
+/**
+ * ============================================================================
+ * ERRORI E RESULT DI PARSING DELLO STATO: StateParseResult
+ * ============================================================================
+ */
+export type StateParseErrorCode =
+  | 'NOT_AN_OBJECT'
+  | 'INVALID_IDENTITY'
+  | 'INVALID_MISSION'
+  | 'SCHEMA_VIOLATION'
+  | 'UNDECLARED_TOOL'
+  | 'INVALID_KNOWLEDGE'
+  | 'INVALID_EPISODIC_LOG';
+
+export interface StateParseError {
+  code: StateParseErrorCode;
+  message: string;
+  details?: unknown;
+}
+
+export type StateParseResult<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined
+> =
+  | { ok: true; state: TypedAgentState<TTools, TStateSchema>; error?: never }
+  | { ok: false; error: StateParseError; state?: never };
 
 /**
  * Mapped type che esige l'esatta implementazione per ciascun tool dichiarato nel contratto.
@@ -201,9 +230,9 @@ export interface AgentDefinition<
   ): ImplementedAgent<TTools, TStateSchema, TTerminations>;
   /**
    * Convalida e raffina a runtime uno stato 'unknown'
-   * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
+   * restituendo un Result tipizzato (StateParseResult) senza lanciare eccezioni.
    */
-  parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;
+  parseState(raw: unknown): StateParseResult<TTools, TStateSchema>;
 
   /**
    * Crea un EvaluationCollector fortemente tipizzato sullo stato (Ds), tool (Ta) e terminazioni di questo agente.
@@ -242,9 +271,9 @@ export interface ImplementedAgent<
 
   /**
    * Convalida e raffina a runtime uno stato 'unknown'
-   * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
+   * restituendo un Result tipizzato (StateParseResult) senza lanciare eccezioni.
    */
-  parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;
+  parseState(raw: unknown): StateParseResult<TTools, TStateSchema>;
 
   /**
    * Spawna un'istanza dell'agente nel runtime collegandola automaticamente al Mondo implementato.

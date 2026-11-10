@@ -252,11 +252,14 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         ]
       };
 
-      const parsed = bankingAgentDef.parseState(validPayload);
-      expect(parsed.I).toBe('CustomBankingIdentity');
-      expect(parsed.Ds.accountNumber).toBe('IT-12345');
-      expect(parsed.Ds.balance).toBe(100);
-      expect(parsed.Ta).toEqual(['deposit']);
+      const parseResult = bankingAgentDef.parseState(validPayload);
+      expect(parseResult.ok).toBe(true);
+      if (parseResult.ok) {
+        expect(parseResult.state.I).toBe('CustomBankingIdentity');
+        expect(parseResult.state.Ds.accountNumber).toBe('IT-12345');
+        expect(parseResult.state.Ds.balance).toBe(100);
+        expect(parseResult.state.Ta).toEqual(['deposit']);
+      }
     });
 
     it('dovrebbe rifiutare stringhe e tipi non-oggetto esigendo un oggetto JavaScript in memoria', () => {
@@ -269,17 +272,29 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       };
 
       const jsonStr = JSON.stringify(validPayload);
-      // Rifiuta stringhe grezze, numeri, null
-      expect(() => bankingAgentDef.parseState(jsonStr)).toThrow(StateValidationError);
-      expect(() => bankingAgentDef.parseState(123)).toThrow(StateValidationError);
-      expect(() => bankingAgentDef.parseState(null)).toThrow(StateValidationError);
+      // Rifiuta stringhe grezze, numeri, null con Result { ok: false }
+      expect(bankingAgentDef.parseState(jsonStr)).toEqual({
+        ok: false,
+        error: expect.objectContaining({ code: 'NOT_AN_OBJECT' })
+      });
+      expect(bankingAgentDef.parseState(123)).toEqual({
+        ok: false,
+        error: expect.objectContaining({ code: 'NOT_AN_OBJECT' })
+      });
+      expect(bankingAgentDef.parseState(null)).toEqual({
+        ok: false,
+        error: expect.objectContaining({ code: 'NOT_AN_OBJECT' })
+      });
 
       // Accetta l'oggetto già deserializzato da qualsiasi codec (JSON, Protobuf, DB)
-      const parsed = bankingAgentDef.parseState(JSON.parse(jsonStr));
-      expect(parsed.Ds.accountNumber).toBe('IT-999');
+      const parseOk = bankingAgentDef.parseState(JSON.parse(jsonStr));
+      expect(parseOk.ok).toBe(true);
+      if (parseOk.ok) {
+        expect(parseOk.state.Ds.accountNumber).toBe('IT-999');
+      }
     });
 
-    it('dovrebbe lanciare StateValidationError se Ds viola lo stateSchema Zod', () => {
+    it('dovrebbe restituire errore SCHEMA_VIOLATION se Ds viola lo stateSchema Zod', () => {
       const invalidDsPayload = {
         I: 'BankingAgent',
         Ms: 'Missione',
@@ -288,12 +303,14 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         Ep: []
       };
 
-      expect(() => bankingAgentDef.parseState(invalidDsPayload)).toThrow(
-        StateValidationError
-      );
+      const result = bankingAgentDef.parseState(invalidDsPayload);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('SCHEMA_VIOLATION');
+      }
     });
 
-    it('dovrebbe lanciare StateValidationError se Ta contiene tool non dichiarati nel contratto', () => {
+    it('dovrebbe restituire errore UNDECLARED_TOOL se Ta contiene tool non dichiarati nel contratto', () => {
       const undeclaredToolPayload = {
         I: 'BankingAgent',
         Ms: 'Missione',
@@ -302,9 +319,12 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         Ep: []
       };
 
-      expect(() => bankingAgentDef.parseState(undeclaredToolPayload)).toThrow(
-        /Tool 'unauthorized_withdraw' in 'Ta' is not declared/
-      );
+      const result = bankingAgentDef.parseState(undeclaredToolPayload);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNDECLARED_TOOL');
+        expect(result.error.message).toContain("Tool 'unauthorized_withdraw' in 'Ta' is not declared");
+      }
     });
   });
 
@@ -391,7 +411,10 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const serializedJsonString = JSON.stringify(serializeAgentState(suspendedSnapshot));
 
       // FASE 2: In un contesto separato (nuova esecuzione), convalidiamo l'oggetto deserializzato con il contratto
-      const validatedState = implementedAgent.parseState(JSON.parse(serializedJsonString));
+      const parseOutcome = implementedAgent.parseState(JSON.parse(serializedJsonString));
+      expect(parseOutcome.ok).toBe(true);
+      if (!parseOutcome.ok) throw new Error(parseOutcome.error.message);
+      const validatedState = parseOutcome.state;
       expect(validatedState.Ds.accountId).toBe('ACC-1');
 
       // FASE 3: Riprendiamo l'agente con il RunnerBuilder ripartendo dallo stato serializzato
@@ -490,7 +513,10 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         const json = JSON.stringify(serialized);
 
         // Ora riprendiamo in un nuovo runner senza abort signal
-        const restoredState = implemented.parseState(JSON.parse(json));
+        const parseOutcome = implemented.parseState(JSON.parse(json));
+        expect(parseOutcome.ok).toBe(true);
+        if (!parseOutcome.ok) throw new Error(parseOutcome.error.message);
+        const restoredState = parseOutcome.state;
         const finalResult = await runner.runFromState(restoredState);
 
         expect(finalResult.status).toBe('halt');
@@ -631,7 +657,10 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         const serializedJson = JSON.stringify(serializeAgentState(turn1Result.state));
 
         // TURNO 2: Ripartiamo dallo stato serializzato in halt, passando un nuovo stimulus!
-        const parsedState = implemented.parseState(JSON.parse(serializedJson));
+        const parseOutcome = implemented.parseState(JSON.parse(serializedJson));
+        expect(parseOutcome.ok).toBe(true);
+        if (!parseOutcome.ok) throw new Error(parseOutcome.error.message);
+        const parsedState = parseOutcome.state;
         const turn2Result = await runner.runFromState(parsedState, {
           userContent: { kind: 'text', text: 'Secondo messaggio' }
         });

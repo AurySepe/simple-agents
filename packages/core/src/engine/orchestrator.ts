@@ -120,6 +120,7 @@ export interface HaltRunResult<T = DataValue> extends BaseRunResult {
   result: ExitResult<T>;
   stall?: never;
   reason?: never;
+  error?: never;
 }
 
 export interface StallRunResult extends BaseRunResult {
@@ -127,6 +128,7 @@ export interface StallRunResult extends BaseRunResult {
   stall: DeliberationStall;
   result?: never;
   reason?: never;
+  error?: never;
 }
 
 export interface SuspendedRunResult extends BaseRunResult {
@@ -134,12 +136,39 @@ export interface SuspendedRunResult extends BaseRunResult {
   reason: 'aborted' | 'cycle_limit' | 'tick_limit';
   stall?: never;
   result?: never;
+  error?: never;
+}
+
+export interface ExecutionErrorDetail {
+  code: 'TOOL_EXECUTION_ERROR' | 'QUIESCENCE_VIOLATION' | 'UNHANDLED_ERROR';
+  message: string;
+  details?: unknown;
+}
+
+export interface ErrorRunResult extends BaseRunResult {
+  status: 'error';
+  error: ExecutionErrorDetail;
+  result?: never;
+  stall?: never;
+  reason?: never;
 }
 
 export type RunResult<T = DataValue> =
   | HaltRunResult<T>
   | StallRunResult
-  | SuspendedRunResult;
+  | SuspendedRunResult
+  | ErrorRunResult;
+
+export type FeedPayloadResult =
+  | { ok: true; error?: never }
+  | {
+      ok: false;
+      error: {
+        code: 'QUIESCENCE_VIOLATION';
+        message: string;
+        currentPhase: FSMControlState;
+      };
+    };
 
 /**
  * ============================================================================
@@ -403,15 +432,21 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
   /**
    * Invia un payload esogeno all'agente risvegliandolo.
+   * Restituisce un FeedPayloadResult per segnalare violazioni di quiescenza senza eccezioni.
    */
-  public feedPayload(payload: WakeupPayload): void {
+  public feedPayload(payload: WakeupPayload): FeedPayloadResult {
     // Validazione rigorosa del Vincolo di Quiescenza:
     // Lo stimolo utente può essere fornito esclusivamente quando l'agente è a riposo (q_sleep o q_halt)
     if (payload.userContent !== undefined) {
       if (this.fsm.phase !== 'q_sleep' && this.fsm.phase !== 'q_halt') {
-        throw new Error(
-          `User stimulus can only be provided when the agent is in a quiescent state ('q_sleep' or 'q_halt'). Current control state: '${this.fsm.phase}'.`
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'QUIESCENCE_VIOLATION',
+            message: `User stimulus can only be provided when the agent is in a quiescent state ('q_sleep' or 'q_halt'). Current control state: '${this.fsm.phase}'.`,
+            currentPhase: this.fsm.phase
+          }
+        };
       }
     }
 
@@ -449,10 +484,12 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
       this.transitionTo({ phase: 'q_exec' }, 'stimulus_received');
     }
+
+    return { ok: true };
   }
 
-  public wakeup(payload: WakeupPayload): void {
-    this.feedPayload(payload);
+  public wakeup(payload: WakeupPayload): FeedPayloadResult {
+    return this.feedPayload(payload);
   }
 
   private buildInferenceTriple(): InferenceTriple {
@@ -1180,7 +1217,24 @@ export class AgentInstance<T extends DataValue = DataValue> {
 
     try {
       if (options?.userContent !== undefined) {
-        this.feedPayload({ userContent: options.userContent });
+        const feedRes = this.feedPayload({ userContent: options.userContent });
+        if (!feedRes.ok) {
+          void this.emitEvent({
+            type: 'execution_error',
+            timestamp: new Date(),
+            macroCycle: this.c,
+            tick: this.t,
+            error: feedRes.error,
+            stateSnapshot: this.getSnapshot()
+          });
+          return {
+            status: 'error',
+            error: feedRes.error,
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
+        }
       }
 
       while (true) {
@@ -1284,16 +1338,16 @@ export class AgentInstance<T extends DataValue = DataValue> {
         }
 
         // Dispatch asincrono in parallelo dei tool di mondo in q_yield
-        const worldResults = await Promise.all(
+        const toolExecutionOutcomes = await Promise.all(
           outcome.pendingCalls.map(async (call) => {
             if (options?.beforeToolExecution) {
               await options.beforeToolExecution(call.name, call.payload);
             }
             const startTime = Date.now();
-            try {
-              const res = await this.world.executeTool(call.name, call.payload);
-              const durationMs = Date.now() - startTime;
+            const execResult = await this.world.executeTool(call.name, call.payload);
+            const durationMs = Date.now() - startTime;
 
+            if (execResult.ok) {
               void this.emitEvent({
                 type: 'world_action',
                 timestamp: new Date(),
@@ -1302,17 +1356,15 @@ export class AgentInstance<T extends DataValue = DataValue> {
                 toolId: call.name,
                 args: call.payload,
                 status: 'success',
-                result: res,
+                result: execResult.data,
                 durationMs
               });
 
               if (options?.afterToolExecution) {
-                await options.afterToolExecution(call.name, call.payload, res);
+                await options.afterToolExecution(call.name, call.payload, execResult.data);
               }
-              return { callId: call.id, result: res };
-            } catch (err: unknown) {
-              const durationMs = Date.now() - startTime;
-              const errorObj = err instanceof Error ? err : new Error(String(err));
+              return { ok: true as const, callId: call.id, result: execResult.data };
+            } else {
               void this.emitEvent({
                 type: 'world_action',
                 timestamp: new Date(),
@@ -1321,13 +1373,43 @@ export class AgentInstance<T extends DataValue = DataValue> {
                 toolId: call.name,
                 args: call.payload,
                 status: 'failure',
-                error: errorObj,
+                error: execResult.error.message,
                 durationMs
               });
-              throw err;
+              return { ok: false as const, callId: call.id, error: execResult.error };
             }
           })
         );
+
+        // Se un'azione fisica è fallita, interrompiamo l'esecuzione e restituiamo l'errore tipizzato
+        const firstFailed = toolExecutionOutcomes.find((o) => !o.ok);
+        if (firstFailed && !firstFailed.ok) {
+          const errDetail: ExecutionErrorDetail = {
+            code: 'TOOL_EXECUTION_ERROR',
+            message: firstFailed.error.message,
+            details: firstFailed.error
+          };
+          void this.emitEvent({
+            type: 'execution_error',
+            timestamp: new Date(),
+            macroCycle: this.c,
+            tick: this.t,
+            error: errDetail,
+            stateSnapshot: this.getSnapshot()
+          });
+          return {
+            status: 'error',
+            error: errDetail,
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
+        }
+
+        const worldResults = toolExecutionOutcomes.map((o) => {
+          if (!o.ok) throw new Error('Unreachable');
+          return { callId: o.callId, result: o.result };
+        });
 
         this.feedPayload({ worldResults });
       }

@@ -397,24 +397,29 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
       const agent = runtime.spawnAgent(manifest, model);
 
       // In q_sleep: ammissibile
-      expect(() =>
-        agent.feedPayload({ userContent: { kind: 'text', text: 'Avvio' } })
-      ).not.toThrow();
+      const initialFeed = agent.feedPayload({ userContent: { kind: 'text', text: 'Avvio' } });
+      expect(initialFeed).toEqual({ ok: true });
 
-      // Ora è in q_exec: uno stimolo utente deve lanciare errore
-      expect(() =>
-        agent.feedPayload({ userContent: { kind: 'text', text: 'Interrompi' } })
-      ).toThrow(/User stimulus can only be provided when the agent is in a quiescent state/);
+      // Ora è in q_exec: uno stimolo utente deve restituire un errore tipizzato di quiescenza
+      const execFeed = agent.feedPayload({ userContent: { kind: 'text', text: 'Interrompi' } });
+      expect(execFeed.ok).toBe(false);
+      if (!execFeed.ok) {
+        expect(execFeed.error.code).toBe('QUIESCENCE_VIOLATION');
+        expect(execFeed.error.currentPhase).toBe('q_exec');
+      }
 
       // Step verso q_yield
       const outcome = await agent.step();
       expect(outcome.status).toBe('yield');
       expect(agent.getControlState()).toBe('q_yield');
 
-      // In q_yield: uno stimolo utente deve lanciare errore esplicito
-      expect(() =>
-        agent.feedPayload({ userContent: { kind: 'text', text: 'Messaggio durante i tool' } })
-      ).toThrow(/User stimulus can only be provided when the agent is in a quiescent state/);
+      // In q_yield: uno stimolo utente deve restituire errore tipizzato di quiescenza
+      const yieldFeed = agent.feedPayload({ userContent: { kind: 'text', text: 'Messaggio durante i tool' } });
+      expect(yieldFeed.ok).toBe(false);
+      if (!yieldFeed.ok) {
+        expect(yieldFeed.error.code).toBe('QUIESCENCE_VIOLATION');
+        expect(yieldFeed.error.currentPhase).toBe('q_yield');
+      }
     });
   });
 });

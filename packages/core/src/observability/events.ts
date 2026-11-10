@@ -89,6 +89,16 @@ export interface SuspendEvent extends BaseAgentEvent {
   stateSnapshot: Readonly<AgentState>;
 }
 
+export interface ExecutionErrorEvent extends BaseAgentEvent {
+  type: 'execution_error';
+  error: {
+    code: 'TOOL_EXECUTION_ERROR' | 'QUIESCENCE_VIOLATION' | 'UNHANDLED_ERROR';
+    message: string;
+    details?: unknown;
+  };
+  stateSnapshot: Readonly<AgentState>;
+}
+
 export type AgentEvent =
   | MacroCycleStartEvent
   | StepStartEvent
@@ -99,4 +109,5 @@ export type AgentEvent =
   | YieldEvent
   | HaltEvent
   | StallEvent
-  | SuspendEvent;
+  | SuspendEvent
+  | ExecutionErrorEvent;

@@ -82,7 +82,10 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     expect(runResult.status).toBe('halt');
 
     // 1. Validazione e tipizzazione dello stato mediante parseState
-    const typedState = implemented.parseState(runResult.state);
+    const parseResult = implemented.parseState(runResult.state);
+    expect(parseResult.ok).toBe(true);
+    if (!parseResult.ok) throw new Error(parseResult.error.message);
+    const typedState = parseResult.state;
 
     // 2. Estrazione della traiettoria dallo stato tipizzato
     const trajectory = implemented.extractTrajectory(typedState);
@@ -157,14 +160,21 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     const serialized = serializeAgentState(runResult.state);
     const jsonString = JSON.stringify(serialized);
 
-    // Verifica che parseState rifiuti direttamente la stringa grezza
-    expect(() => agentDef.parseState(jsonString)).toThrow();
+    // Verifica che parseState rifiuti direttamente la stringa grezza con un Result { ok: false }
+    const invalidParse = agentDef.parseState(jsonString);
+    expect(invalidParse.ok).toBe(false);
+    if (!invalidParse.ok) {
+      expect(invalidParse.error.code).toBe('NOT_AN_OBJECT');
+    }
 
     // Passo 1: il driver/codec decodifica il wire format in oggetto JavaScript
     const decodedObject = JSON.parse(jsonString);
 
     // Passo 2: validazione e raffinamento semantico contro il contratto dell'agente
-    const typedState = agentDef.parseState(decodedObject);
+    const parseResult = agentDef.parseState(decodedObject);
+    expect(parseResult.ok).toBe(true);
+    if (!parseResult.ok) throw new Error(parseResult.error.message);
+    const typedState = parseResult.state;
 
     // Passo 3: extractTrajectory accetta SOLO l'oggetto tipizzato (TypedAgentState)
     const offlineTrajectory = agentDef.extractTrajectory(typedState);
@@ -207,7 +217,10 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
     const runResult = await implemented.run(engine, model, { userContent: 'Test loop' });
 
-    const typedState = implemented.parseState(runResult.state);
+    const parseResult = implemented.parseState(runResult.state);
+    expect(parseResult.ok).toBe(true);
+    if (!parseResult.ok) throw new Error(parseResult.error.message);
+    const typedState = parseResult.state;
     const trajectory = implemented.extractTrajectory(typedState);
 
     expect(trajectory.summary.redundantCallsCount).toBe(1);

@@ -12,6 +12,23 @@ import {
  * ============================================================================
  * Il catalogo formale delle funzioni fisiche esogene iniettate nell'Orchestratore.
  */
+export type ToolExecutionErrorCode =
+  | 'TOOL_NOT_FOUND'
+  | 'SCHEMA_VALIDATION_ERROR'
+  | 'EXECUTION_REJECTED';
+
+export interface ToolExecutionError {
+  code: ToolExecutionErrorCode;
+  toolId: string;
+  message: string;
+  details?: unknown;
+  cause?: unknown;
+}
+
+export type ToolExecutionResult =
+  | { ok: true; data: ToolResult; error?: never }
+  | { ok: false; error: ToolExecutionError; data?: never };
+
 export interface WorldRegistry {
   /**
    * Restituisce la definizione di un tool del mondo (per il modello LLM).
@@ -20,10 +37,10 @@ export interface WorldRegistry {
 
   /**
    * Esegue un tool fisico verso il mondo esterno W.
-   * Valida automaticamente lo schema Zod e inoltra i parametri validati al tool.
+   * Valida automaticamente lo schema Zod e restituisce un ToolExecutionResult tipizzato (ok/error).
    * Rispetta il Teorema di Non-Invasività: non riceve lo stato dell'agente.
    */
-  executeTool(toolId: string, args: DataRecord): Promise<ToolResult>;
+  executeTool(toolId: string, args: DataRecord): Promise<ToolExecutionResult>;
 
   /**
    * Elenco completo dei tool disponibili nel Mondo W.
@@ -96,38 +113,48 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
       }));
     },
 
-    async executeTool(toolId: string, rawArgs: DataRecord): Promise<ToolResult> {
+    async executeTool(toolId: string, rawArgs: DataRecord): Promise<ToolExecutionResult> {
       const tool = toolsMap.get(toolId);
       if (!tool) {
-        throw new WorldToolError(
-          toolId,
-          'not_found',
-          `Tool '${toolId}' was not found in World catalog W.`
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'TOOL_NOT_FOUND',
+            toolId,
+            message: `Tool '${toolId}' was not found in World catalog W.`
+          }
+        };
       }
 
       // Validazione automatica Zod dei parametri attesi
       const parseResult = tool.parameters.safeParse(rawArgs);
       if (!parseResult.success) {
-        throw new WorldToolError(
-          toolId,
-          'invalid_parameters',
-          `Parameters provided for tool '${toolId}' do not conform to expected schema.`,
-          parseResult.error.format()
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'SCHEMA_VALIDATION_ERROR',
+            toolId,
+            message: `Parameters provided for tool '${toolId}' do not conform to expected schema.`,
+            details: parseResult.error.format()
+          }
+        };
       }
 
       // Esecuzione protetta con inoltro dei parametri validati e tipizzati
       try {
-        return await tool.execute(parseResult.data);
+        const data = await tool.execute(parseResult.data);
+        return { ok: true, data };
       } catch (err: unknown) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
-        throw new WorldToolError(
-          toolId,
-          'execution_failed',
-          `Error during execution of tool '${toolId}': ${errorObj.message}`,
-          errorObj
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'EXECUTION_REJECTED',
+            toolId,
+            message: `Error during execution of tool '${toolId}': ${errorObj.message}`,
+            cause: errorObj
+          }
+        };
       }
     }
   };

@@ -377,6 +377,14 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write('');
         break;
       }
+
+      case 'execution_error': {
+        this.write('');
+        this.write(pfx + this.bold(this.red(`❌ [Execution Error - ${event.error.code}]`)));
+        this.write(pfx + `   ${this.red(event.error.message)}`);
+        this.write('');
+        break;
+      }
     }
   }
 

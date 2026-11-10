@@ -13,7 +13,16 @@ import {
   TimeIndex,
   ValidToolCall
 } from '../types/index.js';
-import { AgentContract, ToolContract, TypedAgentState } from './types.js';
+import {
+  AgentContract,
+  StateParseError,
+  StateParseErrorCode,
+  StateParseResult,
+  ToolContract,
+  TypedAgentState
+} from './types.js';
+
+export type { StateParseError, StateParseErrorCode, StateParseResult };
 
 /**
  * ============================================================================
@@ -177,7 +186,8 @@ export function deriveFSMState<TTerm = DataValue>(
  * FACTORY DEL PARSER DELLO STATO: createAgentStateParser
  * ============================================================================
  * Compone automaticamente un validatore type-safe a partire dalla specifica
- * dell'AgentContract.
+ * dell'AgentContract, restituendo un Result tipizzato (StateParseResult)
+ * senza mai lanciare eccezioni.
  */
 export function createAgentStateParser<
   TTools extends Record<string, ToolContract>,
@@ -185,27 +195,39 @@ export function createAgentStateParser<
   TTerminations extends Record<string, any> = Record<string, any>
 >(
   contract: AgentContract<TTools, TStateSchema, TTerminations>
-): (raw: unknown) => TypedAgentState<TTools, TStateSchema> {
+): (raw: unknown) => StateParseResult<TTools, TStateSchema> {
   const allowedToolKeys = new Set(Object.keys(contract.tools ?? {}));
 
-  return function parseState(raw: unknown): TypedAgentState<TTools, TStateSchema> {
+  return function parseState(raw: unknown): StateParseResult<TTools, TStateSchema> {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-      throw new StateValidationError(
-        'Agent state must be a non-null object.'
-      );
+      return {
+        ok: false,
+        error: {
+          code: 'NOT_AN_OBJECT',
+          message: 'Agent state must be a non-null object.'
+        }
+      };
     }
     const candidate: any = raw;
 
     // 1. Validazione Identità (I) e Missione (Ms)
     if (typeof candidate.I !== 'string' || candidate.I.trim().length === 0) {
-      throw new StateValidationError(
-        "Missing or invalid agent identity 'I' (must be a non-empty string)."
-      );
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_IDENTITY',
+          message: "Missing or invalid agent identity 'I' (must be a non-empty string)."
+        }
+      };
     }
     if (typeof candidate.Ms !== 'string') {
-      throw new StateValidationError(
-        "Missing or invalid agent mission 'Ms' (must be a string)."
-      );
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_MISSION',
+          message: "Missing or invalid agent mission 'Ms' (must be a string)."
+        }
+      };
     }
 
     // 2. Validazione Memoria Dati (Ds)
@@ -213,37 +235,57 @@ export function createAgentStateParser<
     if (contract.stateSchema) {
       const parsedDs = contract.stateSchema.safeParse(candidate.Ds);
       if (!parsedDs.success) {
-        throw new StateValidationError(
-          `Agent state 'Ds' does not conform to the contract 'stateSchema': ${parsedDs.error.message}`,
-          parsedDs.error.format()
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'SCHEMA_VIOLATION',
+            message: `Agent state 'Ds' does not conform to the contract 'stateSchema': ${parsedDs.error.message}`,
+            details: parsedDs.error.format()
+          }
+        };
       }
       validatedDs = parsedDs.data;
     } else {
       if (!isDataRecord(validatedDs)) {
-        throw new StateValidationError(
-          "Agent state 'Ds' must be a structured key-value record."
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'SCHEMA_VIOLATION',
+            message: "Agent state 'Ds' must be a structured key-value record."
+          }
+        };
       }
     }
 
     // 3. Validazione Toolbelt (Ta) - supporta sia Array che Set (da runtime AgentState)
     const rawTa = candidate.Ta instanceof Set ? Array.from(candidate.Ta) : candidate.Ta;
     if (!Array.isArray(rawTa)) {
-      throw new StateValidationError(
-        "Agent state 'Ta' must be an array of tool ID strings."
-      );
+      return {
+        ok: false,
+        error: {
+          code: 'UNDECLARED_TOOL',
+          message: "Agent state 'Ta' must be an array of tool ID strings."
+        }
+      };
     }
     for (const toolId of rawTa) {
       if (typeof toolId !== 'string') {
-        throw new StateValidationError(
-          `Found non-string tool ID in 'Ta': ${String(toolId)}`
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'UNDECLARED_TOOL',
+            message: `Found non-string tool ID in 'Ta': ${String(toolId)}`
+          }
+        };
       }
       if (!allowedToolKeys.has(toolId)) {
-        throw new StateValidationError(
-          `Tool '${toolId}' in 'Ta' is not declared in the agent contract tools.`
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'UNDECLARED_TOOL',
+            message: `Tool '${toolId}' in 'Ta' is not declared in the agent contract tools.`
+          }
+        };
       }
     }
 
@@ -252,15 +294,23 @@ export function createAgentStateParser<
     if (candidate.Ka !== undefined && candidate.Ka !== null) {
       const rawKa = candidate.Ka instanceof Map ? Array.from(candidate.Ka.values()) : candidate.Ka;
       if (!Array.isArray(rawKa)) {
-        throw new StateValidationError(
-          "Agent state 'Ka' must be an array of Concept objects."
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_KNOWLEDGE',
+            message: "Agent state 'Ka' must be an array of Concept objects."
+          }
+        };
       }
       for (const [idx, item] of rawKa.entries()) {
         if (!item || typeof item.name !== 'string' || typeof item.descrizione !== 'string' || typeof item.corpo !== 'string') {
-          throw new StateValidationError(
-            `Knowledge concept at index ${idx} must have 'name', 'descrizione' and 'corpo' string properties.`
-          );
+          return {
+            ok: false,
+            error: {
+              code: 'INVALID_KNOWLEDGE',
+              message: `Knowledge concept at index ${idx} must have 'name', 'descrizione' and 'corpo' string properties.`
+            }
+          };
         }
       }
       validatedKa = rawKa;
@@ -268,30 +318,45 @@ export function createAgentStateParser<
 
     // 5. Validazione Traccia Episodica (Ep)
     if (!Array.isArray(candidate.Ep)) {
-      throw new StateValidationError(
-        "Agent state 'Ep' must be an array of episodic messages."
-      );
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_EPISODIC_LOG',
+          message: "Agent state 'Ep' must be an array of episodic messages."
+        }
+      };
     }
     for (const [idx, msg] of candidate.Ep.entries()) {
       if (!msg || typeof msg !== 'object') {
-        throw new StateValidationError(
-          `Episodic event at index ${idx} must be a valid message object.`
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_EPISODIC_LOG',
+            message: `Episodic event at index ${idx} must be a valid message object.`
+          }
+        };
       }
       if (!['stimulus', 'thought', 'action', 'result'].includes(msg.type)) {
-        throw new StateValidationError(
-          `Episodic event at index ${idx} has invalid event type '${msg.type}'.`
-        );
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_EPISODIC_LOG',
+            message: `Episodic event at index ${idx} has invalid event type '${msg.type}'.`
+          }
+        };
       }
     }
 
     return {
-      I: candidate.I,
-      Ms: candidate.Ms,
-      Ds: validatedDs,
-      Ta: rawTa as (keyof TTools & string)[],
-      Ka: validatedKa,
-      Ep: candidate.Ep as Message[]
+      ok: true,
+      state: {
+        I: candidate.I,
+        Ms: candidate.Ms,
+        Ds: validatedDs,
+        Ta: rawTa as (keyof TTools & string)[],
+        Ka: validatedKa,
+        Ep: candidate.Ep as Message[]
+      }
     };
   };
 }

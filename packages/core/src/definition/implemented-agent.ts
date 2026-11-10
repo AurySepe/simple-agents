@@ -17,6 +17,7 @@ import {
   AgentContract,
   AgentRunResult,
   ImplementedAgent,
+  StateParseResult,
   TerminationContractDef,
   ToolContract,
   TypedAgentState
@@ -32,7 +33,7 @@ export class ImplementedAgentImpl<
 > implements ImplementedAgent<TTools, TStateSchema, TTerminations> {
   readonly manifest: AgentManifest<DataValue>;
   readonly world: WorldRegistry;
-  private readonly parser: (raw: unknown) => TypedAgentState<TTools, TStateSchema>;
+  private readonly parser: (raw: unknown) => StateParseResult<TTools, TStateSchema>;
 
   constructor(
     readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
@@ -129,7 +130,7 @@ export class ImplementedAgentImpl<
     return new EvaluationCollector<TTools, TStateSchema, TTerminations>();
   }
 
-  public parseState(raw: unknown): TypedAgentState<TTools, TStateSchema> {
+  public parseState(raw: unknown): StateParseResult<TTools, TStateSchema> {
     return this.parser(raw);
   }
 

@@ -29,7 +29,7 @@ describe('World Registry (Livello 2): Validazione automatica ed esecuzione non-i
 
     // Esecuzione diretta
     const res = await world.executeTool('w_ordine', { id: 10 });
-    expect(res).toEqual({ totale: 150, stato: 'APERTO_10' });
+    expect(res).toEqual({ ok: true, data: { totale: 150, stato: 'APERTO_10' } });
 
     // Verifica formattazione automatica in computeVisibleTools
     const dummyState = {
@@ -77,28 +77,25 @@ describe('World Registry (Livello 2): Validazione automatica ed esecuzione non-i
 
     // 2. Esecuzione valida
     const result = await world.executeTool('w_meteo', { citta: 'Roma', unita: 'C' });
-    expect(result).toEqual({ temperatura: 22, unita: 'C', condizione: 'Soleggiato' });
+    expect(result).toEqual({ ok: true, data: { temperatura: 22, unita: 'C', condizione: 'Soleggiato' } });
     expect(executedWith).toEqual({ citta: 'Roma', unita: 'C' });
 
     // 3. Esecuzione con parametri non validi (Zod safeParse fallisce)
-    await expect(
-      world.executeTool('w_meteo', { citta: 'R', unita: 'Kelvin' })
-    ).rejects.toThrow(WorldToolError);
-
-    try {
-      await world.executeTool('w_meteo', { citta: 'R', unita: 'Kelvin' });
-    } catch (err) {
-      expect(err).toBeInstanceOf(WorldToolError);
-      const toolErr = err as WorldToolError;
-      expect(toolErr.kind).toBe('invalid_parameters');
-      expect(toolErr.toolId).toBe('w_meteo');
-      expect(toolErr.details).toBeDefined();
+    const invalidResult = await world.executeTool('w_meteo', { citta: 'R', unita: 'Kelvin' });
+    expect(invalidResult.ok).toBe(false);
+    if (!invalidResult.ok) {
+      expect(invalidResult.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+      expect(invalidResult.error.toolId).toBe('w_meteo');
+      expect(invalidResult.error.details).toBeDefined();
     }
 
     // 4. Esecuzione di tool sconosciuto
-    await expect(
-      world.executeTool('w_sconosciuto', {})
-    ).rejects.toThrow(WorldToolError);
+    const notFoundResult = await world.executeTool('w_sconosciuto', {});
+    expect(notFoundResult.ok).toBe(false);
+    if (!notFoundResult.ok) {
+      expect(notFoundResult.error.code).toBe('TOOL_NOT_FOUND');
+      expect(notFoundResult.error.toolId).toBe('w_sconosciuto');
+    }
   });
 
   it('dovrebbe consentire la registrazione dinamica di nuovi tool con register()', async () => {
@@ -114,7 +111,7 @@ describe('World Registry (Livello 2): Validazione automatica ed esecuzione non-i
 
     expect(world.getAllDefinitions()).toHaveLength(1);
     const sum = await world.executeTool('w_calcolatrice', { a: 10, b: 20 });
-    expect(sum).toBe(30);
+    expect(sum).toEqual({ ok: true, data: 30 });
   });
 });
 

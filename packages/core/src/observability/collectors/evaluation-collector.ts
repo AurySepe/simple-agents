@@ -8,6 +8,7 @@ import {
 } from '../../types/index.js';
 import {
   AgentEvent,
+  ExecutionErrorEvent,
   HaltEvent,
   ModelInferenceEvent,
   StallEvent,
@@ -88,18 +89,32 @@ export type EvaluationNonHaltSummary =
       exitContract?: never;
       exitPayload?: never;
       suspensionReason?: never;
+      error?: never;
     }
   | {
       status: 'suspended';
       exitContract?: never;
       exitPayload?: never;
       suspensionReason: 'aborted' | 'cycle_limit' | 'tick_limit';
+      error?: never;
+    }
+  | {
+      status: 'error';
+      exitContract?: never;
+      exitPayload?: never;
+      suspensionReason?: never;
+      error: {
+        code: string;
+        message: string;
+        details?: unknown;
+      };
     }
   | {
       status: 'running';
       exitContract?: never;
       exitPayload?: never;
       suspensionReason?: never;
+      error?: never;
     };
 
 /**
@@ -192,7 +207,12 @@ export class EvaluationCollector<
     }
     this.events.push(event);
 
-    if (event.type === 'halt' || event.type === 'stall' || event.type === 'suspend') {
+    if (
+      event.type === 'halt' ||
+      event.type === 'stall' ||
+      event.type === 'suspend' ||
+      event.type === 'execution_error'
+    ) {
       this.endTime = event.timestamp.getTime();
     }
   }
@@ -217,6 +237,7 @@ export class EvaluationCollector<
     const haltEvent = this.events.find((e): e is HaltEvent => e.type === 'halt');
     const stallEvent = this.events.find((e): e is StallEvent => e.type === 'stall');
     const suspendEvent = this.events.find((e): e is SuspendEvent => e.type === 'suspend');
+    const executionErrorEvent = this.events.find((e): e is ExecutionErrorEvent => e.type === 'execution_error');
 
     // 1. Calcolo metriche di performance & token
     let promptTokens = 0;
@@ -343,6 +364,11 @@ export class EvaluationCollector<
       baseSummary = {
         status: 'suspended',
         suspensionReason: suspendEvent.reason
+      };
+    } else if (executionErrorEvent) {
+      baseSummary = {
+        status: 'error',
+        error: executionErrorEvent.error
       };
     } else {
       baseSummary = {
