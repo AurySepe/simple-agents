@@ -23,3 +23,6 @@ export * from './sglang/index.js';
 
 // 5. Client, Strategie e Adapter llama-server (OpenAI Compatible + GBNF Grammar)
 export * from './llamacpp/index.js';
+
+// 6. Client, Strategie e Adapter Google Gemini (Gemini 3 Pro/Flash, Gemini 4 Argon/Carbon)
+export * from './gemini/index.js';

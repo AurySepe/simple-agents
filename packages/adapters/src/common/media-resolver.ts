@@ -67,9 +67,22 @@ export function resolveMediaBase64(asset: InputMediaAsset): { base64: string; mi
 export function resolveTextFileContent(asset: InputMediaAsset): string {
   const source = asset.source;
   switch (source.kind) {
-    case 'inline':
-      // Se inline base64, decodifica a utf8
-      return Buffer.from(source.data, 'base64').toString('utf-8');
+    case 'inline': {
+      // Se contiene ritorni a capo o spazi tipici del testo chiaro
+      if (source.data.includes('\n') || source.data.includes('\r')) {
+        return source.data;
+      }
+      try {
+        const decoded = Buffer.from(source.data, 'base64').toString('utf-8');
+        // Se ri-codificando in base64 corrisponde alla stringa passata, era effettivo base64
+        if (Buffer.from(decoded, 'utf-8').toString('base64') === source.data.trim()) {
+          return decoded;
+        }
+        return source.data;
+      } catch {
+        return source.data;
+      }
+    }
 
     case 'path': {
       if (!fs.existsSync(source.filePath)) {
