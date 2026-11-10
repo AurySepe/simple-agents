@@ -35,11 +35,30 @@ const consoleLogger = new ConsoleLogger({
   useColors: true,
 });
 
-// 4. Runner pronto e collegato all'agente
+// 4. Runner pronto e collegato all'agente con policy dichiarativa di recupero
 export const careerRunner = createRunner({ defaultEngine: false })
   .withEngine(engine)
   .withModel(qwenModel)
   .withAgent(careerAgent)
+  .withRecovery({
+    // Gestione resiliente automatica degli errori di rete dei tool
+    onToolError: {
+      w_cerca_web: async (error, context) => {
+        if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+          console.warn(`[Recovery] Timeout ricerca web (tentativo ${context.attempt}), ritento...`);
+          return { action: 'retry' };
+        }
+        return { action: 'abort' };
+      },
+      w_leggi_pagina_web: async (error, context) => {
+        if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+          console.warn(`[Recovery] Timeout pagina web (tentativo ${context.attempt}), ritento...`);
+          return { action: 'retry' };
+        }
+        return { action: 'abort' };
+      }
+    }
+  })
   .withOptions({
     observers: [consoleLogger],
     maxMacroCycles: 25,

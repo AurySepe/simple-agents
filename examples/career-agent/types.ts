@@ -49,3 +49,24 @@ export interface CareerAgentState {
   esito_finale?: EsitoRicerca;
 }
 
+/**
+ * ============================================================================
+ * ERRORI INFRASTRUTTURALI / AMBIENTALI DEL WEB (Rete, Timeout, HTTP)
+ * ============================================================================
+ * Distinti nettamente dalla logica di dominio (esito ricerca trovata o no).
+ */
+export type WebSearchError =
+  | { type: 'NETWORK_TIMEOUT'; url: string; timeoutMs: number; message: string }
+  | { type: 'HTTP_ERROR'; url: string; status: number; statusText: string; message: string }
+  | { type: 'SEARCH_ENGINE_UNAVAILABLE'; message: string };
+
+export type WebScrapeError =
+  | { type: 'NETWORK_TIMEOUT'; url: string; timeoutMs: number; message: string }
+  | { type: 'HTTP_ERROR'; url: string; status: number; statusText: string; message: string }
+  | { type: 'PAGE_PARSING_FAILED'; url: string; message: string };
+
+export type CareerAgentToolErrors = {
+  w_cerca_web: WebSearchError;
+  w_leggi_pagina_web: WebScrapeError;
+};
+

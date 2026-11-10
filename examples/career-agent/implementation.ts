@@ -1,7 +1,14 @@
 import * as cheerio from "cheerio";
+import { toolOk, toolFail, ToolReturn } from "@formal-agent/core";
 import { extractWebPage } from "./extractor.js";
 import { careerAgentContract } from "./contract.js";
-import type { ExtractedWebPage, WebSearchResult } from "./types.js";
+import type {
+  ExtractedWebPage,
+  WebSearchResult,
+  WebSearchError,
+  WebScrapeError,
+  CareerAgentToolErrors,
+} from "./types.js";
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -230,17 +237,61 @@ export class RealWebClient {
  * ============================================================================
  * IMPLEMENTAZIONE REALE DELL'AGENTE (Zero Mock)
  * ============================================================================
- * Collega i tool dichiarati nel contratto cognitivo con il client web reale.
+ * Collega i tool dichiarati nel contratto cognitivo con il client web reale,
+ * gestendo gli errori infrastrutturali in modo tipizzato con toolOk e toolFail.
  */
 export function createCareerAgent(client: RealWebClient = new RealWebClient()) {
-  return careerAgentContract.implement({
+  return careerAgentContract.implement<CareerAgentToolErrors>({
     tools: {
       w_cerca_web: async ({ query }) => {
-        const risultati = await client.search(query);
-        return { query_eseguita: query, risultati };
+        try {
+          const risultati = await client.search(query);
+          return toolOk({ query_eseguita: query, risultati });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('timeout') || msg.includes('AbortError')) {
+            return toolFail({
+              type: 'NETWORK_TIMEOUT',
+              url: 'https://html.duckduckgo.com',
+              timeoutMs: 15000,
+              message: `Timeout durante la ricerca per '${query}'`
+            });
+          }
+          if (msg.includes('HTTP')) {
+            return toolFail({
+              type: 'HTTP_ERROR',
+              url: 'https://html.duckduckgo.com',
+              status: 503,
+              statusText: msg,
+              message: msg
+            });
+          }
+          return toolFail({
+            type: 'SEARCH_ENGINE_UNAVAILABLE',
+            message: msg
+          });
+        }
       },
       w_leggi_pagina_web: async ({ url }) => {
-        return await client.fetchAndExtract(url);
+        try {
+          const result = await client.fetchAndExtract(url);
+          return toolOk(result);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('timeout') || msg.includes('AbortError')) {
+            return toolFail({
+              type: 'NETWORK_TIMEOUT',
+              url,
+              timeoutMs: 15000,
+              message: `Timeout durante il caricamento di ${url}`
+            });
+          }
+          return toolFail({
+            type: 'PAGE_PARSING_FAILED',
+            url,
+            message: msg
+          });
+        }
       },
     },
   });

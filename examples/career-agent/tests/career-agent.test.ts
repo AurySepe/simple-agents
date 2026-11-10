@@ -114,5 +114,58 @@ describe("Career Web Agent - Suite di Test", () => {
       expect(careerRunner).toBeDefined();
       expect(typeof careerRunner.run).toBe("function");
     });
+
+    it("deve gestire in modo tipizzato gli errori ambientali del web con ok: false", async () => {
+      // Creiamo un client con timeout simulato immediato
+      const failingClient = new RealWebClient({ timeoutMs: 1 });
+      const failingAgent = careerAgentContract.implement({
+        tools: {
+          w_cerca_web: async () => {
+            return {
+              ok: false,
+              error: {
+                type: "NETWORK_TIMEOUT",
+                url: "https://html.duckduckgo.com",
+                timeoutMs: 1,
+                message: "Timeout simulato",
+              },
+            };
+          },
+          w_leggi_pagina_web: async ({ url }) => {
+            return {
+              successo: true,
+              url,
+              titolo: "Test",
+              contenuto_estratto: "Test",
+              link_rilevanti: [],
+              errore: null,
+            };
+          },
+        },
+      });
+
+      const { createRunner } = await import("@formal-agent/core");
+      const mockModel = {
+        infer: async () => ({
+          calls: [{ id: "c1", name: "w_cerca_web", payload: { query: "test query" } }],
+        }),
+      };
+
+      const testRunner = createRunner()
+        .withModel(mockModel as any)
+        .withAgent(failingAgent);
+
+      const result = await testRunner.run({ userContent: "Cerca" });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.status).toBe("error");
+        expect(result.error.kind).toBe("TOOL_ERROR");
+        if (result.error.kind === "TOOL_ERROR") {
+          expect(result.error.toolName).toBe("w_cerca_web");
+          expect(result.error.error.type).toBe("NETWORK_TIMEOUT");
+        }
+        expect(typeof result.resume).toBe("function");
+      }
+    });
   });
 });
