@@ -158,6 +158,101 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       expect((userParts[2] as { text: string }).text).toContain('[File: dati.csv]');
       expect((userParts[2] as { text: string }).text).toContain('id,nome\n1,Mario');
     });
+
+    it('proietta azioni native con providerMetadata.thoughtSignature come functionCall nativo in modo stateless', () => {
+      const strategy = new GeminiStrategy();
+      const tripleWithGeminiSig: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [sampleTool],
+        messages: [
+          {
+            index: 0,
+            type: 'stimulus',
+            content: { kind: 'text', text: 'Cerca file' }
+          },
+          {
+            index: 1,
+            type: 'action',
+            callId: 'call_gemini_1',
+            content: { name: 'cerca_documenti', payload: { query: 'report' } },
+            providerMetadata: { provider: 'gemini', thoughtSignature: 'sig_crypto_test_123' }
+          },
+          {
+            index: 2,
+            type: 'result',
+            callId: 'call_gemini_1',
+            content: { trovati: 1 }
+          }
+        ]
+      };
+
+      const formatted = strategy.format(tripleWithGeminiSig);
+
+      // Il messaggio del modello contiene la functionCall con la thoughtSignature intatta
+      const modelContent = formatted.contents.find((c) => c.role === 'model');
+      expect(modelContent).toBeDefined();
+      expect(modelContent?.parts[0]).toEqual({
+        functionCall: {
+          name: 'cerca_documenti',
+          args: { query: 'report' },
+          id: 'call_gemini_1'
+        },
+        thoughtSignature: 'sig_crypto_test_123'
+      });
+
+      // Il messaggio successivo contiene la functionResponse nativa
+      const responseContent = formatted.contents[formatted.contents.length - 1];
+      expect(responseContent.role).toBe('user');
+      expect(responseContent.parts[0]).toEqual({
+        functionResponse: {
+          name: 'cerca_documenti',
+          response: {
+            output: { trovati: 1 }
+          }
+        }
+      });
+    });
+
+    it('proietta azioni prive di firma (cross-model da Qwen/Claude) come messaggi user naturali per prevenire errori 400', () => {
+      const strategy = new GeminiStrategy();
+      const tripleCrossModel: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [sampleTool],
+        messages: [
+          {
+            index: 0,
+            type: 'stimulus',
+            content: { kind: 'text', text: 'Cerca file' }
+          },
+          {
+            index: 1,
+            type: 'action',
+            callId: 'call_qwen_1',
+            content: { name: 'cerca_documenti', payload: { query: 'vecchio report' } }
+            // Nessun providerMetadata: generato da un altro modello o deserializzato
+          },
+          {
+            index: 2,
+            type: 'result',
+            callId: 'call_qwen_1',
+            content: { trovati: 0 }
+          }
+        ]
+      };
+
+      const formatted = strategy.format(tripleCrossModel);
+
+      // Nessun functionCall sprovvisto di firma viene inviato con role: 'model'
+      const modelContent = formatted.contents.find((c) => c.role === 'model');
+      expect(modelContent).toBeUndefined();
+
+      // Entrambi gli eventi sono proiettati come testo utente contestuale pulito
+      const userContent = formatted.contents.find((c) => c.role === 'user');
+      expect(userContent).toBeDefined();
+      const fullUserText = userContent?.parts.map((p: any) => p.text).join('\n');
+      expect(fullUserText).toContain('[Azione eseguita precedentemente]: cerca_documenti');
+      expect(fullUserText).toContain('[Esito osservato per cerca_documenti]: {"trovati":0}');
+    });
   });
 
   describe('parseGeminiError', () => {

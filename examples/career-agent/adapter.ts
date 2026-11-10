@@ -3,6 +3,9 @@ import {
   LlamaCppClient,
   LlamaCppModelAdapter,
   LlamaCppQwenStrategy,
+  createGeminiAdapter,
+  GeminiModelAdapter,
+  type GeminiModelError
 } from "@formal-agent/adapters";
 
 export interface CreateCareerLlamaAdapterOptions {
@@ -15,6 +18,27 @@ export interface CreateCareerLlamaAdapterOptions {
   contextLimit?: number;
   timeoutMs?: number;
   writer?: (message: string) => void;
+}
+
+export interface CreateCareerGeminiAdapterOptions {
+  apiKey: string;
+  model: string;
+  timeoutMs?: number;
+  temperature?: number;
+}
+
+/**
+ * Factory helper per istanziare l'adapter ufficiale Google Gemini (Gemini 3 / 4).
+ */
+export function createCareerGeminiAdapter(options: CreateCareerGeminiAdapterOptions): GeminiModelAdapter {
+  return createGeminiAdapter({
+    apiKey: options.apiKey,
+    model: options.model,
+    options: {
+      timeoutMs: options.timeoutMs ?? 60000,
+      temperature: options.temperature
+    }
+  });
 }
 
 /**

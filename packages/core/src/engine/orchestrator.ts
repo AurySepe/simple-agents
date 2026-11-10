@@ -712,7 +712,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
       this.appendMessage({
         type: 'action',
         callId: syntaxErrCall.id,
-        content: { name: syntaxErrCall.name, payload: { raw: syntaxErrCall.rawText } }
+        content: { name: syntaxErrCall.name, payload: { raw: syntaxErrCall.rawText } },
+        ...(syntaxErrCall.providerMetadata ? { providerMetadata: syntaxErrCall.providerMetadata } : {})
       });
 
       const errPayload = this.policy.formatDiagnosticPayload(
@@ -775,7 +776,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
         this.appendMessage({
           type: 'action',
           callId: termCall.id,
-          content: { name: termCall.name, payload: termPayload }
+          content: { name: termCall.name, payload: termPayload },
+          ...(termCall.providerMetadata ? { providerMetadata: termCall.providerMetadata } : {})
         });
 
         const detail = JSON.stringify(parsed.error.format());
@@ -826,7 +828,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
       this.appendMessage({
         type: 'action',
         callId: termCall.id,
-        content: { name: termCall.name, payload: termPayload }
+        content: { name: termCall.name, payload: termPayload },
+        ...(termCall.providerMetadata ? { providerMetadata: termCall.providerMetadata } : {})
       });
 
       this.t++;
@@ -862,7 +865,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
         this.appendMessage({
           type: 'action',
           callId: call.id,
-          content: { name: call.name, payload: call.payload }
+          content: { name: call.name, payload: call.payload },
+          ...(call.providerMetadata ? { providerMetadata: call.providerMetadata } : {})
         });
 
         const errPayload = this.policy.formatDiagnosticPayload(
@@ -908,7 +912,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
         this.appendMessage({
           type: 'action',
           callId: call.id,
-          content: { name: call.name, payload: call.payload }
+          content: { name: call.name, payload: call.payload },
+          ...(call.providerMetadata ? { providerMetadata: call.providerMetadata } : {})
         });
 
         const errPayload = this.policy.formatDiagnosticPayload(
@@ -954,7 +959,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
         this.appendMessage({
           type: 'action',
           callId: call.id,
-          content: { name: call.name, payload: call.payload }
+          content: { name: call.name, payload: call.payload },
+          ...(call.providerMetadata ? { providerMetadata: call.providerMetadata } : {})
         });
 
         const detail = JSON.stringify(parsed.error.format());
@@ -1000,7 +1006,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
         status: 'valid',
         id: call.id,
         name: call.name,
-        payload: parsed.data
+        payload: parsed.data,
+        ...(call.providerMetadata ? { providerMetadata: call.providerMetadata } : {})
       });
     }
 
@@ -1009,7 +1016,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
       this.appendMessage({
         type: 'action',
         callId: validCall.id,
-        content: { name: validCall.name, payload: validCall.payload }
+        content: { name: validCall.name, payload: validCall.payload },
+        ...(validCall.providerMetadata ? { providerMetadata: validCall.providerMetadata } : {})
       });
     }
 
@@ -1179,7 +1187,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
           this.appendMessage({
             type: 'action',
             callId: firstCall.id,
-            content: { name: firstCall.name, payload: termPayload }
+            content: { name: firstCall.name, payload: termPayload },
+            ...(firstCall.providerMetadata ? { providerMetadata: firstCall.providerMetadata } : {})
           });
 
           this.t++;
@@ -1217,7 +1226,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
             this.appendMessage({
               type: 'action',
               callId: firstCall.id,
-              content: { name: firstCall.name, payload: parsed.data }
+              content: { name: firstCall.name, payload: parsed.data },
+              ...(firstCall.providerMetadata ? { providerMetadata: firstCall.providerMetadata } : {})
             });
 
             this.t++;
@@ -1225,7 +1235,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
               status: 'valid',
               id: firstCall.id,
               name: firstCall.name,
-              payload: parsed.data
+              payload: parsed.data,
+              ...(firstCall.providerMetadata ? { providerMetadata: firstCall.providerMetadata } : {})
             };
             this.transitionTo({ phase: 'q_yield', pendingCalls: [validCall] }, 'exec_world_yield');
 

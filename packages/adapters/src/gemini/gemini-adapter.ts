@@ -195,14 +195,37 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
         return modelOk(stallOutput);
       }
 
-      // 4. Estrazione Tool Calls (Garantite da mode: ANY)
-      const rawCalls = response.functionCalls ?? [];
-      const calls: ToolCallInput[] = rawCalls.map((fc: any, index: number) => ({
-        status: 'valid' as const,
-        id: `gemini_call_${Date.now()}_${index}`,
-        name: (fc.name as string) ?? 'unknown_tool',
-        payload: (fc.args as DataRecord) ?? {}
-      }));
+      // 4. Estrazione Tool Calls (Garantite da mode: ANY con salvataggio stateless thoughtSignature)
+      const candidateParts = candidate?.content?.parts ?? [];
+      const calls: ToolCallInput[] = [];
+
+      for (let index = 0; index < candidateParts.length; index++) {
+        const part = candidateParts[index] as any;
+        if (part.functionCall) {
+          const callId = part.functionCall.id || `gemini_call_${Date.now()}_${index}`;
+          const signature = part.thoughtSignature ?? part.thought_signature;
+          calls.push({
+            status: 'valid' as const,
+            id: callId,
+            name: (part.functionCall.name as string) ?? 'unknown_tool',
+            payload: (part.functionCall.args as DataRecord) ?? {},
+            ...(signature ? { providerMetadata: { provider: 'gemini' as const, thoughtSignature: signature } } : {})
+          });
+        }
+      }
+
+      // Fallback su response.functionCalls se candidateParts non conteneva functionCall
+      if (calls.length === 0 && response.functionCalls && response.functionCalls.length > 0) {
+        response.functionCalls.forEach((fc: any, index: number) => {
+          const callId = fc.id || `gemini_call_${Date.now()}_${index}`;
+          calls.push({
+            status: 'valid' as const,
+            id: callId,
+            name: (fc.name as string) ?? 'unknown_tool',
+            payload: (fc.args as DataRecord) ?? {}
+          });
+        });
+      }
 
       const usageMetadata = response.usageMetadata;
       const metrics: GeminiMetrics = {

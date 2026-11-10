@@ -3,32 +3,38 @@ import {
   createDefaultFrameworkConfig,
   createRunner,
   FrameworkEngine,
+  type LanguageModelAdapter,
 } from "@formal-agent/core";
-import { createCareerLlamaAdapter } from "./adapter.js";
+import { createCareerLlamaAdapter, createCareerGeminiAdapter } from "./adapter.js";
 import { careerAgent } from "./implementation.js";
-import { abort } from "process";
 
 /**
  * ============================================================================
- * CONFIGURAZIONE DEL RUNNER E DEL MODELLO QWEN
+ * CONFIGURAZIONE DEL RUNNER E DEL MODELLO (GEMINI / QWEN)
  * ============================================================================
- * Il runner è pre-configurato con:
- * - FrameworkEngine (Livello 1) con policy e proiettore Markdown standard
- * - Modello Qwen via llama-server (con vincolo grammaticale GBNF sui tool)
- * - ConsoleLogger (per stampare i passi dell'agente in tempo reale in console)
- * - Agente delle carriere già collegato e pronto
+ * Il runner supporta dinamicamente sia Google Gemini che Llama-server (Qwen).
+ * Se GEMINI_API_KEY è configurata, utilizza il modello Gemini specificato (default: gemini-3.5-flash-lite).
  */
+
+export function resolveDefaultModelAdapter(): LanguageModelAdapter {
+  if (process.env.GEMINI_API_KEY) {
+    return createCareerGeminiAdapter({
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
+      timeoutMs: process.env.GEMINI_TIMEOUT_MS ? parseInt(process.env.GEMINI_TIMEOUT_MS, 10) : 60000,
+    });
+  }
+
+  return createCareerLlamaAdapter({
+    baseUrl: process.env.LLAMA_BASE_URL ?? "http://localhost:30000",
+    modelName: process.env.LLAMA_MODEL_NAME ?? "qwen3.5-9b",
+  });
+}
 
 // 1. Motore invariante di transizione
 const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
-// 2. Modello linguistico Qwen (llama-server su porta 30000 o da variabile d'ambiente)
-const qwenModel = createCareerLlamaAdapter({
-  baseUrl: process.env.LLAMA_BASE_URL ?? "http://localhost:30000",
-  modelName: process.env.LLAMA_MODEL_NAME ?? "qwen3.5-9b",
-});
-
-// 3. Logger per stampare a video i passi dell'agente in linguaggio naturale
+// 2. Logger per stampare a video i passi dell'agente in linguaggio naturale
 const consoleLogger = new ConsoleLogger({
   showThoughts: true,
   showState: false,
@@ -36,40 +42,52 @@ const consoleLogger = new ConsoleLogger({
   useColors: true,
 });
 
-// 4. Runner pronto e collegato all'agente con policy dichiarativa di recupero
-export const careerRunner = createRunner({ defaultEngine: false })
-  .withEngine(engine)
-  .withModel(qwenModel)
-  .withAgent(careerAgent)
-  .withRecovery({
-    // Gestione resiliente automatica degli errori di rete dei tool
-    onToolError: {
+/**
+ * Costruisce un runner per l'agente delle carriere con un adapter del modello specificato.
+ */
+export function buildCareerRunner(modelAdapter?: LanguageModelAdapter) {
+  const model = modelAdapter ?? resolveDefaultModelAdapter();
 
-      w_leggi_pagina_web: async (error, context) => {
-        if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
-          console.warn(`[Recovery] Timeout pagina web (tentativo ${context.attempt}), ritento...`);
-          return { action: 'retry' };
-        }
-        return { action: 'abort' };
+  return createRunner({ defaultEngine: false })
+    .withEngine(engine)
+    .withModel(model)
+    .withAgent(careerAgent)
+    .withRecovery({
+      onToolError: {
+        w_leggi_pagina_web: async (error, context) => {
+          if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+            console.warn(`[Recovery] Timeout pagina web (tentativo ${context.attempt}), ritento...`);
+            return { action: 'retry' };
+          }
+          return { action: 'abort' };
+        },
+        w_cerca_web: async (error, context) => {
+          if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+            console.warn(`[Recovery] Timeout ricerca web (tentativo ${context.attempt}), ritento...`);
+            return { action: 'retry' };
+          }
+          return { action: 'abort' };
+        },
       },
-      w_cerca_web: async (error, context) => {
-        if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
-          console.warn(`[Recovery] Timeout ricerca web (tentativo ${context.attempt}), ritento...`);
-          return { action: 'retry' };
+      async onModelError(error, context) {
+        if ((error.type === 'SERVICE_UNAVAILABLE' || error.type === 'RATE_LIMIT_EXCEEDED') && context.attempt < 4) {
+          const delay = (error as any).retryAfterMs ?? (context.attempt * 2000);
+          console.warn(`[Recovery] Modello sovraccarico (${error.type}), attendo ${delay}ms prima del tentativo ${context.attempt + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+          return { action: "retry" };
         }
-        return { action: 'abort' };
+        console.error(`[Recovery] Errore modello irreversibile: ${error.type ?? 'UNKNOWN'}`);
+        return { action: "abort" };
       },
+    })
+    .withOptions({
+      observers: [consoleLogger],
+      maxMacroCycles: 25,
+      maxTicks: 100,
+    });
+}
 
-    },
-    onModelError(error, context) {
-      return { action: "abort" };
-    },
-  })
-  .withOptions({
-    observers: [consoleLogger],
-    maxMacroCycles: 25,
-    maxTicks: 100,
-  });
+export const careerRunner = buildCareerRunner();
 
 /**
  * Funzione di alto livello per avviare la ricerca carriere per un'azienda.

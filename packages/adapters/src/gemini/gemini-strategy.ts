@@ -99,6 +99,13 @@ export function convertUserContentToParts(content: UserMessageContent): Array<Re
  * Strategia di formattazione del contesto cognitivo formale (InferenceTriple)
  * per l'SDK Google GenAI (`@google/genai`).
  */
+/**
+ * Strategia di formattazione del contesto cognitivo formale (InferenceTriple)
+ * per l'SDK Google GenAI (`@google/genai`).
+ *
+ * Completamente stateless: la gestione di thoughtSignature e della cronologia
+ * deriva esclusivamente dai dati memorizzati nella tupla dell'agente (Ep).
+ */
 export class GeminiStrategy {
   constructor(private readonly options?: GeminiChatOptions) {}
 
@@ -108,54 +115,75 @@ export class GeminiStrategy {
       ? { parts: [{ text: context.systemFrame }] }
       : undefined;
 
-    // 2. Cronologia Ep: mapping su contenuti Gemini (user/model)
+    // 2. Cronologia Ep: mapping su contenuti Gemini (user/model) con adiacenza corretta
     const contents: Array<{
       role: 'user' | 'model';
       parts: Array<Record<string, unknown>>;
     }> = [];
 
-    // Mappa callId -> toolName per ricreare le functionResponse
+    const appendContent = (role: 'user' | 'model', newParts: Array<Record<string, unknown>>) => {
+      const last = contents[contents.length - 1];
+      if (last && last.role === role) {
+        last.parts.push(...newParts);
+      } else {
+        contents.push({ role, parts: [...newParts] });
+      }
+    };
+
+    // Traccia quali callId sono nativi Gemini con firma valida
+    const nativeCallIds = new Set<string>();
     const callIdToToolName = new Map<string, string>();
 
     for (const msg of context.messages) {
       switch (msg.type) {
         case 'stimulus': {
           const parts = convertUserContentToParts(msg.content);
-          contents.push({ role: 'user', parts });
+          appendContent('user', parts);
           break;
         }
 
         case 'thought': {
-          // I pensieri dell'agente possono essere inseriti come parte model
-          // se non precedono immediatamente una action (in quel caso verranno raggruppati)
-          contents.push({
-            role: 'model',
-            parts: [{ text: msg.content }]
-          });
+          appendContent('model', [{ thought: true, text: msg.content }]);
           break;
         }
 
         case 'action': {
           callIdToToolName.set(msg.callId, msg.content.name);
-          contents.push({
-            role: 'model',
-            parts: [
+          const signature =
+            msg.providerMetadata?.provider === 'gemini'
+              ? msg.providerMetadata.thoughtSignature
+              : undefined;
+
+          if (signature) {
+            // Chiamata nativa Gemini con firma valida: proiettata come functionCall nativo
+            nativeCallIds.add(msg.callId);
+            appendContent('model', [
               {
                 functionCall: {
                   name: msg.content.name,
-                  args: msg.content.payload
-                }
+                  args: msg.content.payload,
+                  id: msg.callId
+                },
+                thoughtSignature: signature
               }
-            ]
-          });
+            ]);
+          } else {
+            // Chiamata proveniente da un altro provider LLM o ripristinata senza firma:
+            // proiettata come messaggio utente naturale per evitare errore 400 di Gemini
+            appendContent('user', [
+              {
+                text: `[Azione eseguita precedentemente]: ${msg.content.name}(${JSON.stringify(msg.content.payload)})`
+              }
+            ]);
+          }
           break;
         }
 
         case 'result': {
           const toolName = callIdToToolName.get(msg.callId) ?? 'tool_result';
-          contents.push({
-            role: 'user',
-            parts: [
+          if (nativeCallIds.has(msg.callId)) {
+            // Risposta a functionCall nativo Gemini
+            appendContent('user', [
               {
                 functionResponse: {
                   name: toolName,
@@ -164,8 +192,15 @@ export class GeminiStrategy {
                   }
                 }
               }
-            ]
-          });
+            ]);
+          } else {
+            // Risultato per azione cross-model/senza firma inviato come testo utente
+            appendContent('user', [
+              {
+                text: `[Esito osservato per ${toolName}]: ${JSON.stringify(msg.content)}`
+              }
+            ]);
+          }
           break;
         }
       }

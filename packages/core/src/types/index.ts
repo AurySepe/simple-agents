@@ -90,6 +90,16 @@ export interface ThoughtEvent {
   callId?: never;
 }
 
+/**
+ * Metadati specifici del provider LLM associati a una Tool Call.
+ * Discriminated union serializzabile e priva di stato.
+ */
+export type ToolCallProviderMetadata =
+  | {
+      provider: 'gemini';
+      thoughtSignature: string;
+    };
+
 export interface ActionEvent {
   type: 'action';
   callId: string;
@@ -97,6 +107,7 @@ export interface ActionEvent {
     name: string;
     payload: DataRecord;
   };
+  providerMetadata?: ToolCallProviderMetadata;
 }
 
 export interface EpCoordinates {
@@ -147,7 +158,13 @@ export function createEpEvent(input: MessageInput, index: number, tau: TimeIndex
     case 'thought':
       return { ...base, type: 'thought', content: input.content };
     case 'action':
-      return { ...base, type: 'action', callId: input.callId, content: input.content };
+      return {
+        ...base,
+        type: 'action',
+        callId: input.callId,
+        content: input.content,
+        ...(input.providerMetadata ? { providerMetadata: input.providerMetadata } : {})
+      };
     case 'result':
       return { ...base, type: 'result', callId: input.callId, content: input.content };
   }
@@ -380,6 +397,7 @@ export interface ValidToolCall {
   id: string;
   name: string;
   payload: DataRecord;
+  providerMetadata?: ToolCallProviderMetadata;
 }
 
 export interface SyntaxErrorToolCall {
@@ -389,12 +407,19 @@ export interface SyntaxErrorToolCall {
   rawText: string;
   errorDetail: string;
   payload: DataRecord;
+  providerMetadata?: ToolCallProviderMetadata;
 }
 
 export type ToolCall = ValidToolCall | SyntaxErrorToolCall;
 
 export type ToolCallInput =
-  | { status?: 'valid'; id: string; name: string; payload: DataRecord }
+  | {
+      status?: 'valid';
+      id: string;
+      name: string;
+      payload: DataRecord;
+      providerMetadata?: ToolCallProviderMetadata;
+    }
   | SyntaxErrorToolCall;
 
 export function normalizeToolCall(call: ToolCallInput): ToolCall {
@@ -405,7 +430,8 @@ export function normalizeToolCall(call: ToolCallInput): ToolCall {
     status: 'valid',
     id: call.id,
     name: call.name,
-    payload: call.payload
+    payload: call.payload,
+    ...(call.providerMetadata ? { providerMetadata: call.providerMetadata } : {})
   };
 }
 
