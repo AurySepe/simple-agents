@@ -333,14 +333,27 @@ export function serializeAgentState<
  * Deserializza un SerializedAgentState JSON in un AgentState di runtime con Set e Map.
  */
 export function deserializeAgentState(
-  serialized: SerializedAgentState<any, any>
+  serialized: SerializedAgentState<any, any> | AgentState
 ): AgentState {
+  if (serialized.Ta instanceof Set && serialized.Ka instanceof Map) {
+    return {
+      I: serialized.I,
+      Ms: serialized.Ms,
+      Ds: { ...serialized.Ds },
+      Ta: new Set(serialized.Ta),
+      Ka: new Map(serialized.Ka),
+      Ep: [...serialized.Ep]
+    };
+  }
+  const kaEntries = Array.isArray(serialized.Ka)
+    ? (serialized.Ka as Concept[]).map((c) => [c.name, c] as [string, Concept])
+    : [];
   return {
     I: serialized.I,
     Ms: serialized.Ms,
     Ds: { ...serialized.Ds },
     Ta: new Set(serialized.Ta),
-    Ka: new Map((serialized.Ka ?? []).map((c) => [c.name, c])),
+    Ka: new Map(kaEntries),
     Ep: (serialized.Ep ?? []).map((msg) => ({ ...msg }))
   };
 }
@@ -445,13 +458,37 @@ export function isModelStall(result: ModelResult): result is ModelStallOutput {
 
 /**
  * ============================================================================
+ * ERRORI INFRASTRUTTURALI / AMBIENTALI DEL MODELLO
+ * ============================================================================
+ */
+export interface UnexpectedModelError {
+  type: 'UNEXPECTED_MODEL_ERROR';
+  message: string;
+  cause: unknown;
+}
+
+export type ModelDeliberateResult<TKnownErrors = never> =
+  | { ok: true; data: ModelResult; error?: never }
+  | { ok: false; error: TKnownErrors; data?: never }
+  | ModelResult;
+
+export function modelOk(data: ModelResult): { ok: true; data: ModelResult; error?: never } {
+  return { ok: true, data };
+}
+
+export function modelFail<E extends { type: string }>(error: E): { ok: false; error: E; data?: never } {
+  return { ok: false, error };
+}
+
+/**
+ * ============================================================================
  * 8.b INTERFACCIA DEL TRASDUTTORE NEURALE (MODELLO LINGUISTICO): M
  * ============================================================================
  * Il Framework definisce il Modello come una funzione pura di inferenza:
- * M: C_Ω -> Promise<ModelResult>
+ * M: C_Ω -> Promise<ModelDeliberateResult<TKnownErrors>>
  */
-export interface LanguageModelAdapter {
-  infer(context: InferenceTriple): Promise<ModelResult>;
+export interface LanguageModelAdapter<TKnownErrors = never> {
+  infer(context: InferenceTriple): Promise<ModelDeliberateResult<TKnownErrors>>;
 }
 
 /**

@@ -2,16 +2,41 @@ import {
   AgentInstance,
   FrameworkEngine,
   RunOptions,
-  RunResult
+  RunResult,
+  RecoveryContext,
+  RecoveryDecision,
+  OrchestratorRecoveryConfig
 } from '../engine/orchestrator.js';
-import { DataValue, LanguageModelAdapter } from '../types/index.js';
+import { DataValue, LanguageModelAdapter, UnexpectedModelError } from '../types/index.js';
 import { createDefaultFrameworkConfig } from '../defaults/index.js';
-import { AgentRunResult, ImplementedAgent, TypedAgentState } from './types.js';
+import { AgentRunnerResult, ImplementedAgent, TypedAgentState, WorldExecutionError, ModelExecutionError } from './types.js';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
+import { UnexpectedToolError } from '../world/index.js';
 
-type InferAgentRunResult<TAgent> = TAgent extends ImplementedAgent<any, any, infer TTerminations>
-  ? AgentRunResult<TTerminations>
-  : RunResult<DataValue>;
+type InferAgentRunnerResult<TAgent, TModel> = TAgent extends ImplementedAgent<
+  any,
+  any,
+  infer TTerminations,
+  infer TToolErrorsMap
+>
+  ? TModel extends LanguageModelAdapter<infer TModelErrors>
+    ? AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>
+    : AgentRunnerResult<TTerminations, TToolErrorsMap, any>
+  : AgentRunnerResult<any, any, any>;
+
+export interface TypedRunnerRecoveryConfig<TToolErrorsMap extends Record<string, any>, TModelErrors> {
+  onModelError?: (
+    error: TModelErrors | UnexpectedModelError,
+    context: RecoveryContext
+  ) => Promise<RecoveryDecision> | RecoveryDecision;
+
+  onToolError?: {
+    [K in keyof TToolErrorsMap]?: (
+      error: TToolErrorsMap[K] | UnexpectedToolError,
+      context: RecoveryContext
+    ) => Promise<RecoveryDecision> | RecoveryDecision;
+  };
+}
 
 /**
  * ============================================================================
@@ -23,15 +48,15 @@ type InferAgentRunResult<TAgent> = TAgent extends ImplementedAgent<any, any, inf
  */
 export class RunnerBuilder<
   TEngine extends FrameworkEngine | undefined = undefined,
-  TModel extends LanguageModelAdapter | undefined = undefined,
-  TAgent extends ImplementedAgent<any, any, any> | undefined = undefined,
+  TModel extends LanguageModelAdapter<any> | undefined = undefined,
+  TAgent extends ImplementedAgent<any, any, any, any> | undefined = undefined,
   TOptions extends RunOptions<DataValue> = RunOptions<DataValue>
 > {
   constructor(
     private readonly state: {
       engine?: FrameworkEngine;
-      model?: LanguageModelAdapter;
-      agent?: ImplementedAgent<any, any, any>;
+      model?: LanguageModelAdapter<any>;
+      agent?: ImplementedAgent<any, any, any, any>;
       options?: RunOptions<DataValue>;
     }
   ) {}
@@ -49,8 +74,8 @@ export class RunnerBuilder<
   /**
    * Associa o sovrascrive l'adapter del modello linguistico (LLM).
    */
-  public withModel(model: LanguageModelAdapter): RunnerBuilder<TEngine, LanguageModelAdapter, TAgent, TOptions> {
-    return new RunnerBuilder<TEngine, LanguageModelAdapter, TAgent, TOptions>({
+  public withModel<M extends LanguageModelAdapter<any>>(model: M): RunnerBuilder<TEngine, M, TAgent, TOptions> {
+    return new RunnerBuilder<TEngine, M, TAgent, TOptions>({
       ...this.state,
       model
     });
@@ -59,12 +84,41 @@ export class RunnerBuilder<
   /**
    * Associa o sovrascrive l'agente implementato da eseguire.
    */
-  public withAgent<A extends ImplementedAgent<any, any, any>>(
+  public withAgent<A extends ImplementedAgent<any, any, any, any>>(
     agent: A
   ): RunnerBuilder<TEngine, TModel, A, TOptions> {
     return new RunnerBuilder<TEngine, TModel, A, TOptions>({
       ...this.state,
       agent
+    });
+  }
+
+  /**
+   * Configura una recovery policy dichiarativa fortemente tipizzata sugli errori di tool e modello.
+   */
+  public withRecovery(
+    recovery: TypedRunnerRecoveryConfig<
+      TAgent extends ImplementedAgent<any, any, any, infer TToolErrors> ? TToolErrors : Record<string, any>,
+      TModel extends LanguageModelAdapter<infer TModelErrors> ? TModelErrors : any
+    >
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions> {
+    const orchestratorRecovery: OrchestratorRecoveryConfig = {
+      onModelError: recovery.onModelError as any,
+      onToolError: async (toolId, error, context) => {
+        const handler = recovery.onToolError ? (recovery.onToolError as Record<string, any>)[toolId] : undefined;
+        if (handler) {
+          return await handler(error, context);
+        }
+        return { action: 'abort' };
+      }
+    };
+
+    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions>({
+      ...this.state,
+      options: {
+        ...this.state.options,
+        recovery: orchestratorRecovery
+      }
     });
   }
 
@@ -85,7 +139,7 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
    */
   public spawn(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter, ImplementedAgent<any, any, any>, any>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>
   ): AgentInstance<DataValue> {
     return this.state.agent!.spawn(this.state.engine!, this.state.model!);
   }
@@ -95,8 +149,8 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
    */
   public spawnFromState(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter, ImplementedAgent<any, any, any>, any>,
-    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
+    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any, any>
       ? TypedAgentState<TTools, TStateSchema>
       : TypedAgentState<any, any>
   ): AgentInstance<DataValue> {
@@ -106,7 +160,7 @@ export class RunnerBuilder<
   /**
    * Crea un EvaluationCollector tipizzato sull'agente associato a questo runner.
    */
-  public createEvaluationCollector(): TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, infer TTerminations>
+  public createEvaluationCollector(): TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, infer TTerminations, any>
     ? EvaluationCollector<TTools, TStateSchema, TTerminations>
     : EvaluationCollector {
     return new EvaluationCollector() as any;
@@ -115,12 +169,12 @@ export class RunnerBuilder<
   /**
    * Esegue l'agente end-to-end.
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
-   * Ritorna un esito tipizzato con unione discriminata sul tipo di terminazione e relativo payload.
+   * Ritorna un esito tipizzato con unione discriminata ok: true | false.
    */
   public async run(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter, ImplementedAgent<any, any, any>, any>,
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
     runOptions?: Partial<RunOptions<DataValue>>
-  ): Promise<InferAgentRunResult<TAgent>> {
+  ): Promise<InferAgentRunnerResult<TAgent, TModel>> {
     const mergedOptions: RunOptions<DataValue> = {
       ...this.state.options,
       ...runOptions
@@ -129,7 +183,7 @@ export class RunnerBuilder<
       this.state.engine!,
       this.state.model!,
       mergedOptions
-    )) as unknown as InferAgentRunResult<TAgent>;
+    )) as unknown as InferAgentRunnerResult<TAgent, TModel>;
   }
 
   /**
@@ -137,12 +191,12 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
    */
   public async runFromState(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter, ImplementedAgent<any, any, any>, any>,
-    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
+    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any, any>
       ? TypedAgentState<TTools, TStateSchema>
       : TypedAgentState<any, any>,
     runOptions?: Partial<RunOptions<DataValue>>
-  ): Promise<InferAgentRunResult<TAgent>> {
+  ): Promise<InferAgentRunnerResult<TAgent, TModel>> {
     const mergedOptions: RunOptions<DataValue> = {
       ...this.state.options,
       ...runOptions
@@ -152,7 +206,7 @@ export class RunnerBuilder<
       this.state.model!,
       state as any,
       mergedOptions
-    )) as unknown as InferAgentRunResult<TAgent>;
+    )) as unknown as InferAgentRunnerResult<TAgent, TModel>;
   }
 }
 

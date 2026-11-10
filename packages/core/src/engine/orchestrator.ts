@@ -93,7 +93,27 @@ export type StepOutcome<T = DataValue> =
 export type ExecutionOutcome<T = DataValue> =
   | YieldStepOutcome
   | HaltStepOutcome<T>
-  | StallStepOutcome;
+  | StallStepOutcome
+  | { status: 'error'; error: ExecutionErrorDetail; state: AgentState; macroCycle: number; tick: number };
+
+export interface RecoveryContext {
+  attempt: number;
+}
+
+export type RecoveryDecision = { action: 'retry' } | { action: 'abort' };
+
+export interface OrchestratorRecoveryConfig {
+  onModelError?: (
+    error: unknown,
+    context: RecoveryContext
+  ) => Promise<RecoveryDecision> | RecoveryDecision;
+
+  onToolError?: (
+    toolId: string,
+    error: unknown,
+    context: RecoveryContext
+  ) => Promise<RecoveryDecision> | RecoveryDecision;
+}
 
 /**
  * Opzioni di configurazione per l'esecuzione autonoma end-to-end (run)
@@ -104,6 +124,7 @@ export interface RunOptions<T = DataValue> {
   maxTicks?: number;
   observers?: AgentObserver[];
   signal?: AbortSignal;
+  recovery?: OrchestratorRecoveryConfig;
   onMacroCycle?: (macroCycle: number, outcome: ExecutionOutcome<T>) => void | Promise<void>;
   beforeToolExecution?: (toolId: string, args: DataRecord) => void | Promise<void>;
   afterToolExecution?: (toolId: string, args: DataRecord, result: ToolResult) => void | Promise<void>;
@@ -140,7 +161,7 @@ export interface SuspendedRunResult extends BaseRunResult {
 }
 
 export interface ExecutionErrorDetail {
-  code: 'TOOL_EXECUTION_ERROR' | 'QUIESCENCE_VIOLATION' | 'UNHANDLED_ERROR';
+  code: 'TOOL_EXECUTION_ERROR' | 'MODEL_EXECUTION_ERROR' | 'QUIESCENCE_VIOLATION' | 'UNHANDLED_ERROR';
   message: string;
   details?: unknown;
 }
@@ -227,7 +248,7 @@ export class FrameworkEngine {
    */
   public spawn<T extends DataValue = DataValue>(
     agent: AgentPackage<T> | AgentManifest<T>,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<any>,
     world?: WorldRegistry,
     initialState?: AgentState
   ): AgentInstance<T> {
@@ -246,7 +267,7 @@ export class FrameworkEngine {
    */
   public async run<T extends DataValue = DataValue>(
     agent: AgentPackage<T> | AgentManifest<T>,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<any>,
     options?: RunOptions<T> & { world?: WorldRegistry; initialState?: AgentState }
   ): Promise<RunResult<T>> {
     if (isAgentPackage<T>(agent)) {
@@ -278,7 +299,7 @@ export class BoundRuntime {
 
   public spawnAgent<T extends DataValue = DataValue>(
     manifest: AgentManifest<T>,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<any>,
     initialState?: AgentState
   ): AgentInstance<T> {
     const agent = new AgentInstance<T>(this.frameworkConfig, this.world, manifest, model, initialState);
@@ -290,7 +311,7 @@ export class BoundRuntime {
 
   public async runAgent<T extends DataValue = DataValue>(
     manifest: AgentManifest<T>,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<any>,
     options?: RunOptions<T> & { initialState?: AgentState }
   ): Promise<RunResult<T>> {
     const agent = this.spawnAgent<T>(manifest, model, options?.initialState);
@@ -318,7 +339,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
     private readonly framework: FrameworkConfig,
     private readonly world: WorldRegistry,
     private readonly manifest: AgentManifest<T>,
-    private readonly model: LanguageModelAdapter,
+    private readonly model: LanguageModelAdapter<any>,
     initialState?: AgentState
   ) {
     this.projector = this.framework.systemFrameProjector ?? defaultMarkdownProjector;
@@ -575,13 +596,58 @@ export class AgentInstance<T extends DataValue = DataValue> {
     }
   }
 
+  private lastRunOptions?: RunOptions<T>;
+  private toolAttemptCounts: Map<string, number> = new Map();
+  private modelAttemptCount: number = 0;
+
   /**
    * Ciclo di deliberazione ed esecuzione operativa ordinaria (q_exec)
    */
   private async stepExec(): Promise<StepOutcome<T>> {
     const context = this.buildInferenceTriple();
     const startInfer = Date.now();
-    const output = await this.model.infer(context);
+    let rawOutput: any;
+    try {
+      rawOutput = await this.model.infer(context);
+    } catch (err: unknown) {
+      const errorObj = err instanceof Error ? err : new Error(String(err));
+      const modelError = {
+        type: 'UNEXPECTED_MODEL_ERROR' as const,
+        message: errorObj.message,
+        cause: errorObj
+      };
+      throw {
+        __isModelExecutionError: true,
+        error: modelError
+      };
+    }
+
+    // Supporto Discriminated Union Result { ok: false, error } dall'adapter del modello
+    if (
+      rawOutput !== null &&
+      typeof rawOutput === 'object' &&
+      'ok' in rawOutput &&
+      (rawOutput as { ok: boolean }).ok === false &&
+      'error' in rawOutput
+    ) {
+      throw {
+        __isModelExecutionError: true,
+        error: (rawOutput as { error: unknown }).error
+      };
+    }
+
+    const output: ModelResult =
+      rawOutput !== null &&
+      typeof rawOutput === 'object' &&
+      'ok' in rawOutput &&
+      (rawOutput as { ok: boolean }).ok === true &&
+      'data' in rawOutput
+        ? (rawOutput as { data: ModelResult }).data
+        : rawOutput;
+
+    // Reset del contatore tentativi modello al successo dell'inferenza
+    this.modelAttemptCount = 0;
+
     const durationMs = Date.now() - startInfer;
 
     void this.emitEvent({
@@ -977,7 +1043,45 @@ export class AgentInstance<T extends DataValue = DataValue> {
   }): Promise<StepOutcome<T>> {
     const context = this.buildInferenceTriple();
     const startInfer = Date.now();
-    const output = await this.model.infer(context);
+    let rawOutput: any;
+    try {
+      rawOutput = await this.model.infer(context);
+    } catch (err: unknown) {
+      const errorObj = err instanceof Error ? err : new Error(String(err));
+      const modelError = {
+        type: 'UNEXPECTED_MODEL_ERROR' as const,
+        message: errorObj.message,
+        cause: errorObj
+      };
+      throw {
+        __isModelExecutionError: true,
+        error: modelError
+      };
+    }
+
+    if (
+      rawOutput !== null &&
+      typeof rawOutput === 'object' &&
+      'ok' in rawOutput &&
+      (rawOutput as { ok: boolean }).ok === false &&
+      'error' in rawOutput
+    ) {
+      throw {
+        __isModelExecutionError: true,
+        error: (rawOutput as { error: unknown }).error
+      };
+    }
+
+    const output: ModelResult =
+      rawOutput !== null &&
+      typeof rawOutput === 'object' &&
+      'ok' in rawOutput &&
+      (rawOutput as { ok: boolean }).ok === true &&
+      'data' in rawOutput
+        ? (rawOutput as { data: ModelResult }).data
+        : rawOutput;
+
+    this.modelAttemptCount = 0;
     const durationMs = Date.now() - startInfer;
 
     void this.emitEvent({
@@ -1291,7 +1395,50 @@ export class AgentInstance<T extends DataValue = DataValue> {
           };
         }
 
-        const outcome = await this.resume();
+        let outcome: ExecutionOutcome<T>;
+        try {
+          outcome = await this.resume();
+        } catch (err: unknown) {
+          if (err && typeof err === 'object' && '__isModelExecutionError' in err) {
+            const customModelErr = (err as unknown as { error: unknown }).error;
+            this.modelAttemptCount++;
+
+            // Consultiamo la recovery policy se definita
+            if (options?.recovery?.onModelError) {
+              const decision = await options.recovery.onModelError(customModelErr, {
+                attempt: this.modelAttemptCount
+              });
+              if (decision.action === 'retry') {
+                continue; // Ritenta la deliberazione
+              }
+            }
+
+            const errDetail: ExecutionErrorDetail = {
+              code: 'MODEL_EXECUTION_ERROR',
+              message:
+                customModelErr && typeof customModelErr === 'object' && 'message' in customModelErr && typeof (customModelErr as { message: unknown }).message === 'string'
+                  ? (customModelErr as { message: string }).message
+                  : 'Model execution error during deliberation.',
+              details: customModelErr
+            };
+            void this.emitEvent({
+              type: 'execution_error',
+              timestamp: new Date(),
+              macroCycle: this.c,
+              tick: this.t,
+              error: errDetail,
+              stateSnapshot: this.getSnapshot()
+            });
+            return {
+              status: 'error',
+              error: errDetail,
+              macroCycles: this.c,
+              ticks: this.t,
+              state: this.state
+            };
+          }
+          throw err;
+        }
 
         if (options?.onMacroCycle) {
           await options.onMacroCycle(this.c, outcome);
@@ -1337,73 +1484,102 @@ export class AgentInstance<T extends DataValue = DataValue> {
           };
         }
 
-        // Dispatch asincrono in parallelo dei tool di mondo in q_yield
-        const toolExecutionOutcomes = await Promise.all(
-          outcome.pendingCalls.map(async (call) => {
-            if (options?.beforeToolExecution) {
-              await options.beforeToolExecution(call.name, call.payload);
-            }
-            const startTime = Date.now();
-            const execResult = await this.world.executeTool(call.name, call.payload);
-            const durationMs = Date.now() - startTime;
+        if (outcome.status !== 'yield') {
+          continue;
+        }
 
-            if (execResult.ok) {
-              void this.emitEvent({
-                type: 'world_action',
-                timestamp: new Date(),
-                macroCycle: this.c,
-                tick: this.t,
-                toolId: call.name,
-                args: call.payload,
-                status: 'success',
-                result: execResult.data,
-                durationMs
-              });
+        // Dispatch asincrono dei tool di mondo in q_yield con supporto alla recovery policy
+        let allToolsSucceeded = false;
+        let toolExecutionOutcomes: Array<
+          | { ok: true; callId: string; result: ToolResult }
+          | { ok: false; callId: string; error: any }
+        > = [];
 
-              if (options?.afterToolExecution) {
-                await options.afterToolExecution(call.name, call.payload, execResult.data);
+        while (!allToolsSucceeded) {
+          toolExecutionOutcomes = await Promise.all(
+            outcome.pendingCalls.map(async (call: ToolCall) => {
+              if (options?.beforeToolExecution) {
+                await options.beforeToolExecution(call.name, call.payload);
               }
-              return { ok: true as const, callId: call.id, result: execResult.data };
-            } else {
-              void this.emitEvent({
-                type: 'world_action',
-                timestamp: new Date(),
-                macroCycle: this.c,
-                tick: this.t,
-                toolId: call.name,
-                args: call.payload,
-                status: 'failure',
-                error: execResult.error.message,
-                durationMs
-              });
-              return { ok: false as const, callId: call.id, error: execResult.error };
-            }
-          })
-        );
+              const startTime = Date.now();
+              const execResult = await this.world.executeTool(call.name, call.payload);
+              const durationMs = Date.now() - startTime;
 
-        // Se un'azione fisica è fallita, interrompiamo l'esecuzione e restituiamo l'errore tipizzato
-        const firstFailed = toolExecutionOutcomes.find((o) => !o.ok);
-        if (firstFailed && !firstFailed.ok) {
-          const errDetail: ExecutionErrorDetail = {
-            code: 'TOOL_EXECUTION_ERROR',
-            message: firstFailed.error.message,
-            details: firstFailed.error
-          };
-          void this.emitEvent({
-            type: 'execution_error',
-            timestamp: new Date(),
-            macroCycle: this.c,
-            tick: this.t,
-            error: errDetail,
-            stateSnapshot: this.getSnapshot()
-          });
-          return {
-            status: 'error',
-            error: errDetail,
-            macroCycles: this.c,
-            ticks: this.t,
-            state: this.state
-          };
+              if (execResult.ok) {
+                this.toolAttemptCounts.delete(call.name);
+                void this.emitEvent({
+                  type: 'world_action',
+                  timestamp: new Date(),
+                  macroCycle: this.c,
+                  tick: this.t,
+                  toolId: call.name,
+                  args: call.payload,
+                  status: 'success',
+                  result: execResult.data,
+                  durationMs
+                });
+
+                if (options?.afterToolExecution) {
+                  await options.afterToolExecution(call.name, call.payload, execResult.data);
+                }
+                return { ok: true as const, callId: call.id, result: execResult.data };
+              } else {
+                void this.emitEvent({
+                  type: 'world_action',
+                  timestamp: new Date(),
+                  macroCycle: this.c,
+                  tick: this.t,
+                  toolId: call.name,
+                  args: call.payload,
+                  status: 'failure',
+                  error: execResult.error.message,
+                  durationMs
+                });
+                return { ok: false as const, callId: call.id, toolName: call.name, error: execResult.error };
+              }
+            })
+          );
+
+          const failedTool = toolExecutionOutcomes.find((o): o is { ok: false; callId: string; toolName: string; error: any } => !o.ok);
+          if (failedTool) {
+            const currentAttempts = (this.toolAttemptCounts.get(failedTool.toolName) ?? 0) + 1;
+            this.toolAttemptCounts.set(failedTool.toolName, currentAttempts);
+
+            // Consultiamo la recovery policy per il tool se presente
+            if (options?.recovery?.onToolError) {
+              const customErr = failedTool.error.customError ?? failedTool.error;
+              const decision = await options.recovery.onToolError(failedTool.toolName, customErr, {
+                attempt: currentAttempts
+              });
+              if (decision.action === 'retry') {
+                continue; // Ritenta l'esecuzione dei tool
+              }
+            }
+
+            // Se abort o nessuna recovery definita
+            const errDetail: ExecutionErrorDetail = {
+              code: 'TOOL_EXECUTION_ERROR',
+              message: failedTool.error.message,
+              details: failedTool.error
+            };
+            void this.emitEvent({
+              type: 'execution_error',
+              timestamp: new Date(),
+              macroCycle: this.c,
+              tick: this.t,
+              error: errDetail,
+              stateSnapshot: this.getSnapshot()
+            });
+            return {
+              status: 'error',
+              error: errDetail,
+              macroCycles: this.c,
+              ticks: this.t,
+              state: this.state
+            };
+          }
+
+          allToolsSucceeded = true;
         }
 
         const worldResults = toolExecutionOutcomes.map((o) => {

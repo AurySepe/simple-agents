@@ -15,6 +15,7 @@ import { createWorldRegistry, WorldRegistry } from '../world/index.js';
 import {
   AgentBinding,
   AgentContract,
+  AgentRunnerResult,
   AgentRunResult,
   ImplementedAgent,
   StateParseResult,
@@ -29,15 +30,16 @@ import { BehavioralTrajectory, extractBehavioralTrajectory } from './trajectory-
 export class ImplementedAgentImpl<
   TTools extends Record<string, ToolContract>,
   TStateSchema extends z.ZodType | undefined,
-  TTerminations extends Record<string, TerminationContractDef>
-> implements ImplementedAgent<TTools, TStateSchema, TTerminations> {
+  TTerminations extends Record<string, TerminationContractDef>,
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+> implements ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap> {
   readonly manifest: AgentManifest<DataValue>;
   readonly world: WorldRegistry;
   private readonly parser: (raw: unknown) => StateParseResult<TTools, TStateSchema>;
 
   constructor(
     readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
-    readonly binding: AgentBinding<TTools, TStateSchema>
+    readonly binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap>
   ) {
     // 1. Fail-fast validation of ontological Identity (I)
     if (!contract.identity || contract.identity.trim().length === 0) {
@@ -156,31 +158,131 @@ export class ImplementedAgentImpl<
     return boundRuntime.spawnAgent(this.manifest, model, rawState);
   }
 
-  public async run(
+  public async run<TModelErrors = never>(
     engine: FrameworkEngine,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<TModelErrors>,
     options?: RunOptions<DataValue>
-  ): Promise<AgentRunResult<TTerminations>> {
+  ): Promise<AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>> {
     const boundRuntime = engine.bindWorld(this.world);
-    return (await boundRuntime.runAgent(
+    const rawOutcome = await boundRuntime.runAgent(
       this.manifest,
       model,
       options
-    )) as unknown as AgentRunResult<TTerminations>;
+    );
+
+    if (rawOutcome.status === 'error') {
+      let customErr: any = rawOutcome.error;
+      if (rawOutcome.error.code === 'TOOL_EXECUTION_ERROR') {
+        const toolErr = rawOutcome.error.details as any;
+        customErr = {
+          code: 'TOOL_EXECUTION_ERROR',
+          kind: 'TOOL_ERROR',
+          toolName: toolErr?.toolId,
+          error: toolErr?.customError ?? toolErr,
+          message: rawOutcome.error.message
+        };
+      } else if (rawOutcome.error.code === 'MODEL_EXECUTION_ERROR') {
+        customErr = {
+          code: 'MODEL_EXECUTION_ERROR',
+          kind: 'MODEL_ERROR',
+          error: rawOutcome.error.details,
+          message: rawOutcome.error.message
+        };
+      } else if (rawOutcome.error.code === 'QUIESCENCE_VIOLATION') {
+        customErr = {
+          code: 'QUIESCENCE_VIOLATION',
+          kind: 'QUIESCENCE_VIOLATION',
+          currentState: (rawOutcome.error.details as any)?.currentState ?? 'unknown',
+          message: rawOutcome.error.message
+        };
+      }
+
+      return {
+        ok: false,
+        status: 'error',
+        error: customErr,
+        macroCycles: rawOutcome.macroCycles,
+        ticks: rawOutcome.ticks,
+        state: rawOutcome.state,
+        resume: async () => {
+          return (await this.runFromState(
+            engine,
+            model,
+            rawOutcome.state as any,
+            { ...options, userContent: undefined }
+          )) as any;
+        }
+      };
+    }
+
+    return {
+      ok: true,
+      ...rawOutcome
+    } as any;
   }
 
-  public async runFromState(
+  public async runFromState<TModelErrors = never>(
     engine: FrameworkEngine,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<TModelErrors>,
     state: TypedAgentState<TTools, TStateSchema>,
     options?: RunOptions<DataValue>
-  ): Promise<AgentRunResult<TTerminations>> {
+  ): Promise<AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>> {
     const rawState = deserializeAgentState(state as any);
     const boundRuntime = engine.bindWorld(this.world);
-    return (await boundRuntime.runAgent(
+    const rawOutcome = await boundRuntime.runAgent(
       this.manifest,
       model,
       { ...options, initialState: rawState }
-    )) as unknown as AgentRunResult<TTerminations>;
+    );
+
+    if (rawOutcome.status === 'error') {
+      let customErr: any = rawOutcome.error;
+      if (rawOutcome.error.code === 'TOOL_EXECUTION_ERROR') {
+        const toolErr = rawOutcome.error.details as any;
+        customErr = {
+          code: 'TOOL_EXECUTION_ERROR',
+          kind: 'TOOL_ERROR',
+          toolName: toolErr?.toolId,
+          error: toolErr?.customError ?? toolErr,
+          message: rawOutcome.error.message
+        };
+      } else if (rawOutcome.error.code === 'MODEL_EXECUTION_ERROR') {
+        customErr = {
+          code: 'MODEL_EXECUTION_ERROR',
+          kind: 'MODEL_ERROR',
+          error: rawOutcome.error.details,
+          message: rawOutcome.error.message
+        };
+      } else if (rawOutcome.error.code === 'QUIESCENCE_VIOLATION') {
+        customErr = {
+          code: 'QUIESCENCE_VIOLATION',
+          kind: 'QUIESCENCE_VIOLATION',
+          currentState: (rawOutcome.error.details as any)?.currentState ?? 'unknown',
+          message: rawOutcome.error.message
+        };
+      }
+
+      return {
+        ok: false,
+        status: 'error',
+        error: customErr,
+        macroCycles: rawOutcome.macroCycles,
+        ticks: rawOutcome.ticks,
+        state: rawOutcome.state,
+        resume: async () => {
+          return (await this.runFromState(
+            engine,
+            model,
+            rawOutcome.state as any,
+            { ...options, userContent: undefined }
+          )) as any;
+        }
+      };
+    }
+
+    return {
+      ok: true,
+      ...rawOutcome
+    } as any;
   }
 }

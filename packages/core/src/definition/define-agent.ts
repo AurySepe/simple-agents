@@ -50,9 +50,9 @@ export function defineAgent<
     extractTrajectory(state: TypedAgentState<TTools, TStateSchema>) {
       return extractBehavioralTrajectory(this, state);
     },
-    implement(
-      binding: AgentBinding<TTools, TStateSchema>
-    ): ImplementedAgent<TTools, TStateSchema, TTerminations> {
+    implement<TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>>(
+      binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap>
+    ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap> {
       return new ImplementedAgentImpl(contract, binding);
     }
   };

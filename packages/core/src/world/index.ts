@@ -8,6 +8,30 @@ import {
 
 /**
  * ============================================================================
+ * TIPI ED HELPER PER GLI ESITI DEI TOOL HANDLER
+ * ============================================================================
+ */
+export interface UnexpectedToolError {
+  type: 'UNEXPECTED_ERROR';
+  message: string;
+  cause: unknown;
+}
+
+export type ToolReturn<TOutput = ToolResult, TCustomError = never> =
+  | TOutput
+  | { ok: true; data: TOutput; error?: never }
+  | { ok: false; error: TCustomError; data?: never };
+
+export function toolOk<T>(data: T): { ok: true; data: T; error?: never } {
+  return { ok: true, data };
+}
+
+export function toolFail<E extends { type: string }>(error: E): { ok: false; error: E; data?: never } {
+  return { ok: false, error };
+}
+
+/**
+ * ============================================================================
  * INTERFACCIA DEL REGISTRO DEL MONDO (W)
  * ============================================================================
  * Il catalogo formale delle funzioni fisiche esogene iniettate nell'Orchestratore.
@@ -21,6 +45,7 @@ export interface ToolExecutionError {
   code: ToolExecutionErrorCode;
   toolId: string;
   message: string;
+  customError?: unknown;
   details?: unknown;
   cause?: unknown;
 }
@@ -142,16 +167,58 @@ export function createWorldRegistry(initialTools: WorldTool[] = []): WorldRegist
 
       // Esecuzione protetta con inoltro dei parametri validati e tipizzati
       try {
-        const data = await tool.execute(parseResult.data);
-        return { ok: true, data };
+        const rawResult = await tool.execute(parseResult.data);
+        // Riconoscimento del pattern { ok: false, error } restituito dal tool handler
+        if (
+          rawResult !== null &&
+          typeof rawResult === 'object' &&
+          'ok' in rawResult &&
+          (rawResult as { ok: boolean }).ok === false &&
+          'error' in rawResult
+        ) {
+          const customError = (rawResult as { error: unknown }).error;
+          const message =
+            customError && typeof customError === 'object' && 'message' in customError && typeof (customError as { message: unknown }).message === 'string'
+              ? (customError as { message: string }).message
+              : `Tool '${toolId}' failed with declared environmental error.`;
+          return {
+            ok: false,
+            error: {
+              code: 'EXECUTION_REJECTED',
+              toolId,
+              message,
+              customError
+            }
+          };
+        }
+
+        // Riconoscimento del pattern { ok: true, data } restituito dal tool handler (toolOk)
+        if (
+          rawResult !== null &&
+          typeof rawResult === 'object' &&
+          'ok' in rawResult &&
+          (rawResult as { ok: boolean }).ok === true &&
+          'data' in rawResult
+        ) {
+          return { ok: true, data: (rawResult as { data: ToolResult }).data };
+        }
+
+        // Successo di dominio diretto (es. oggetto o valore restituito direttamente)
+        return { ok: true, data: rawResult as ToolResult };
       } catch (err: unknown) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
+        const unexpectedError: UnexpectedToolError = {
+          type: 'UNEXPECTED_ERROR',
+          message: errorObj.message,
+          cause: errorObj
+        };
         return {
           ok: false,
           error: {
             code: 'EXECUTION_REJECTED',
             toolId,
-            message: `Error during execution of tool '${toolId}': ${errorObj.message}`,
+            message: `Unexpected error during execution of tool '${toolId}': ${errorObj.message}`,
+            customError: unexpectedError,
             cause: errorObj
           }
         };

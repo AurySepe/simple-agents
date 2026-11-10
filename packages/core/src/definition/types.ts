@@ -3,14 +3,26 @@ import {
   Concept,
   DataRecord,
   DataValue,
+  DeliberationStall,
   Message,
   ToolResult,
   LanguageModelAdapter,
   AgentManifest,
-  AgentState
+  AgentState,
+  UnexpectedModelError
 } from '../types/index.js';
-import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult, SuspendedRunResult, ErrorRunResult } from '../engine/orchestrator.js';
-import { WorldRegistry } from '../world/index.js';
+import {
+  FrameworkEngine,
+  AgentInstance,
+  RunOptions,
+  RunResult,
+  StallRunResult,
+  SuspendedRunResult,
+  ErrorRunResult,
+  RecoveryContext,
+  RecoveryDecision
+} from '../engine/orchestrator.js';
+import { ToolReturn, UnexpectedToolError, WorldRegistry } from '../world/index.js';
 import type { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 import type { BehavioralTrajectory } from './trajectory-extractor.js';
 
@@ -170,14 +182,86 @@ export type StateParseResult<
   | { ok: false; error: StateParseError; state?: never };
 
 /**
- * Mapped type che esige l'esatta implementazione per ciascun tool dichiarato nel contratto.
+ * ============================================================================
+ * ERRORI INFRASTRUTTURALI / AMBIENTALI FORTEMENTE TIPIZZATI
+ * ============================================================================
  */
-export type ToolImplementations<TTools extends Record<string, ToolContract>> = {
+export type WorldExecutionError<TToolErrorsMap extends Record<string, any>> = {
+  [K in keyof TToolErrorsMap]: {
+    kind: 'TOOL_ERROR';
+    toolName: K & string;
+    error: TToolErrorsMap[K] | UnexpectedToolError;
+  };
+}[keyof TToolErrorsMap];
+
+export type ModelExecutionError<TModelErrors> = {
+  kind: 'MODEL_ERROR';
+  error: TModelErrors | UnexpectedModelError;
+};
+
+export type TypedAgentRunError<TToolErrorsMap extends Record<string, any> = Record<string, any>, TModelErrors = any> =
+  | WorldExecutionError<TToolErrorsMap>
+  | ModelExecutionError<TModelErrors>
+  | { kind: 'QUIESCENCE_VIOLATION'; currentState: string; message: string };
+
+/**
+ * ============================================================================
+ * ESITO UNIFICATO DEL RUNNER: ok: true | false
+ * ============================================================================
+ */
+export type AgentRunSuccess<TTerminations extends Record<string, TerminationContractDef>> = {
+  ok: true;
+  macroCycles: number;
+  ticks: number;
+  state: AgentState;
+} & (
+  | { status: 'halt'; result: InferTerminationsUnion<TTerminations>; stall?: never; reason?: never }
+  | { status: 'stall'; stall: DeliberationStall; result?: never; reason?: never }
+  | { status: 'suspended'; reason: 'aborted' | 'cycle_limit' | 'tick_limit'; result?: never; stall?: never }
+);
+
+export interface AgentRunFailure<
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>,
+  TToolErrorsMap extends Record<string, any> = Record<string, any>,
+  TModelErrors = any
+> {
+  ok: false;
+  status: 'error';
+  error: TypedAgentRunError<TToolErrorsMap, TModelErrors>;
+  macroCycles: number;
+  ticks: number;
+  state: AgentState;
+  resume: () => Promise<AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>>;
+}
+
+export type AgentRunnerResult<
+  TTerminations extends Record<string, TerminationContractDef>,
+  TToolErrorsMap extends Record<string, any> = Record<string, any>,
+  TModelErrors = any
+> =
+  | AgentRunSuccess<TTerminations>
+  | AgentRunFailure<TTerminations, TToolErrorsMap, TModelErrors>;
+
+/**
+ * Helper per estrarre il tipo dell'errore infrastrutturale da un tool return.
+ */
+export type ExtractToolCustomError<TReturn> = TReturn extends { ok: false; error: infer E }
+  ? E
+  : never;
+
+/**
+ * Mapped type che esige l'esatta implementazione per ciascun tool dichiarato nel contratto.
+ * Supporta sia il ritorno diretto di TReturns, sia ToolReturn<TReturns, TCustomError>.
+ */
+export type ToolImplementations<
+  TTools extends Record<string, ToolContract>,
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+> = {
   [K in keyof TTools]: (
     args: z.infer<TTools[K]['parameters']>
   ) =>
-    | Promise<TTools[K]['returns'] extends z.ZodType ? z.infer<TTools[K]['returns']> : ToolResult>
-    | (TTools[K]['returns'] extends z.ZodType ? z.infer<TTools[K]['returns']> : ToolResult);
+    | Promise<ToolReturn<TTools[K]['returns'] extends z.ZodType ? z.infer<TTools[K]['returns']> : ToolResult, TToolErrorsMap[K]>>
+    | ToolReturn<TTools[K]['returns'] extends z.ZodType ? z.infer<TTools[K]['returns']> : ToolResult, TToolErrorsMap[K]>;
 };
 
 export type InferInitialState<TStateSchema> = TStateSchema extends z.ZodType
@@ -208,10 +292,11 @@ export type TypedAgentState<
  */
 export type AgentBinding<
   TTools extends Record<string, ToolContract>,
-  TStateSchema extends z.ZodType | undefined = undefined
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
 > = {
   /** Esecutori asincroni tipizzati per ciascun tool dichiarato nel contratto */
-  tools: ToolImplementations<TTools>;
+  tools: ToolImplementations<TTools, TToolErrorsMap>;
 } & (TStateSchema extends z.ZodType
   ? { initialState: z.infer<TStateSchema> }
   : { initialState?: never });
@@ -225,9 +310,9 @@ export interface AgentDefinition<
   TTerminations extends Record<string, TerminationContractDef>
 > {
   readonly contract: AgentContract<TTools, TStateSchema, TTerminations>;
-  implement(
-    binding: AgentBinding<TTools, TStateSchema>
-  ): ImplementedAgent<TTools, TStateSchema, TTerminations>;
+  implement<TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>>(
+    binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap>
+  ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap>;
   /**
    * Convalida e raffina a runtime uno stato 'unknown'
    * restituendo un Result tipizzato (StateParseResult) senza lanciare eccezioni.
@@ -250,9 +335,10 @@ export interface AgentDefinition<
  * Interfaccia dell'agente completamente implementato e pronto per il runtime.
  */
 export interface ImplementedAgent<
-  TTools extends Record<string, ToolContract>,
-  TStateSchema extends z.ZodType | undefined,
-  TTerminations extends Record<string, TerminationContractDef>
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>,
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
 > {
   readonly contract: AgentContract<TTools, TStateSchema, TTerminations>;
   readonly manifest: AgentManifest<DataValue>;
@@ -278,18 +364,18 @@ export interface ImplementedAgent<
   /**
    * Spawna un'istanza dell'agente nel runtime collegandola automaticamente al Mondo implementato.
    */
-  spawn(
+  spawn<TModelErrors = never>(
     engine: FrameworkEngine,
-    model: LanguageModelAdapter
+    model: LanguageModelAdapter<TModelErrors>
   ): AgentInstance<DataValue>;
 
   /**
    * Spawna un'istanza dell'agente nel runtime ripartendo da uno stato pregresso fortemente tipizzato.
    * Calcola deterministicamente la fase FSM e l'indice temporale dall'Ep dello stato.
    */
-  spawnFromState(
+  spawnFromState<TModelErrors = never>(
     engine: FrameworkEngine,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<TModelErrors>,
     state: TypedAgentState<TTools, TStateSchema>
   ): AgentInstance<DataValue>;
 
@@ -297,19 +383,19 @@ export interface ImplementedAgent<
    * Esegue l'agente end-to-end gestendo spawn e run in una singola invocazione.
    * Ritorna un esito tipizzato con unione discriminata sul tipo di terminazione e relativo payload Zod.
    */
-  run(
+  run<TModelErrors = never>(
     engine: FrameworkEngine,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<TModelErrors>,
     options?: RunOptions<DataValue>
-  ): Promise<AgentRunResult<TTerminations>>;
+  ): Promise<AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>>;
 
   /**
    * Esegue l'agente a partire da uno stato pregresso fortemente tipizzato fino alla terminazione (halt).
    */
-  runFromState(
+  runFromState<TModelErrors = never>(
     engine: FrameworkEngine,
-    model: LanguageModelAdapter,
+    model: LanguageModelAdapter<TModelErrors>,
     state: TypedAgentState<TTools, TStateSchema>,
     options?: RunOptions<DataValue>
-  ): Promise<AgentRunResult<TTerminations>>;
+  ): Promise<AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>>;
 }

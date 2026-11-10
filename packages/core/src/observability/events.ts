@@ -92,7 +92,7 @@ export interface SuspendEvent extends BaseAgentEvent {
 export interface ExecutionErrorEvent extends BaseAgentEvent {
   type: 'execution_error';
   error: {
-    code: 'TOOL_EXECUTION_ERROR' | 'QUIESCENCE_VIOLATION' | 'UNHANDLED_ERROR';
+    code: 'TOOL_EXECUTION_ERROR' | 'MODEL_EXECUTION_ERROR' | 'QUIESCENCE_VIOLATION' | 'UNHANDLED_ERROR';
     message: string;
     details?: unknown;
   };
