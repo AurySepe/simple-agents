@@ -5,6 +5,7 @@ import {
   DataRecord,
   DataValue,
   deserializeAgentState,
+  SerializedAgentState,
   TerminationContract,
   ToolResult,
   WorldTool,
@@ -17,15 +18,56 @@ import {
   AgentContract,
   AgentRunnerResult,
   AgentRunResult,
+  AgentRunSuccess,
+  AgentRunFailure,
   ImplementedAgent,
   StateParseResult,
   TerminationContractDef,
   ToolContract,
+  TypedAgentRunError,
   TypedAgentState
 } from './types.js';
 import { createAgentStateParser } from './state-parser.js';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 import { BehavioralTrajectory, extractBehavioralTrajectory } from './trajectory-extractor.js';
+
+function mapExecutionErrorDetail<TToolErrorsMap extends Record<string, unknown>, TModelErrors>(
+  detail: { code: string; message: string; details?: unknown }
+): TypedAgentRunError<TToolErrorsMap, TModelErrors> {
+  if (detail.code === 'TOOL_EXECUTION_ERROR') {
+    const toolDetails = detail.details as { toolId?: string; customError?: unknown } | undefined;
+    const toolId = toolDetails?.toolId ?? 'unknown';
+    const err = toolDetails?.customError ?? detail.details;
+    return {
+      code: 'TOOL_EXECUTION_ERROR',
+      kind: 'TOOL_ERROR',
+      toolName: toolId,
+      error: err,
+      message: detail.message
+    } as TypedAgentRunError<TToolErrorsMap, TModelErrors>;
+  }
+
+  if (detail.code === 'MODEL_EXECUTION_ERROR') {
+    return {
+      code: 'MODEL_EXECUTION_ERROR',
+      kind: 'MODEL_ERROR',
+      error: detail.details as TModelErrors,
+      message: detail.message
+    } as TypedAgentRunError<TToolErrorsMap, TModelErrors>;
+  }
+
+  const currentPhase =
+    detail.details && typeof detail.details === 'object' && 'currentPhase' in detail.details
+      ? String((detail.details as { currentPhase: unknown }).currentPhase)
+      : 'unknown';
+
+  return {
+    code: 'QUIESCENCE_VIOLATION',
+    kind: 'QUIESCENCE_VIOLATION',
+    currentState: currentPhase,
+    message: detail.message
+  };
+}
 
 export class ImplementedAgentImpl<
   TTools extends Record<string, ToolContract>,
@@ -171,33 +213,8 @@ export class ImplementedAgentImpl<
     );
 
     if (rawOutcome.status === 'error') {
-      let customErr: any = rawOutcome.error;
-      if (rawOutcome.error.code === 'TOOL_EXECUTION_ERROR') {
-        const toolErr = rawOutcome.error.details as any;
-        customErr = {
-          code: 'TOOL_EXECUTION_ERROR',
-          kind: 'TOOL_ERROR',
-          toolName: toolErr?.toolId,
-          error: toolErr?.customError ?? toolErr,
-          message: rawOutcome.error.message
-        };
-      } else if (rawOutcome.error.code === 'MODEL_EXECUTION_ERROR') {
-        customErr = {
-          code: 'MODEL_EXECUTION_ERROR',
-          kind: 'MODEL_ERROR',
-          error: rawOutcome.error.details,
-          message: rawOutcome.error.message
-        };
-      } else if (rawOutcome.error.code === 'QUIESCENCE_VIOLATION') {
-        customErr = {
-          code: 'QUIESCENCE_VIOLATION',
-          kind: 'QUIESCENCE_VIOLATION',
-          currentState: (rawOutcome.error.details as any)?.currentState ?? 'unknown',
-          message: rawOutcome.error.message
-        };
-      }
-
-      return {
+      const customErr = mapExecutionErrorDetail<TToolErrorsMap, TModelErrors>(rawOutcome.error);
+      const failure: AgentRunFailure<TTerminations, TToolErrorsMap, TModelErrors> = {
         ok: false,
         status: 'error',
         error: customErr,
@@ -205,20 +222,21 @@ export class ImplementedAgentImpl<
         ticks: rawOutcome.ticks,
         state: rawOutcome.state,
         resume: async () => {
-          return (await this.runFromState(
+          return await this.runFromState(
             engine,
             model,
-            rawOutcome.state as any,
+            rawOutcome.state as unknown as TypedAgentState<TTools, TStateSchema>,
             { ...options, userContent: undefined }
-          )) as any;
+          );
         }
       };
+      return failure;
     }
 
     return {
       ok: true,
       ...rawOutcome
-    } as any;
+    } as unknown as AgentRunSuccess<TTerminations>;
   }
 
   public async runFromState<TModelErrors = never>(
@@ -227,7 +245,7 @@ export class ImplementedAgentImpl<
     state: TypedAgentState<TTools, TStateSchema>,
     options?: RunOptions<DataValue>
   ): Promise<AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>> {
-    const rawState = deserializeAgentState(state as any);
+    const rawState = deserializeAgentState(state as unknown as SerializedAgentState);
     const boundRuntime = engine.bindWorld(this.world);
     const rawOutcome = await boundRuntime.runAgent(
       this.manifest,
@@ -236,33 +254,8 @@ export class ImplementedAgentImpl<
     );
 
     if (rawOutcome.status === 'error') {
-      let customErr: any = rawOutcome.error;
-      if (rawOutcome.error.code === 'TOOL_EXECUTION_ERROR') {
-        const toolErr = rawOutcome.error.details as any;
-        customErr = {
-          code: 'TOOL_EXECUTION_ERROR',
-          kind: 'TOOL_ERROR',
-          toolName: toolErr?.toolId,
-          error: toolErr?.customError ?? toolErr,
-          message: rawOutcome.error.message
-        };
-      } else if (rawOutcome.error.code === 'MODEL_EXECUTION_ERROR') {
-        customErr = {
-          code: 'MODEL_EXECUTION_ERROR',
-          kind: 'MODEL_ERROR',
-          error: rawOutcome.error.details,
-          message: rawOutcome.error.message
-        };
-      } else if (rawOutcome.error.code === 'QUIESCENCE_VIOLATION') {
-        customErr = {
-          code: 'QUIESCENCE_VIOLATION',
-          kind: 'QUIESCENCE_VIOLATION',
-          currentState: (rawOutcome.error.details as any)?.currentState ?? 'unknown',
-          message: rawOutcome.error.message
-        };
-      }
-
-      return {
+      const customErr = mapExecutionErrorDetail<TToolErrorsMap, TModelErrors>(rawOutcome.error);
+      const failure: AgentRunFailure<TTerminations, TToolErrorsMap, TModelErrors> = {
         ok: false,
         status: 'error',
         error: customErr,
@@ -270,19 +263,20 @@ export class ImplementedAgentImpl<
         ticks: rawOutcome.ticks,
         state: rawOutcome.state,
         resume: async () => {
-          return (await this.runFromState(
+          return await this.runFromState(
             engine,
             model,
-            rawOutcome.state as any,
+            rawOutcome.state as unknown as TypedAgentState<TTools, TStateSchema>,
             { ...options, userContent: undefined }
-          )) as any;
+          );
         }
       };
+      return failure;
     }
 
     return {
       ok: true,
       ...rawOutcome
-    } as any;
+    } as unknown as AgentRunSuccess<TTerminations>;
   }
 }

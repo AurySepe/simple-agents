@@ -98,14 +98,23 @@ export class RunnerBuilder<
    */
   public withRecovery(
     recovery: TypedRunnerRecoveryConfig<
-      TAgent extends ImplementedAgent<any, any, any, infer TToolErrors> ? TToolErrors : Record<string, any>,
-      TModel extends LanguageModelAdapter<infer TModelErrors> ? TModelErrors : any
+      TAgent extends ImplementedAgent<any, any, any, infer TToolErrors> ? TToolErrors : Record<string, unknown>,
+      TModel extends LanguageModelAdapter<infer TModelErrors> ? TModelErrors : unknown
     >
   ): RunnerBuilder<TEngine, TModel, TAgent, TOptions> {
     const orchestratorRecovery: OrchestratorRecoveryConfig = {
-      onModelError: recovery.onModelError as any,
+      onModelError: recovery.onModelError
+        ? (error, context) =>
+            (recovery.onModelError as (e: unknown, ctx: RecoveryContext) => Promise<RecoveryDecision> | RecoveryDecision)(
+              error,
+              context
+            )
+        : undefined,
       onToolError: async (toolId, error, context) => {
-        const handler = recovery.onToolError ? (recovery.onToolError as Record<string, any>)[toolId] : undefined;
+        const toolHandlers = recovery.onToolError as
+          | Record<string, ((err: unknown, ctx: RecoveryContext) => Promise<RecoveryDecision> | RecoveryDecision) | undefined>
+          | undefined;
+        const handler = toolHandlers ? toolHandlers[toolId] : undefined;
         if (handler) {
           return await handler(error, context);
         }
@@ -194,7 +203,7 @@ export class RunnerBuilder<
     this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
     state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any, any>
       ? TypedAgentState<TTools, TStateSchema>
-      : TypedAgentState<any, any>,
+      : TypedAgentState<Record<string, never>, undefined>,
     runOptions?: Partial<RunOptions<DataValue>>
   ): Promise<InferAgentRunnerResult<TAgent, TModel>> {
     const mergedOptions: RunOptions<DataValue> = {
@@ -204,7 +213,7 @@ export class RunnerBuilder<
     return (await this.state.agent!.runFromState(
       this.state.engine!,
       this.state.model!,
-      state as any,
+      state as unknown as TypedAgentState<Record<string, never>, undefined>,
       mergedOptions
     )) as unknown as InferAgentRunnerResult<TAgent, TModel>;
   }

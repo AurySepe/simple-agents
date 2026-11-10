@@ -27,7 +27,7 @@ import {
   UserPayload,
   ValidToolCall
 } from '../types/index.js';
-import { WorldRegistry } from '../world/index.js';
+import { ToolExecutionError, WorldRegistry } from '../world/index.js';
 import { computeVisibleTools, SystemFrameProjector } from './projection.js';
 import { defaultMarkdownProjector } from '../defaults/projectors/markdown-projector.js';
 import { defaultOperationalPolicy, OperationalPolicy } from '../defaults/policies/operational-policy.js';
@@ -606,7 +606,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
   private async stepExec(): Promise<StepOutcome<T>> {
     const context = this.buildInferenceTriple();
     const startInfer = Date.now();
-    let rawOutput: any;
+    let rawOutput: unknown;
     try {
       rawOutput = await this.model.infer(context);
     } catch (err: unknown) {
@@ -643,7 +643,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
       (rawOutput as { ok: boolean }).ok === true &&
       'data' in rawOutput
         ? (rawOutput as { data: ModelResult }).data
-        : rawOutput;
+        : (rawOutput as ModelResult);
 
     // Reset del contatore tentativi modello al successo dell'inferenza
     this.modelAttemptCount = 0;
@@ -1043,7 +1043,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
   }): Promise<StepOutcome<T>> {
     const context = this.buildInferenceTriple();
     const startInfer = Date.now();
-    let rawOutput: any;
+    let rawOutput: unknown;
     try {
       rawOutput = await this.model.infer(context);
     } catch (err: unknown) {
@@ -1079,7 +1079,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
       (rawOutput as { ok: boolean }).ok === true &&
       'data' in rawOutput
         ? (rawOutput as { data: ModelResult }).data
-        : rawOutput;
+        : (rawOutput as ModelResult);
 
     this.modelAttemptCount = 0;
     const durationMs = Date.now() - startInfer;
@@ -1492,7 +1492,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
         let allToolsSucceeded = false;
         let toolExecutionOutcomes: Array<
           | { ok: true; callId: string; result: ToolResult }
-          | { ok: false; callId: string; error: any }
+          | { ok: false; callId: string; toolName: string; error: ToolExecutionError }
         > = [];
 
         while (!allToolsSucceeded) {
@@ -1540,7 +1540,9 @@ export class AgentInstance<T extends DataValue = DataValue> {
             })
           );
 
-          const failedTool = toolExecutionOutcomes.find((o): o is { ok: false; callId: string; toolName: string; error: any } => !o.ok);
+          const failedTool = toolExecutionOutcomes.find(
+            (o): o is { ok: false; callId: string; toolName: string; error: ToolExecutionError } => !o.ok
+          );
           if (failedTool) {
             const currentAttempts = (this.toolAttemptCounts.get(failedTool.toolName) ?? 0) + 1;
             this.toolAttemptCounts.set(failedTool.toolName, currentAttempts);

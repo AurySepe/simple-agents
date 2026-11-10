@@ -188,21 +188,25 @@ export type StateParseResult<
  */
 export type WorldExecutionError<TToolErrorsMap extends Record<string, any>> = {
   [K in keyof TToolErrorsMap]: {
+    code: 'TOOL_EXECUTION_ERROR';
     kind: 'TOOL_ERROR';
     toolName: K & string;
     error: TToolErrorsMap[K] | UnexpectedToolError;
+    message: string;
   };
 }[keyof TToolErrorsMap];
 
 export type ModelExecutionError<TModelErrors> = {
+  code: 'MODEL_EXECUTION_ERROR';
   kind: 'MODEL_ERROR';
   error: TModelErrors | UnexpectedModelError;
+  message: string;
 };
 
 export type TypedAgentRunError<TToolErrorsMap extends Record<string, any> = Record<string, any>, TModelErrors = any> =
   | WorldExecutionError<TToolErrorsMap>
   | ModelExecutionError<TModelErrors>
-  | { kind: 'QUIESCENCE_VIOLATION'; currentState: string; message: string };
+  | { code: 'QUIESCENCE_VIOLATION'; kind: 'QUIESCENCE_VIOLATION'; currentState: string; message: string };
 
 /**
  * ============================================================================
