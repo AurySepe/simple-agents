@@ -169,10 +169,10 @@ export class GeminiStrategy {
             ]);
           } else {
             // Chiamata proveniente da un altro provider LLM o ripristinata senza firma:
-            // proiettata come messaggio utente naturale per evitare errore 400 di Gemini
+            // proiettata come messaggio utente naturale in lingua standard inglese
             appendContent('user', [
               {
-                text: `[Azione eseguita precedentemente]: ${msg.content.name}(${JSON.stringify(msg.content.payload)})`
+                text: `[Previously executed action]: ${msg.content.name}(${JSON.stringify(msg.content.payload)})`
               }
             ]);
           }
@@ -194,10 +194,10 @@ export class GeminiStrategy {
               }
             ]);
           } else {
-            // Risultato per azione cross-model/senza firma inviato come testo utente
+            // Risultato per azione cross-model/senza firma inviato come testo utente in inglese
             appendContent('user', [
               {
-                text: `[Esito osservato per ${toolName}]: ${JSON.stringify(msg.content)}`
+                text: `[Observed result for ${toolName}]: ${JSON.stringify(msg.content)}`
               }
             ]);
           }

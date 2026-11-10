@@ -250,8 +250,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       const userContent = formatted.contents.find((c) => c.role === 'user');
       expect(userContent).toBeDefined();
       const fullUserText = userContent?.parts.map((p: any) => p.text).join('\n');
-      expect(fullUserText).toContain('[Azione eseguita precedentemente]: cerca_documenti');
-      expect(fullUserText).toContain('[Esito osservato per cerca_documenti]: {"trovati":0}');
+      expect(fullUserText).toContain('[Previously executed action]: cerca_documenti');
+      expect(fullUserText).toContain('[Observed result for cerca_documenti]: {"trovati":0}');
     });
   });
 
