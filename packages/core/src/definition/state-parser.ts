@@ -189,25 +189,12 @@ export function createAgentStateParser<
   const allowedToolKeys = new Set(Object.keys(contract.tools ?? {}));
 
   return function parseState(raw: unknown): TypedAgentState<TTools, TStateSchema> {
-    let candidate: any = raw;
-
-    // Se è una stringa JSON, prova a parsare
-    if (typeof candidate === 'string') {
-      try {
-        candidate = JSON.parse(candidate);
-      } catch (err: any) {
-        throw new StateValidationError(
-          `Invalid JSON string provided to parseState: ${err.message}`,
-          err
-        );
-      }
-    }
-
-    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
       throw new StateValidationError(
-        'Agent state must be a non-null JSON object.'
+        'Agent state must be a non-null object.'
       );
     }
+    const candidate: any = raw;
 
     // 1. Validazione Identità (I) e Missione (Ms)
     if (typeof candidate.I !== 'string' || candidate.I.trim().length === 0) {

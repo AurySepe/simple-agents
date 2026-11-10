@@ -200,7 +200,7 @@ export interface AgentDefinition<
     binding: AgentBinding<TTools, TStateSchema>
   ): ImplementedAgent<TTools, TStateSchema, TTerminations>;
   /**
-   * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON
+   * Convalida e raffina a runtime uno stato 'unknown'
    * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
    */
   parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;
@@ -212,7 +212,7 @@ export interface AgentDefinition<
 
   /**
    * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S fortemente tipizzato (TypedAgentState)
-   * senza rieseguire l'agente o avviare il runtime. Per stati grezzi o JSON, usare prima 'parseState(raw)'.
+   * senza rieseguire l'agente o avviare il runtime.
    */
   extractTrajectory(state: TypedAgentState<TTools, TStateSchema>): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
 }
@@ -236,12 +236,12 @@ export interface ImplementedAgent<
 
   /**
    * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S fortemente tipizzato (TypedAgentState)
-   * senza rieseguire l'agente o avviare il runtime. Per stati grezzi o JSON, usare prima 'parseState(raw)'.
+   * senza rieseguire l'agente o avviare il runtime.
    */
   extractTrajectory(state: TypedAgentState<TTools, TStateSchema>): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
 
   /**
-   * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON
+   * Convalida e raffina a runtime uno stato 'unknown'
    * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
    */
   parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;

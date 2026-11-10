@@ -259,7 +259,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       expect(parsed.Ta).toEqual(['deposit']);
     });
 
-    it('dovrebbe accettare e parsare direttamente una stringa JSON', () => {
+    it('dovrebbe rifiutare stringhe e tipi non-oggetto esigendo un oggetto JavaScript in memoria', () => {
       const validPayload = {
         I: 'BankingAgent',
         Ms: 'Missione',
@@ -269,7 +269,13 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       };
 
       const jsonStr = JSON.stringify(validPayload);
-      const parsed = bankingAgentDef.parseState(jsonStr);
+      // Rifiuta stringhe grezze, numeri, null
+      expect(() => bankingAgentDef.parseState(jsonStr)).toThrow(StateValidationError);
+      expect(() => bankingAgentDef.parseState(123)).toThrow(StateValidationError);
+      expect(() => bankingAgentDef.parseState(null)).toThrow(StateValidationError);
+
+      // Accetta l'oggetto già deserializzato da qualsiasi codec (JSON, Protobuf, DB)
+      const parsed = bankingAgentDef.parseState(JSON.parse(jsonStr));
       expect(parsed.Ds.accountNumber).toBe('IT-999');
     });
 
@@ -384,8 +390,8 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const suspendedSnapshot = instance.getSnapshot();
       const serializedJsonString = JSON.stringify(serializeAgentState(suspendedSnapshot));
 
-      // FASE 2: In un contesto separato (nuova esecuzione), convalidiamo il JSON con il contratto
-      const validatedState = implementedAgent.parseState(serializedJsonString);
+      // FASE 2: In un contesto separato (nuova esecuzione), convalidiamo l'oggetto deserializzato con il contratto
+      const validatedState = implementedAgent.parseState(JSON.parse(serializedJsonString));
       expect(validatedState.Ds.accountId).toBe('ACC-1');
 
       // FASE 3: Riprendiamo l'agente con il RunnerBuilder ripartendo dallo stato serializzato
@@ -484,7 +490,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         const json = JSON.stringify(serialized);
 
         // Ora riprendiamo in un nuovo runner senza abort signal
-        const restoredState = implemented.parseState(json);
+        const restoredState = implemented.parseState(JSON.parse(json));
         const finalResult = await runner.runFromState(restoredState);
 
         expect(finalResult.status).toBe('halt');
@@ -625,7 +631,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         const serializedJson = JSON.stringify(serializeAgentState(turn1Result.state));
 
         // TURNO 2: Ripartiamo dallo stato serializzato in halt, passando un nuovo stimulus!
-        const parsedState = implemented.parseState(serializedJson);
+        const parsedState = implemented.parseState(JSON.parse(serializedJson));
         const turn2Result = await runner.runFromState(parsedState, {
           userContent: { kind: 'text', text: 'Secondo messaggio' }
         });

@@ -130,7 +130,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     expect(trajectory.steps[2].results).toHaveLength(0); // Nessun tool result per terminazione
   });
 
-  it('dovrebbe funzionare offline: prima parseState(jsonString) e poi extractTrajectory(typedState)', async () => {
+  it('dovrebbe funzionare offline: prima parseState(deserializedObj) e poi extractTrajectory(typedState)', async () => {
     let inferStep = 0;
     const model: LanguageModelAdapter = {
       infer: async () => {
@@ -153,14 +153,20 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
       userContent: 'Volo per Londra'
     });
 
-    // Simulazione salvataggio DB: serializzazione in JSON
+    // Simulazione salvataggio DB: serializzazione in formato wire (es. JSON string)
     const serialized = serializeAgentState(runResult.state);
     const jsonString = JSON.stringify(serialized);
 
-    // Passo 1: validazione contro il contratto dell'agente
-    const typedState = agentDef.parseState(jsonString);
+    // Verifica che parseState rifiuti direttamente la stringa grezza
+    expect(() => agentDef.parseState(jsonString)).toThrow();
 
-    // Passo 2: extractTrajectory accetta SOLO l'oggetto tipizzato (TypedAgentState)
+    // Passo 1: il driver/codec decodifica il wire format in oggetto JavaScript
+    const decodedObject = JSON.parse(jsonString);
+
+    // Passo 2: validazione e raffinamento semantico contro il contratto dell'agente
+    const typedState = agentDef.parseState(decodedObject);
+
+    // Passo 3: extractTrajectory accetta SOLO l'oggetto tipizzato (TypedAgentState)
     const offlineTrajectory = agentDef.extractTrajectory(typedState);
 
     expect(offlineTrajectory.summary.isTerminated).toBe(true);
