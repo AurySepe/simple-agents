@@ -20,6 +20,7 @@ describe('SGLang Transport & Qwen Strategy', () => {
 
   const sampleTool: ToolDefinition = {
     id: 'w_db_ordini',
+    kind: 'world',
     description: 'Interroga ordini cliente',
     parameters: z.object({
       cliente_id: z.number().int().positive().describe('ID cliente')

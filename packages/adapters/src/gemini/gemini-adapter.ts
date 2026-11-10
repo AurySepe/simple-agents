@@ -114,16 +114,21 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
     if (!config.model || typeof config.model !== 'string' || config.model.trim().length === 0) {
       throw new Error('Gemini model name must be explicitly provided in config.model.');
     }
+    if (!config.mediaResolver) {
+      throw new Error(
+        "GeminiAdapterConfig requires an explicit 'mediaResolver' instance. Provide an instance of NodeFileSystemMediaResolver or InMemoryMediaResolver."
+      );
+    }
 
     this.client = new GoogleGenAI({ apiKey: config.apiKey });
     this.model = config.model;
     this.options = config.options ?? {};
-    this.strategy = new GeminiStrategy(this.options);
+    this.strategy = new GeminiStrategy(config.mediaResolver, this.options);
     this.onMetrics = config.onMetrics;
   }
 
   public async infer(context: InferenceTriple): Promise<ModelDeliberateResult<GeminiModelError>> {
-    const formatted = this.strategy.format(context);
+    const formatted = await this.strategy.format(context);
     const timeoutMs = this.options.timeoutMs;
     const abortSignal = timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined;
     const startTime = Date.now();

@@ -76,7 +76,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
     const runResult = await implemented.run(engine, model, {
-      userContent: 'Organizza viaggio a Parigi'
+      userContent: { kind: 'text', text: 'Organizza viaggio a Parigi' }
     });
 
     expect(runResult.status).toBe('halt');
@@ -153,7 +153,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
     const runResult = await implemented.run(engine, model, {
-      userContent: 'Volo per Londra'
+      userContent: { kind: 'text', text: 'Volo per Londra' }
     });
 
     // Simulazione salvataggio DB: serializzazione in formato wire (es. JSON string)
@@ -215,7 +215,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     };
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-    const runResult = await implemented.run(engine, model, { userContent: 'Test loop' });
+    const runResult = await implemented.run(engine, model, { userContent: { kind: 'text', text: 'Test loop' } });
 
     const parseResult = implemented.parseState(runResult.state);
     expect(parseResult.ok).toBe(true);

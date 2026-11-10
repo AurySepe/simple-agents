@@ -7,7 +7,7 @@ import type {
   ToolDefinition
 } from '@formal-agent/core';
 import { FunctionCallingConfigMode, ThinkingLevel } from '@google/genai';
-import { resolveMediaBase64, resolveTextFileContent } from '../common/media-resolver.js';
+import type { MediaResolver } from '../common/media-resolver.js';
 import type { GeminiChatOptions } from './types.js';
 
 export interface FormattedGeminiContext {
@@ -48,18 +48,97 @@ export function cleanZodSchemaForGemini(schema: z.ZodType): Record<string, unkno
   return clean;
 }
 
+function resolveInlineText(data: string): string {
+  if (data.includes('\n') || data.includes('\r')) {
+    return data;
+  }
+  try {
+    const decoded = Buffer.from(data, 'base64').toString('utf-8');
+    if (Buffer.from(decoded, 'utf-8').toString('base64') === data.trim()) {
+      return decoded;
+    }
+    return data;
+  } catch {
+    return data;
+  }
+}
+
 /**
- * Converte un asset multimediale formale in una Part nativa di Gemini (inlineData).
+ * Converte un asset multimediale formale in una Part nativa di Gemini (inlineData o fileData).
+ * La risoluzione dei percorsi locali (kind: 'path') è delegata asincronamente al MediaResolver iniettato.
  */
-export function convertMediaAssetToGeminiPart(asset: InputMediaAsset): Record<string, unknown> {
+export async function convertMediaAssetToGeminiPart(
+  asset: InputMediaAsset,
+  resolver: MediaResolver
+): Promise<Record<string, unknown>> {
+  const source = asset.source;
+
   if (asset.modality === 'text_file') {
-    const textContent = resolveTextFileContent(asset);
+    let textContent: string;
+    switch (source.kind) {
+      case 'inline':
+        textContent = resolveInlineText(source.data);
+        break;
+      case 'path':
+        textContent = await resolver.resolveText(source.filePath);
+        break;
+      case 'url':
+        textContent = `[Content available at URL: ${source.url}]`;
+        break;
+      case 'reference':
+        throw new Error(
+          `Gemini adapter does not support partial file references ({ kind: 'reference' }). ` +
+          `Provide the complete file URL using { kind: 'url', url: '<full_url>', mimeType: '<mime_type>' }.`
+        );
+    }
     return {
       text: asset.filename ? `[File: ${asset.filename}]\n${textContent}` : textContent
     };
   }
 
-  const { base64, mimeType } = resolveMediaBase64(asset);
+  if (source.kind === 'reference') {
+    throw new Error(
+      `Gemini adapter does not support partial file references ({ kind: 'reference' }). ` +
+      `Provide the complete file URL using { kind: 'url', url: '<full_url>', mimeType: '<mime_type>' }.`
+    );
+  }
+
+  if (source.kind === 'url') {
+    if (!source.mimeType || source.mimeType.trim().length === 0) {
+      throw new Error(
+        `Gemini file URL requires an explicit mimeType for asset '${asset.filename ?? source.url}'.`
+      );
+    }
+
+    const isGoogleFileApi = source.url.startsWith('https://generativelanguage.googleapis.com/');
+    const isCloudStorage = source.url.startsWith('gs://');
+
+    if (!isGoogleFileApi && !isCloudStorage) {
+      throw new Error(
+        `Unsupported Gemini file URL: '${source.url}'. ` +
+        `Gemini only supports Google Files API URLs ('https://generativelanguage.googleapis.com/...') or Google Cloud Storage URIs ('gs://...').`
+      );
+    }
+
+    return {
+      fileData: {
+        fileUri: source.url,
+        mimeType: source.mimeType
+      }
+    };
+  }
+
+  if (source.kind === 'inline') {
+    return {
+      inlineData: {
+        mimeType: source.mimeType,
+        data: source.data
+      }
+    };
+  }
+
+  // source.kind === 'path'
+  const { base64, mimeType } = await resolver.resolveBinary(source.filePath, source.mimeType);
   return {
     inlineData: {
       mimeType,
@@ -69,47 +148,57 @@ export function convertMediaAssetToGeminiPart(asset: InputMediaAsset): Record<st
 }
 
 /**
- * Converte l'ontologia UserMessageContent formale in un array di Part Gemini.
+ * Converte l'ontologia UserMessageContent formale in un array di Part Gemini in modo asincrono e concorrente.
  */
-export function convertUserContentToParts(content: UserMessageContent): Array<Record<string, unknown>> {
+export async function convertUserContentToParts(
+  content: UserMessageContent,
+  resolver: MediaResolver
+): Promise<Array<Record<string, unknown>>> {
   switch (content.kind) {
     case 'text':
       return [{ text: content.text }];
 
     case 'media':
-      return content.files.map(convertMediaAssetToGeminiPart);
+      return await Promise.all(content.files.map((file) => convertMediaAssetToGeminiPart(file, resolver)));
 
-    case 'text_with_media':
-      return [
-        { text: content.text },
-        ...content.files.map(convertMediaAssetToGeminiPart)
-      ];
+    case 'text_with_media': {
+      const fileParts = await Promise.all(content.files.map((file) => convertMediaAssetToGeminiPart(file, resolver)));
+      return [{ text: content.text }, ...fileParts];
+    }
 
     case 'interleaved':
-      return content.blocks.map((block) => {
-        if (block.type === 'text') {
-          return { text: block.text };
-        }
-        return convertMediaAssetToGeminiPart(block.media);
-      });
+      return await Promise.all(
+        content.blocks.map(async (block) => {
+          if (block.type === 'text') {
+            return { text: block.text };
+          }
+          return await convertMediaAssetToGeminiPart(block.media, resolver);
+        })
+      );
   }
 }
 
 /**
  * Strategia di formattazione del contesto cognitivo formale (InferenceTriple)
  * per l'SDK Google GenAI (`@google/genai`).
- */
-/**
- * Strategia di formattazione del contesto cognitivo formale (InferenceTriple)
- * per l'SDK Google GenAI (`@google/genai`).
  *
  * Completamente stateless: la gestione di thoughtSignature e della cronologia
  * deriva esclusivamente dai dati memorizzati nella tupla dell'agente (Ep).
+ * Richiede un MediaResolver esplicito per risolvere qualsiasi risorsa locale.
  */
 export class GeminiStrategy {
-  constructor(private readonly options?: GeminiChatOptions) {}
+  constructor(
+    private readonly mediaResolver: MediaResolver,
+    private readonly options?: GeminiChatOptions
+  ) {
+    if (!mediaResolver) {
+      throw new Error(
+        "GeminiStrategy requires an explicit 'mediaResolver' instance. Provide an instance of NodeFileSystemMediaResolver or InMemoryMediaResolver."
+      );
+    }
+  }
 
-  public format(context: InferenceTriple): FormattedGeminiContext {
+  public async format(context: InferenceTriple): Promise<FormattedGeminiContext> {
     // 1. System Instruction F_Ω
     const systemInstruction = context.systemFrame
       ? { parts: [{ text: context.systemFrame }] }
@@ -137,7 +226,7 @@ export class GeminiStrategy {
     for (const msg of context.messages) {
       switch (msg.type) {
         case 'stimulus': {
-          const parts = convertUserContentToParts(msg.content);
+          const parts = await convertUserContentToParts(msg.content, this.mediaResolver);
           appendContent('user', parts);
           break;
         }

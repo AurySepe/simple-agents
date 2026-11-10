@@ -164,10 +164,11 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in 
     // Chiamata fisica w_db_ordini
     const call0 = outcome0.pendingCalls[0];
     const dbResult = await world.executeTool(call0.name, call0.payload);
+    if (!dbResult.ok) throw new Error('Database tool failed');
 
     // CICLO 1 (c = 1): Risveglio dell'agente con il risultato del database
     agent.feedPayload({
-      worldResults: [{ callId: call0.id, result: dbResult }]
+      worldResults: [{ callId: call0.id, result: dbResult.data }]
     });
 
     const outcome1 = await agent.resume();
@@ -180,10 +181,11 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in 
     // Chiamata fisica w_applica_sconto
     const call1 = outcome1.pendingCalls[0];
     const discountResult = await world.executeTool(call1.name, call1.payload);
+    if (!discountResult.ok) throw new Error('Discount tool failed');
 
     // CICLO 2 (c = 2): Risveglio finale e terminazione
     agent.feedPayload({
-      worldResults: [{ callId: call1.id, result: discountResult }]
+      worldResults: [{ callId: call1.id, result: discountResult.data }]
     });
 
     const outcome2 = await agent.resume();

@@ -8,6 +8,9 @@ import type { InferenceTriple, ModelResult, LanguageModelAdapter } from '@formal
  */
 export type { LanguageModelAdapter, InferenceTriple, ModelResult };
 
+// 0. Risolutori di risorse locali e in-memory (MediaResolver)
+export * from './common/media-resolver.js';
+
 // 1. Client e Tipi di Trasporto Ollama
 export * from './ollama/types.js';
 export * from './ollama/client.js';

@@ -3,6 +3,7 @@ import {
   createDefaultFrameworkConfig,
   createRunner,
   FrameworkEngine,
+  type UnexpectedModelError,
 } from "@formal-agent/core";
 import {
   createCareerLlamaAdapter,
@@ -55,8 +56,9 @@ export function buildCareerQwenRunner(options?: CreateCareerLlamaAdapterOptions)
     .withAgent(careerAgent)
     .withRecovery({
       onToolError: defaultToolErrorRecovery,
-      onModelError(error, context) {
-        console.error(`[Recovery Qwen] Errore modello: ${error.type} - ${error.message}`);
+      onModelError(error: unknown, context) {
+        const err = error as { type?: string; message?: string };
+        console.error(`[Recovery Qwen] Errore modello: ${err?.type ?? 'UNKNOWN'} - ${err?.message ?? String(error)}`);
         return { action: "abort" };
       },
     })
@@ -113,6 +115,11 @@ export function buildCareerGeminiRunner(options: CreateCareerGeminiAdapterOption
           case 'CONTEXT_WINDOW_EXCEEDED':
           case 'NETWORK_ERROR':
             console.error(`[Recovery Gemini] Errore non recuperabile: ${error.type} - ${error.message}`);
+            return { action: "abort" };
+
+          case 'UNEXPECTED_MODEL_ERROR':
+          default:
+            console.error(`[Recovery Gemini] Errore imprevisto del modello:`, error);
             return { action: "abort" };
         }
       },

@@ -38,7 +38,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
       tools: {
         queryDb: async (input) => {
           if (!isDbOnline) {
-            return toolFail({ type: 'CONNECTION_TIMEOUT', timeoutMs: 1500 });
+            return toolFail({ type: 'CONNECTION_TIMEOUT' as const, timeoutMs: 1500 });
           }
           return toolOk({ rows: ['row1', 'row2'] });
         }
@@ -59,7 +59,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
     const runner = createRunner().withModel(model).withAgent(agent);
 
     // 1. Prima esecuzione: DB offline, atteso errore tipizzato
-    const firstResult = await runner.run({ userContent: 'Start query' });
+    const firstResult = await runner.run({ userContent: { kind: 'text', text: 'Start query' } });
 
     expect(firstResult.ok).toBe(false);
     if (!firstResult.ok) {
@@ -124,7 +124,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
     };
 
     const runner = createRunner().withModel(model).withAgent(agent);
-    const result = await runner.run({ userContent: 'Go' });
+    const result = await runner.run({ userContent: { kind: 'text', text: 'Go' } });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -165,7 +165,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
         fetchData: async () => {
           attempts++;
           if (attempts < 3) {
-            return toolFail({ type: 'SOCKET_HANGUP' });
+            return toolFail({ type: 'SOCKET_HANGUP' as const });
           }
           return toolOk('online_payload');
         }
@@ -198,7 +198,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
         }
       });
 
-    const result = await runner.run({ userContent: 'Start' });
+    const result = await runner.run({ userContent: { kind: 'text', text: 'Start' } });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.status).toBe('halt');
@@ -217,7 +217,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
       infer: async () => {
         modelCalls++;
         if (modelCalls === 1) {
-          return modelFail({ type: 'RATE_LIMIT_EXCEEDED', retryAfterMs: 50 });
+          return modelFail({ type: 'RATE_LIMIT_EXCEEDED' as const, retryAfterMs: 50 });
         }
         return modelOk({
           calls: [{ id: 'term', name: 'done', payload: { success: true } }]
@@ -241,7 +241,7 @@ describe('Typed Environmental Errors, Recovery & Resume', () => {
 
     // 1. Senza recovery policy: errore immediato
     const runner = createRunner().withModel(customModel).withAgent(agent);
-    const failResult = await runner.run({ userContent: 'Hello' });
+    const failResult = await runner.run({ userContent: { kind: 'text', text: 'Hello' } });
 
     expect(failResult.ok).toBe(false);
     if (!failResult.ok) {

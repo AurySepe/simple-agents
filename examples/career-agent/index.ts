@@ -38,10 +38,12 @@ async function main() {
         console.log(`Tipo errore:     ${outcome.error.error.type}`);
         console.log(`Dettaglio:       ${outcome.error.message}`);
         break;
-      case "MODEL_ERROR":
-        console.log(`Modello fallito: ${outcome.error.error.type}`);
+      case "MODEL_ERROR": {
+        const modelErr = outcome.error.error as { type?: string; message?: string };
+        console.log(`Modello fallito: ${modelErr?.type ?? 'UNKNOWN'}`);
         console.log(`Dettaglio:       ${outcome.error.message}`);
         break;
+      }
       case "QUIESCENCE_VIOLATION":
         console.log(`Violazione:      Quiescenza violata in stato ${outcome.error.currentState}`);
         console.log(`Dettaglio:       ${outcome.error.message}`);

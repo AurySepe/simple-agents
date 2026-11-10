@@ -5,7 +5,9 @@ import {
   LlamaCppQwenStrategy,
   createGeminiAdapter,
   GeminiModelAdapter,
-  type GeminiModelError
+  type GeminiModelError,
+  NodeFileSystemMediaResolver,
+  type MediaResolver
 } from "@formal-agent/adapters";
 
 export interface CreateCareerLlamaAdapterOptions {
@@ -25,6 +27,7 @@ export interface CreateCareerGeminiAdapterOptions {
   model: string;
   timeoutMs?: number;
   temperature?: number;
+  mediaResolver?: MediaResolver;
 }
 
 /**
@@ -34,6 +37,7 @@ export function createCareerGeminiAdapter(options: CreateCareerGeminiAdapterOpti
   return createGeminiAdapter({
     apiKey: options.apiKey,
     model: options.model,
+    mediaResolver: options.mediaResolver ?? new NodeFileSystemMediaResolver(),
     options: {
       timeoutMs: options.timeoutMs ?? 60000,
       temperature: options.temperature

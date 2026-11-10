@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { z } from 'zod';
 import {
   GeminiModelAdapter,
   GeminiStrategy,
   cleanZodSchemaForGemini,
   createGeminiAdapter,
-  parseGeminiError
+  parseGeminiError,
+  InMemoryMediaResolver,
+  NodeFileSystemMediaResolver
 } from '../src/index.js';
 import type {
   InferenceTriple,
@@ -16,6 +21,7 @@ import { FinishReason, FunctionCallingConfigMode, ThinkingLevel } from '@google/
 
 describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
   const sampleTool: ToolDefinition = {
+    kind: 'world',
     id: 'cerca_documenti',
     description: 'Cerca tra i documenti aziendali',
     parameters: z.object({
@@ -56,7 +62,58 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
     ]
   };
 
+  const defaultResolver = new InMemoryMediaResolver();
+
+  describe('MediaResolver Interface and Implementations', () => {
+    it('InMemoryMediaResolver memorizza e risolve file binari e testuali senza toccare il filesystem', async () => {
+      const resolver = new InMemoryMediaResolver({
+        'virtual://dati.csv': 'id,valore\n1,100',
+        'virtual://immagine.png': {
+          data: Buffer.from('fake-png-binary'),
+          mimeType: 'image/png'
+        }
+      });
+
+      // Risoluzione testo
+      const text = await resolver.resolveText('virtual://dati.csv');
+      expect(text).toBe('id,valore\n1,100');
+
+      // Risoluzione binaria
+      const binary = await resolver.resolveBinary('virtual://immagine.png');
+      expect(binary.mimeType).toBe('image/png');
+      expect(binary.base64).toBe(Buffer.from('fake-png-binary').toString('base64'));
+
+      // Fallimento per chiave inesistente
+      await expect(resolver.resolveBinary('virtual://inesistente.pdf')).rejects.toThrowError(
+        /InMemoryMediaResolver: File not found for key 'virtual:\/\/inesistente.pdf'/
+      );
+    });
+
+    it('NodeFileSystemMediaResolver legge asincronamente file reali da disco', async () => {
+      const resolver = new NodeFileSystemMediaResolver();
+      const tmpFile = path.join(os.tmpdir(), 'gemini_test_media.txt');
+      fs.writeFileSync(tmpFile, 'contenuto di test su disco', 'utf-8');
+
+      try {
+        const text = await resolver.resolveText(tmpFile);
+        expect(text).toBe('contenuto di test su disco');
+
+        const binary = await resolver.resolveBinary(tmpFile);
+        expect(binary.mimeType).toBe('text/plain');
+        expect(binary.base64).toBe(Buffer.from('contenuto di test su disco').toString('base64'));
+      } finally {
+        fs.unlinkSync(tmpFile);
+      }
+    });
+  });
+
   describe('cleanZodSchemaForGemini & GeminiStrategy (Nessun default implicito)', () => {
+    it('lancia errore se GeminiStrategy viene istanziata senza mediaResolver', () => {
+      expect(() => new GeminiStrategy(undefined as any)).toThrowError(
+        /GeminiStrategy requires an explicit 'mediaResolver' instance/
+      );
+    });
+
     it('rimuove $schema dalla serializzazione zod per compatibilità OpenAPI Gemini', () => {
       const schema = z.object({
         testo: z.string()
@@ -67,9 +124,9 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       expect(cleaned).toHaveProperty('properties');
     });
 
-    it('forza sempre mode: ANY in toolConfig quando ci sono strumenti visibili per garantire la deliberazione', () => {
-      const strategy = new GeminiStrategy();
-      const formatted = strategy.format(sampleTriple);
+    it('forza sempre mode: ANY in toolConfig quando ci sono strumenti visibili per garantire la deliberazione', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
+      const formatted = await strategy.format(sampleTriple);
 
       expect(formatted.tools).toBeDefined();
       expect(formatted.tools?.[0].functionDeclarations).toHaveLength(1);
@@ -77,36 +134,36 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       expect(formatted.toolConfig?.functionCallingConfig?.allowedFunctionNames).toEqual(['cerca_documenti']);
     });
 
-    it('non crea toolConfig se non sono presenti strumenti visibili', () => {
-      const strategy = new GeminiStrategy();
+    it('non crea toolConfig se non sono presenti strumenti visibili', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
       const tripleWithoutTools: InferenceTriple = {
         ...sampleTriple,
         visibleTools: []
       };
-      const formatted = strategy.format(tripleWithoutTools);
+      const formatted = await strategy.format(tripleWithoutTools);
       expect(formatted.tools).toBeUndefined();
       expect(formatted.toolConfig).toBeUndefined();
     });
 
-    it('NON aggiunge default a thinkingConfig se non esplicitamente richiesto', () => {
-      const strategy = new GeminiStrategy();
-      const formatted = strategy.format(sampleTriple);
+    it('NON aggiunge default a thinkingConfig se non esplicitamente richiesto', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
+      const formatted = await strategy.format(sampleTriple);
       expect(formatted.thinkingConfig).toBeUndefined();
 
-      const strategyExplicit = new GeminiStrategy({
+      const strategyExplicit = new GeminiStrategy(defaultResolver, {
         thinking: {
           thinkingLevel: ThinkingLevel.HIGH
         }
       });
-      const formattedExplicit = strategyExplicit.format(sampleTriple);
+      const formattedExplicit = await strategyExplicit.format(sampleTriple);
       expect(formattedExplicit.thinkingConfig?.thinkingLevel).toBe(ThinkingLevel.HIGH);
       // Nessun default forzato su includeThoughts o budget
       expect(formattedExplicit.thinkingConfig?.includeThoughts).toBeUndefined();
       expect(formattedExplicit.thinkingConfig?.thinkingBudget).toBeUndefined();
     });
 
-    it('supporta stimoli multimodali (immagini base64, audio, file di testo)', () => {
-      const strategy = new GeminiStrategy();
+    it('supporta stimoli multimodali (immagini base64, audio, file di testo)', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
 
       const multimodalContent: UserMessageContent = {
         kind: 'text_with_media',
@@ -144,7 +201,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
         ]
       };
 
-      const formatted = strategy.format(triple);
+      const formatted = await strategy.format(triple);
       const userParts = formatted.contents[0].parts;
 
       expect(userParts[0]).toEqual({ text: 'Descrivi questa scansione' });
@@ -159,8 +216,199 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       expect((userParts[2] as { text: string }).text).toContain('id,nome\n1,Mario');
     });
 
-    it('proietta azioni native con providerMetadata.thoughtSignature come functionCall nativo in modo stateless', () => {
-      const strategy = new GeminiStrategy();
+    it('supporta file remoti tramite URL completi conformi (Gemini Files API e GCS)', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
+
+      const multimodalWithRemoteFiles: UserMessageContent = {
+        kind: 'text_with_media',
+        text: 'Analizza i documenti remoti',
+        files: [
+          {
+            modality: 'document',
+            filename: 'report.pdf',
+            source: {
+              kind: 'url',
+              url: 'https://generativelanguage.googleapis.com/v1beta/files/abc123xyz',
+              mimeType: 'application/pdf'
+            }
+          },
+          {
+            modality: 'video',
+            filename: 'lezione.mp4',
+            source: {
+              kind: 'url',
+              url: 'gs://my-bucket/videos/lezione.mp4',
+              mimeType: 'video/mp4'
+            }
+          }
+        ]
+      };
+
+      const triple: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [],
+        messages: [
+          {
+            index: 0,
+            type: 'stimulus',
+            content: multimodalWithRemoteFiles
+          }
+        ]
+      };
+
+      const formatted = await strategy.format(triple);
+      const userParts = formatted.contents[0].parts;
+
+      expect(userParts[0]).toEqual({ text: 'Analizza i documenti remoti' });
+      expect(userParts[1]).toEqual({
+        fileData: {
+          fileUri: 'https://generativelanguage.googleapis.com/v1beta/files/abc123xyz',
+          mimeType: 'application/pdf'
+        }
+      });
+      expect(userParts[2]).toEqual({
+        fileData: {
+          fileUri: 'gs://my-bucket/videos/lezione.mp4',
+          mimeType: 'video/mp4'
+        }
+      });
+    });
+
+    it('risolve asset con kind: "path" attraverso InMemoryMediaResolver senza toccare il filesystem', async () => {
+      const memoryResolver = new InMemoryMediaResolver({
+        'virtual://docs/contratto.pdf': {
+          data: Buffer.from('pdf-dummy-content'),
+          mimeType: 'application/pdf'
+        },
+        'virtual://appunti.txt': 'Note importanti del meeting'
+      });
+
+      const strategy = new GeminiStrategy(memoryResolver);
+
+      const content: UserMessageContent = {
+        kind: 'text_with_media',
+        text: 'Controlla questi file',
+        files: [
+          {
+            modality: 'document',
+            filename: 'contratto.pdf',
+            source: {
+              kind: 'path',
+              filePath: 'virtual://docs/contratto.pdf'
+            }
+          },
+          {
+            modality: 'text_file',
+            filename: 'appunti.txt',
+            source: {
+              kind: 'path',
+              filePath: 'virtual://appunti.txt'
+            }
+          }
+        ]
+      };
+
+      const triple: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [],
+        messages: [{ index: 0, type: 'stimulus', content }]
+      };
+
+      const formatted = await strategy.format(triple);
+      const userParts = formatted.contents[0].parts;
+
+      expect(userParts[0]).toEqual({ text: 'Controlla questi file' });
+      expect(userParts[1]).toEqual({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: Buffer.from('pdf-dummy-content').toString('base64')
+        }
+      });
+      expect(userParts[2]).toEqual({
+        text: '[File: appunti.txt]\nNote importanti del meeting'
+      });
+    });
+
+    it('lancia errore se viene fornito un URL remoto senza mimeType esplicito', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
+
+      const content: UserMessageContent = {
+        kind: 'media',
+        files: [
+          {
+            modality: 'document',
+            source: {
+              kind: 'url',
+              url: 'https://generativelanguage.googleapis.com/v1beta/files/abc123xyz'
+              // mimeType mancante
+            }
+          }
+        ]
+      };
+
+      const triple: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [],
+        messages: [{ index: 0, type: 'stimulus', content }]
+      };
+
+      await expect(strategy.format(triple)).rejects.toThrowError(/requires an explicit mimeType/i);
+    });
+
+    it('lancia errore esplicito se viene fornito un URL HTTP generico non supportato da Gemini', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
+
+      const content: UserMessageContent = {
+        kind: 'media',
+        files: [
+          {
+            modality: 'document',
+            source: {
+              kind: 'url',
+              url: 'https://example.com/unsupported-document.pdf',
+              mimeType: 'application/pdf'
+            }
+          }
+        ]
+      };
+
+      const triple: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [],
+        messages: [{ index: 0, type: 'stimulus', content }]
+      };
+
+      await expect(strategy.format(triple)).rejects.toThrowError(/Unsupported Gemini file URL/i);
+    });
+
+    it('lancia errore esplicito se viene fornito un asset con kind reference invece di un URL completo', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
+
+      const content: UserMessageContent = {
+        kind: 'media',
+        files: [
+          {
+            modality: 'document',
+            source: {
+              kind: 'reference',
+              fileId: 'abc123xyz',
+              provider: 'gemini'
+            }
+          }
+        ]
+      };
+
+      const triple: InferenceTriple = {
+        systemFrame: 'System test',
+        visibleTools: [],
+        messages: [{ index: 0, type: 'stimulus', content }]
+      };
+
+      await expect(strategy.format(triple)).rejects.toThrowError(/does not support partial file references/i);
+    });
+
+    it('proietta azioni native con providerMetadata.thoughtSignature come functionCall nativo in modo stateless', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
       const tripleWithGeminiSig: InferenceTriple = {
         systemFrame: 'System test',
         visibleTools: [sampleTool],
@@ -186,7 +434,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
         ]
       };
 
-      const formatted = strategy.format(tripleWithGeminiSig);
+      const formatted = await strategy.format(tripleWithGeminiSig);
 
       // Il messaggio del modello contiene la functionCall con la thoughtSignature intatta
       const modelContent = formatted.contents.find((c) => c.role === 'model');
@@ -213,8 +461,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       });
     });
 
-    it('proietta azioni prive di firma (cross-model da Qwen/Claude) come messaggi user naturali per prevenire errori 400', () => {
-      const strategy = new GeminiStrategy();
+    it('proietta azioni prive di firma (cross-model da Qwen/Claude) come messaggi user naturali per prevenire errori 400', async () => {
+      const strategy = new GeminiStrategy(defaultResolver);
       const tripleCrossModel: InferenceTriple = {
         systemFrame: 'System test',
         visibleTools: [sampleTool],
@@ -240,7 +488,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
         ]
       };
 
-      const formatted = strategy.format(tripleCrossModel);
+      const formatted = await strategy.format(tripleCrossModel);
 
       // Nessun functionCall sprovvisto di firma viene inviato con role: 'model'
       const modelContent = formatted.contents.find((c) => c.role === 'model');
@@ -335,16 +583,18 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
   });
 
   describe('GeminiModelAdapter (Rigorosa configurazione esplicita)', () => {
-    it('lancia errore esplicito se apiKey o model sono omessi', () => {
+    it('lancia errore esplicito se apiKey, model o mediaResolver sono omessi', () => {
       expect(() => new GeminiModelAdapter(undefined as any)).toThrow('GeminiAdapterConfig must be provided explicitly');
-      expect(() => new GeminiModelAdapter({ apiKey: '', model: 'gemini-3.5-pro' })).toThrow('Gemini API key must be explicitly provided');
-      expect(() => new GeminiModelAdapter({ apiKey: 'fake-key', model: '' })).toThrow('Gemini model name must be explicitly provided');
+      expect(() => new GeminiModelAdapter({ apiKey: '', model: 'gemini-3.5-pro', mediaResolver: defaultResolver })).toThrow('Gemini API key must be explicitly provided');
+      expect(() => new GeminiModelAdapter({ apiKey: 'fake-key', model: '', mediaResolver: defaultResolver })).toThrow('Gemini model name must be explicitly provided');
+      expect(() => new GeminiModelAdapter({ apiKey: 'fake-key', model: 'gemini-3.5-pro' } as any)).toThrow("GeminiAdapterConfig requires an explicit 'mediaResolver' instance");
     });
 
     it('inferisce invocazioni di tool con successo ritornando modelOk', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-test-key',
-        model: 'gemini-3.5-pro'
+        model: 'gemini-3.5-pro',
+        mediaResolver: defaultResolver
       });
 
       const mockGenerateContent = vi.fn().mockResolvedValue({
@@ -385,8 +635,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
 
       const result = await adapter.infer(sampleTriple);
 
-      expect(result.ok).toBe(true);
-      if (result.ok && !('status' in result.data && result.data.status === 'stall')) {
+      expect('ok' in result && result.ok).toBe(true);
+      if ('ok' in result && result.ok && !('status' in result.data && result.data.status === 'stall')) {
         expect(result.data.thought).toBe('Rifletto sul documento da ricercare...');
         expect(result.data.calls).toHaveLength(1);
         expect(result.data.calls[0].name).toBe('cerca_documenti');
@@ -399,7 +649,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
     it('ritorna uno stall formale quando il modello esaurisce il budget di token (finishReason = MAX_TOKENS)', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',
-        model: 'gemini-3.5-flash'
+        model: 'gemini-3.5-flash',
+        mediaResolver: defaultResolver
       });
 
       (adapter as any).client = {
@@ -425,8 +676,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
 
       const result = await adapter.infer(sampleTriple);
 
-      expect(result.ok).toBe(true);
-      if (result.ok && 'status' in result.data && result.data.status === 'stall') {
+      expect('ok' in result && result.ok).toBe(true);
+      if ('ok' in result && result.ok && 'status' in result.data && result.data.status === 'stall') {
         expect(result.data.stall.reason).toBe('thinking_budget_exhausted');
         expect(result.data.stall.partialThought).toBe('Stavo elaborando la query...');
       } else {
@@ -437,7 +688,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
     it('intercetta SAFETY_BLOCKED e ritorna modelFail tipizzato', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',
-        model: 'gemini-3.5-pro'
+        model: 'gemini-3.5-pro',
+        mediaResolver: defaultResolver
       });
 
       (adapter as any).client = {
@@ -455,8 +707,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
 
       const result = await adapter.infer(sampleTriple);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
+      expect('ok' in result && !result.ok).toBe(true);
+      if ('ok' in result && !result.ok) {
         expect(result.error.type).toBe('SAFETY_BLOCKED');
         if (result.error.type === 'SAFETY_BLOCKED') {
           expect(result.error.finishReason).toBe('SAFETY');
@@ -467,7 +719,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
     it('intercetta RECITATION_BLOCKED e ritorna modelFail tipizzato', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',
-        model: 'gemini-3.5-pro'
+        model: 'gemini-3.5-pro',
+        mediaResolver: defaultResolver
       });
 
       (adapter as any).client = {
@@ -484,8 +737,8 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
 
       const result = await adapter.infer(sampleTriple);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
+      expect('ok' in result && !result.ok).toBe(true);
+      if ('ok' in result && !result.ok) {
         expect(result.error.type).toBe('RECITATION_BLOCKED');
       }
     });
@@ -495,6 +748,7 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',
         model: 'gemini-3.5-flash',
+        mediaResolver: defaultResolver,
         onMetrics
       });
 

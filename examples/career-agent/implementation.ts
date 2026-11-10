@@ -251,7 +251,7 @@ export function createCareerAgent(client: RealWebClient = new RealWebClient()) {
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.includes('timeout') || msg.includes('AbortError')) {
             return toolFail({
-              type: 'NETWORK_TIMEOUT',
+              type: 'NETWORK_TIMEOUT' as const,
               url: 'https://html.duckduckgo.com',
               timeoutMs: 15000,
               message: `Timeout durante la ricerca per '${query}'`
@@ -259,7 +259,7 @@ export function createCareerAgent(client: RealWebClient = new RealWebClient()) {
           }
           if (msg.includes('HTTP')) {
             return toolFail({
-              type: 'HTTP_ERROR',
+              type: 'HTTP_ERROR' as const,
               url: 'https://html.duckduckgo.com',
               status: 503,
               statusText: msg,
@@ -267,7 +267,7 @@ export function createCareerAgent(client: RealWebClient = new RealWebClient()) {
             });
           }
           return toolFail({
-            type: 'SEARCH_ENGINE_UNAVAILABLE',
+              type: 'SEARCH_ENGINE_UNAVAILABLE' as const,
             message: msg
           });
         }
@@ -280,14 +280,14 @@ export function createCareerAgent(client: RealWebClient = new RealWebClient()) {
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.includes('timeout') || msg.includes('AbortError')) {
             return toolFail({
-              type: 'NETWORK_TIMEOUT',
+              type: 'NETWORK_TIMEOUT' as const,
               url,
               timeoutMs: 15000,
               message: `Timeout durante il caricamento di ${url}`
             });
           }
           return toolFail({
-            type: 'PAGE_PARSING_FAILED',
+            type: 'PAGE_PARSING_FAILED' as const,
             url,
             message: msg
           });

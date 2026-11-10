@@ -9,7 +9,7 @@
   "dependencies": {
     "@formal-agent/core": "*",
     "@formal-agent/adapters": "*",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   }
 }
 

@@ -1,5 +1,6 @@
 import type { DataRecord } from '@formal-agent/core';
 import type { ThinkingLevel } from '@google/genai';
+import type { MediaResolver } from '../common/media-resolver.js';
 
 /**
  * ============================================================================
@@ -125,6 +126,11 @@ export interface GeminiAdapterConfig {
    * Nome del modello richiesto esplicitamente (es. 'gemini-3.5-flash', 'gemini-3.5-pro', 'gemini-4-argon').
    */
   model: string;
+  /**
+   * Risolutore obbligatorio per i file multimediali e testuali (NodeFileSystemMediaResolver o InMemoryMediaResolver).
+   * Nessun fallback implicito: l'utente deve dichiarare esplicitamente da dove risolvere i file locali.
+   */
+  mediaResolver: MediaResolver;
   /**
    * Opzioni di generazione opzionali.
    */

@@ -206,7 +206,7 @@ describe('EvaluationCollector & Scorecard System', () => {
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
     await implemented.run(engine, model, {
-      userContent: 'Go',
+      userContent: { kind: 'text', text: 'Go' },
       observers: [collector]
     });
 

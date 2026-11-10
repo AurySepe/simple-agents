@@ -200,7 +200,7 @@ describe('Discriminated Union Results & Robust Error Handling', () => {
       const collector = createEvaluationCollector(implemented);
       const engine = new FrameworkEngine(createDefaultFrameworkConfig());
       const outcome = await implemented.run(engine, model, {
-        userContent: 'Start',
+        userContent: { kind: 'text', text: 'Start' },
         observers: [collector]
       });
 
@@ -243,7 +243,7 @@ describe('Discriminated Union Results & Robust Error Handling', () => {
 
       // Ora chiamiamo run con userContent mentre l'istanza è già in q_exec
       const outcome = await instance.run({
-        userContent: 'Messaggio vietato durante q_exec'
+        userContent: { kind: 'text', text: 'Messaggio vietato durante q_exec' }
       });
 
       expect(outcome.status).toBe('error');

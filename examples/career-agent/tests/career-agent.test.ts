@@ -155,7 +155,7 @@ describe("Career Web Agent - Suite di Test", () => {
         .withModel(mockModel as any)
         .withAgent(failingAgent);
 
-      const result = await testRunner.run({ userContent: "Cerca" });
+      const result = await testRunner.run({ userContent: { kind: 'text', text: "Cerca" } });
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.status).toBe("error");
