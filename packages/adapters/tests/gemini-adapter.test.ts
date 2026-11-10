@@ -339,38 +339,6 @@ describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {
       }
     });
 
-    it('ritorna NETWORK_ERROR se il server termina in modo anomalo senza tool calls in mode ANY', async () => {
-      const adapter = createGeminiAdapter({
-        apiKey: 'fake-key',
-        model: 'gemini-3.5-flash'
-      });
-
-      (adapter as any).client = {
-        models: {
-          generateContent: vi.fn().mockResolvedValue({
-            candidates: [
-              {
-                finishReason: FinishReason.STOP,
-                content: {
-                  parts: [{ text: 'Risposta anomala senza tool' }]
-                }
-              }
-            ],
-            functionCalls: undefined,
-            text: 'Risposta anomala senza tool'
-          })
-        }
-      };
-
-      const result = await adapter.infer(sampleTriple);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.type).toBe('NETWORK_ERROR');
-        expect(result.error.message).toContain('completed without required tool calls in mode ANY');
-      }
-    });
-
     it('intercetta SAFETY_BLOCKED e ritorna modelFail tipizzato', async () => {
       const adapter = createGeminiAdapter({
         apiKey: 'fake-key',

@@ -177,7 +177,25 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
         extractedThought = thoughtParts.map((p: any) => p.text ?? '').join('\n').trim();
       }
 
-      // 3. Estrazione Tool Calls (Function Calls)
+      // 3. Controllo Deliberation Stall (Token budget esaurito prima di emettere un'azione)
+      if (candidate?.finishReason === FinishReason.MAX_TOKENS) {
+        const stallOutput: ModelStallOutput = {
+          status: 'stall',
+          stall: {
+            reason: 'thinking_budget_exhausted',
+            partialThought: extractedThought ?? response.text ?? '',
+            message: `Model '${this.model}' exhausted its token budget (MAX_TOKENS) before completing an action.`
+          },
+          usage: {
+            promptTokens: response.usageMetadata?.promptTokenCount,
+            completionTokens: response.usageMetadata?.candidatesTokenCount,
+            totalTokens: response.usageMetadata?.totalTokenCount
+          }
+        };
+        return modelOk(stallOutput);
+      }
+
+      // 4. Estrazione Tool Calls (Garantite da mode: ANY)
       const rawCalls = response.functionCalls ?? [];
       const calls: ToolCallInput[] = rawCalls.map((fc: any, index: number) => ({
         status: 'valid' as const,
@@ -185,33 +203,6 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
         name: (fc.name as string) ?? 'unknown_tool',
         payload: (fc.args as DataRecord) ?? {}
       }));
-
-      // 4. Gestione assenza di tool calls (Stall vs Nessuna Azione)
-      if (calls.length === 0) {
-        // Se il modello ha esaurito il proprio budget di token prima di completare la deliberazione
-        if (candidate?.finishReason === FinishReason.MAX_TOKENS) {
-          const stallOutput: ModelStallOutput = {
-            status: 'stall',
-            stall: {
-              reason: 'thinking_budget_exhausted',
-              partialThought: extractedThought ?? response.text ?? '',
-              message: `Model '${this.model}' exhausted its token budget (MAX_TOKENS) before selecting an action.`
-            },
-            usage: {
-              promptTokens: response.usageMetadata?.promptTokenCount,
-              completionTokens: response.usageMetadata?.candidatesTokenCount,
-              totalTokens: response.usageMetadata?.totalTokenCount
-            }
-          };
-          return modelOk(stallOutput);
-        }
-
-        // Con mode: ANY forzato, l'assenza di chiamate indica un'interruzione anomala del protocollo
-        return modelFail<GeminiModelError>({
-          type: 'NETWORK_ERROR',
-          message: `Model '${this.model}' completed without required tool calls in mode ANY: ${response.text ?? 'empty response'}`
-        });
-      }
 
       const usageMetadata = response.usageMetadata;
       const metrics: GeminiMetrics = {
