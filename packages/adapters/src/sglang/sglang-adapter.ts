@@ -83,7 +83,14 @@ export class SGLangModelAdapter implements LanguageModelAdapter {
       });
     }
 
-    return this.strategy.parseResponse(response);
+    const result = this.strategy.parseResponse(response);
+    result.usage = {
+      promptTokens: metrics.promptTokens,
+      completionTokens: metrics.completionTokens,
+      totalTokens: metrics.totalTokens,
+      tokensPerSecond: metrics.tokensPerSecond
+    };
+    return result;
   }
 }
 

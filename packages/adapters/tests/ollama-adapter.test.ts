@@ -663,6 +663,48 @@ describe('Ollama Transport & Qwen Strategy', () => {
       expect(toolMessages[1].tool_call_id).toBe('call_p2');
       expect(toolMessages[1].content).toBe(JSON.stringify({ totale: 200 }));
     });
+
+    it('deve popolare il campo usage in ModelResult con le metriche dei token estratti da Ollama', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          model: 'qwen3.5:9b',
+          created_at: '2026-11-06T12:00:00Z',
+          message: {
+            role: 'assistant',
+            content: 'Risposta',
+            tool_calls: [
+              {
+                id: 'call_1',
+                function: { name: 'w_db_ordini', arguments: { cliente_id: 55 } }
+              }
+            ]
+          },
+          done: true,
+          prompt_eval_count: 120,
+          eval_count: 45,
+          total_duration: 1_000_000_000,
+          prompt_eval_duration: 600_000_000,
+          eval_duration: 400_000_000
+        })
+      });
+
+      const client = new OllamaClient({ baseUrl: 'http://localhost:11434' });
+      const strategy = new QwenModelStrategy({ reasoningFormat: 'native_field' });
+      const adapter = new OllamaModelAdapter({
+        client,
+        strategy,
+        model: 'qwen3.5:9b',
+        options: { temperature: 0 }
+      });
+
+      const result = await adapter.infer(sampleTriple);
+      expect(result.usage).toBeDefined();
+      expect(result.usage?.promptTokens).toBe(120);
+      expect(result.usage?.completionTokens).toBe(45);
+      expect(result.usage?.totalTokens).toBe(165);
+      expect(result.usage?.tokensPerSecond).toBeGreaterThan(0);
+    });
   });
 });
 

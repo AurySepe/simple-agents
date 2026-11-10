@@ -414,15 +414,27 @@ export interface DeliberationStall {
   message: string;
 }
 
+/**
+ * Metriche di utilizzo computazionale e token dell'inferenza del modello.
+ */
+export interface ModelUsageMetrics {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  tokensPerSecond?: number;
+}
+
 export interface ModelOutput {
   status?: 'success';
   thought?: string;
   calls: NonEmptyArray<ToolCallInput>;
+  usage?: ModelUsageMetrics;
 }
 
 export interface ModelStallOutput {
   status: 'stall';
   stall: DeliberationStall;
+  usage?: ModelUsageMetrics;
 }
 
 export type ModelResult = ModelOutput | ModelStallOutput;

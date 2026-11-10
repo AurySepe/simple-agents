@@ -289,6 +289,17 @@ export class ConsoleLoggerObserver implements AgentObserver {
         } else {
           this.write(pfx + `  ⚡ ${this.dim('No action emitted')}`);
         }
+
+        if (event.output.usage) {
+          const u = event.output.usage;
+          const tokensInfo: string[] = [];
+          if (u.promptTokens !== undefined) tokensInfo.push(`in: ${u.promptTokens}`);
+          if (u.completionTokens !== undefined) tokensInfo.push(`out: ${u.completionTokens}`);
+          if (u.tokensPerSecond !== undefined) tokensInfo.push(`${u.tokensPerSecond.toFixed(1)} t/s`);
+          if (tokensInfo.length > 0) {
+            this.write(pfx + `  📊 ${this.dim(`[Tokens: ${tokensInfo.join(', ')}] (${event.durationMs}ms)`)}`);
+          }
+        }
         break;
       }
 

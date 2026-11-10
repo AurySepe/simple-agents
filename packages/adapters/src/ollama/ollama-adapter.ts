@@ -72,7 +72,14 @@ export class OllamaModelAdapter implements LanguageModelAdapter {
       });
     }
 
-    return this.strategy.parseResponse(response);
+    const result = this.strategy.parseResponse(response);
+    result.usage = {
+      promptTokens: metrics.promptEvalCount,
+      completionTokens: metrics.evalCount,
+      totalTokens: metrics.promptEvalCount + metrics.evalCount,
+      tokensPerSecond: metrics.tokensPerSecond
+    };
+    return result;
   }
 }
 
