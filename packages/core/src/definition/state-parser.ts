@@ -240,13 +240,14 @@ export function createAgentStateParser<
       }
     }
 
-    // 3. Validazione Toolbelt (Ta)
-    if (!Array.isArray(candidate.Ta)) {
+    // 3. Validazione Toolbelt (Ta) - supporta sia Array che Set (da runtime AgentState)
+    const rawTa = candidate.Ta instanceof Set ? Array.from(candidate.Ta) : candidate.Ta;
+    if (!Array.isArray(rawTa)) {
       throw new StateValidationError(
         "Agent state 'Ta' must be an array of tool ID strings."
       );
     }
-    for (const toolId of candidate.Ta) {
+    for (const toolId of rawTa) {
       if (typeof toolId !== 'string') {
         throw new StateValidationError(
           `Found non-string tool ID in 'Ta': ${String(toolId)}`
@@ -259,22 +260,23 @@ export function createAgentStateParser<
       }
     }
 
-    // 4. Validazione Conoscenze (Ka)
+    // 4. Validazione Conoscenze (Ka) - supporta sia Array che Map (da runtime AgentState)
     let validatedKa: Concept[] = [];
     if (candidate.Ka !== undefined && candidate.Ka !== null) {
-      if (!Array.isArray(candidate.Ka)) {
+      const rawKa = candidate.Ka instanceof Map ? Array.from(candidate.Ka.values()) : candidate.Ka;
+      if (!Array.isArray(rawKa)) {
         throw new StateValidationError(
           "Agent state 'Ka' must be an array of Concept objects."
         );
       }
-      for (const [idx, item] of candidate.Ka.entries()) {
+      for (const [idx, item] of rawKa.entries()) {
         if (!item || typeof item.name !== 'string' || typeof item.descrizione !== 'string' || typeof item.corpo !== 'string') {
           throw new StateValidationError(
             `Knowledge concept at index ${idx} must have 'name', 'descrizione' and 'corpo' string properties.`
           );
         }
       }
-      validatedKa = candidate.Ka;
+      validatedKa = rawKa;
     }
 
     // 5. Validazione Traccia Episodica (Ep)
@@ -300,7 +302,7 @@ export function createAgentStateParser<
       I: candidate.I,
       Ms: candidate.Ms,
       Ds: validatedDs,
-      Ta: candidate.Ta as (keyof TTools & string)[],
+      Ta: rawTa as (keyof TTools & string)[],
       Ka: validatedKa,
       Ep: candidate.Ep as Message[]
     };

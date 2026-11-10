@@ -12,6 +12,7 @@ import {
 import { ImplementedAgentImpl } from './implemented-agent.js';
 import { createAgentStateParser } from './state-parser.js';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
+import { extractBehavioralTrajectory } from './trajectory-extractor.js';
 
 /**
  * ============================================================================
@@ -44,6 +45,9 @@ export function defineAgent<
     },
     parseState(raw: unknown) {
       return parser(raw);
+    },
+    extractTrajectory(rawState: unknown) {
+      return extractBehavioralTrajectory(this, rawState);
     },
     implement(
       binding: AgentBinding<TTools, TStateSchema>

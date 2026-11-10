@@ -12,6 +12,7 @@ import {
 import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult, SuspendedRunResult } from '../engine/orchestrator.js';
 import { WorldRegistry } from '../world/index.js';
 import type { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
+import type { BehavioralTrajectory } from './trajectory-extractor.js';
 
 /**
  * ============================================================================
@@ -208,6 +209,12 @@ export interface AgentDefinition<
    * Crea un EvaluationCollector fortemente tipizzato sullo stato (Ds), tool (Ta) e terminazioni di questo agente.
    */
   createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations>;
+
+  /**
+   * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S
+   * senza rieseguire l'agente o avviare il runtime.
+   */
+  extractTrajectory(rawState: unknown): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
 }
 
 /**
@@ -226,6 +233,12 @@ export interface ImplementedAgent<
    * Crea un EvaluationCollector fortemente tipizzato sullo stato (Ds), tool (Ta) e terminazioni di questo agente.
    */
   createEvaluationCollector(): EvaluationCollector<TTools, TStateSchema, TTerminations>;
+
+  /**
+   * Estrae ed organizza la traiettoria comportamentale oggettiva da uno stato S
+   * senza rieseguire l'agente o avviare il runtime.
+   */
+  extractTrajectory(rawState: unknown): BehavioralTrajectory<TTools, TStateSchema, TTerminations>;
 
   /**
    * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON

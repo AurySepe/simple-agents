@@ -23,6 +23,7 @@ import {
 } from './types.js';
 import { createAgentStateParser } from './state-parser.js';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
+import { BehavioralTrajectory, extractBehavioralTrajectory } from './trajectory-extractor.js';
 
 export class ImplementedAgentImpl<
   TTools extends Record<string, ToolContract>,
@@ -130,6 +131,10 @@ export class ImplementedAgentImpl<
 
   public parseState(raw: unknown): TypedAgentState<TTools, TStateSchema> {
     return this.parser(raw);
+  }
+
+  public extractTrajectory(rawState: unknown): BehavioralTrajectory<TTools, TStateSchema, TTerminations> {
+    return extractBehavioralTrajectory(this, rawState);
   }
 
   public spawn(
