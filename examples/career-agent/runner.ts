@@ -3,38 +3,19 @@ import {
   createDefaultFrameworkConfig,
   createRunner,
   FrameworkEngine,
-  type LanguageModelAdapter,
 } from "@formal-agent/core";
-import { createCareerLlamaAdapter, createCareerGeminiAdapter } from "./adapter.js";
+import {
+  createCareerLlamaAdapter,
+  createCareerGeminiAdapter,
+  type CreateCareerLlamaAdapterOptions,
+  type CreateCareerGeminiAdapterOptions,
+} from "./adapter.js";
 import { careerAgent } from "./implementation.js";
 
-/**
- * ============================================================================
- * CONFIGURAZIONE DEL RUNNER E DEL MODELLO (GEMINI / QWEN)
- * ============================================================================
- * Il runner supporta dinamicamente sia Google Gemini che Llama-server (Qwen).
- * Se GEMINI_API_KEY è configurata, utilizza il modello Gemini specificato (default: gemini-3.5-flash-lite).
- */
-
-export function resolveDefaultModelAdapter(): LanguageModelAdapter {
-  if (process.env.GEMINI_API_KEY) {
-    return createCareerGeminiAdapter({
-      apiKey: process.env.GEMINI_API_KEY,
-      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
-      timeoutMs: process.env.GEMINI_TIMEOUT_MS ? parseInt(process.env.GEMINI_TIMEOUT_MS, 10) : 60000,
-    });
-  }
-
-  return createCareerLlamaAdapter({
-    baseUrl: process.env.LLAMA_BASE_URL ?? "http://localhost:30000",
-    modelName: process.env.LLAMA_MODEL_NAME ?? "qwen3.5-9b",
-  });
-}
-
-// 1. Motore invariante di transizione
+// Motore invariante di transizione condiviso
 const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
-// 2. Logger per stampare a video i passi dell'agente in linguaggio naturale
+// Logger per stampare a video i passi dell'agente in linguaggio naturale
 const consoleLogger = new ConsoleLogger({
   showThoughts: true,
   showState: false,
@@ -42,41 +23,40 @@ const consoleLogger = new ConsoleLogger({
   useColors: true,
 });
 
+const defaultToolErrorRecovery = {
+  w_leggi_pagina_web: async (error: { type: string }, context: { attempt: number }) => {
+    if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+      console.warn(`[Recovery Tool] Timeout lettura pagina web (tentativo ${context.attempt}), ritento...`);
+      return { action: 'retry' as const };
+    }
+    return { action: 'abort' as const };
+  },
+  w_cerca_web: async (error: { type: string }, context: { attempt: number }) => {
+    if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
+      console.warn(`[Recovery Tool] Timeout ricerca web (tentativo ${context.attempt}), ritento...`);
+      return { action: 'retry' as const };
+    }
+    return { action: 'abort' as const };
+  },
+};
+
 /**
- * Costruisce un runner per l'agente delle carriere con un adapter del modello specificato.
+ * ============================================================================
+ * 1. RUNNER FORTEMENTE TIPIZZATO SU QWEN (LLAMA.CPP / SGLANG)
+ * ============================================================================
+ * Tutti i tipi degli errori del modello sono inferiti a tempo di compilazione.
  */
-export function buildCareerRunner(modelAdapter?: LanguageModelAdapter) {
-  const model = modelAdapter ?? resolveDefaultModelAdapter();
+export function buildCareerQwenRunner(options?: CreateCareerLlamaAdapterOptions) {
+  const qwenModel = createCareerLlamaAdapter(options);
 
   return createRunner({ defaultEngine: false })
     .withEngine(engine)
-    .withModel(model)
+    .withModel(qwenModel)
     .withAgent(careerAgent)
     .withRecovery({
-      onToolError: {
-        w_leggi_pagina_web: async (error, context) => {
-          if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
-            console.warn(`[Recovery] Timeout pagina web (tentativo ${context.attempt}), ritento...`);
-            return { action: 'retry' };
-          }
-          return { action: 'abort' };
-        },
-        w_cerca_web: async (error, context) => {
-          if (error.type === 'NETWORK_TIMEOUT' && context.attempt < 3) {
-            console.warn(`[Recovery] Timeout ricerca web (tentativo ${context.attempt}), ritento...`);
-            return { action: 'retry' };
-          }
-          return { action: 'abort' };
-        },
-      },
-      async onModelError(error, context) {
-        if ((error.type === 'SERVICE_UNAVAILABLE' || error.type === 'RATE_LIMIT_EXCEEDED') && context.attempt < 4) {
-          const delay = (error as any).retryAfterMs ?? (context.attempt * 2000);
-          console.warn(`[Recovery] Modello sovraccarico (${error.type}), attendo ${delay}ms prima del tentativo ${context.attempt + 1}...`);
-          await new Promise((r) => setTimeout(r, delay));
-          return { action: "retry" };
-        }
-        console.error(`[Recovery] Errore modello irreversibile: ${error.type ?? 'UNKNOWN'}`);
+      onToolError: defaultToolErrorRecovery,
+      onModelError(error, context) {
+        console.error(`[Recovery Qwen] Errore modello: ${error.type} - ${error.message}`);
         return { action: "abort" };
       },
     })
@@ -87,26 +67,126 @@ export function buildCareerRunner(modelAdapter?: LanguageModelAdapter) {
     });
 }
 
-export const careerRunner = buildCareerRunner();
+/**
+ * ============================================================================
+ * 2. RUNNER FORTEMENTE TIPIZZATO SU GOOGLE GEMINI (GEMINI 3 & 4)
+ * ============================================================================
+ * Gestisce l'intera discriminated union GeminiModelError a tempo di compilazione.
+ */
+export function buildCareerGeminiRunner(options: CreateCareerGeminiAdapterOptions) {
+  const geminiModel = createCareerGeminiAdapter(options);
+
+  return createRunner({ defaultEngine: false })
+    .withEngine(engine)
+    .withModel(geminiModel)
+    .withAgent(careerAgent)
+    .withRecovery({
+      onToolError: defaultToolErrorRecovery,
+      async onModelError(error, context) {
+        switch (error.type) {
+          case 'SERVICE_UNAVAILABLE':
+          case 'RATE_LIMIT_EXCEEDED': {
+            if (context.attempt < 4) {
+              const retryAfterMs = error.type === 'RATE_LIMIT_EXCEEDED' ? error.retryAfterMs : undefined;
+              const delay = retryAfterMs ?? (context.attempt * 2000);
+              console.warn(
+                `[Recovery Gemini] Modello temporaneamente non disponibile (${error.type}), attendo ${delay}ms prima del tentativo ${context.attempt + 1}...`
+              );
+              await new Promise((r) => setTimeout(r, delay));
+              return { action: "retry" };
+            }
+            return { action: "abort" };
+          }
+
+          case 'NETWORK_TIMEOUT': {
+            if (context.attempt < 3) {
+              console.warn(`[Recovery Gemini] Timeout inferenza, ritento...`);
+              return { action: "retry" };
+            }
+            return { action: "abort" };
+          }
+
+          case 'INVALID_API_KEY':
+          case 'QUOTA_EXHAUSTED':
+          case 'SAFETY_BLOCKED':
+          case 'RECITATION_BLOCKED':
+          case 'CONTEXT_WINDOW_EXCEEDED':
+          case 'NETWORK_ERROR':
+            console.error(`[Recovery Gemini] Errore non recuperabile: ${error.type} - ${error.message}`);
+            return { action: "abort" };
+        }
+      },
+    })
+    .withOptions({
+      observers: [consoleLogger],
+      maxMacroCycles: 25,
+      maxTicks: 100,
+    });
+}
 
 /**
- * Funzione di alto livello per avviare la ricerca carriere per un'azienda.
- *
- * @param company.name Nome dell'azienda target da investigare
- * @param company.description Descrizione o contesto opzionale per affinare la ricerca
+ * Runner di default pre-configurato con Qwen per test ed esecuzione locale.
+ */
+export const careerRunner = buildCareerQwenRunner();
+
+/**
+ * Funzione di esecuzione specializzata per Qwen / Llama-server.
+ */
+export async function searchCompanyCareersWithQwen(
+  company: { name: string; description?: string },
+  options?: CreateCareerLlamaAdapterOptions
+) {
+  const runner = buildCareerQwenRunner(options);
+  const prompt = company.description
+    ? `Trova la pagina carriere ufficiale dell'azienda "${company.name}". Informazioni di contesto: ${company.description}`
+    : `Trova la pagina carriere ufficiale dell'azienda "${company.name}".`;
+
+  return await runner.run({
+    userContent: {
+      kind: 'text',
+      text: prompt,
+    },
+  });
+}
+
+/**
+ * Funzione di esecuzione specializzata per Google Gemini.
+ */
+export async function searchCompanyCareersWithGemini(
+  company: { name: string; description?: string },
+  options: CreateCareerGeminiAdapterOptions
+) {
+  const runner = buildCareerGeminiRunner(options);
+  const prompt = company.description
+    ? `Trova la pagina carriere ufficiale dell'azienda "${company.name}". Informazioni di contesto: ${company.description}`
+    : `Trova la pagina carriere ufficiale dell'azienda "${company.name}".`;
+
+  return await runner.run({
+    userContent: {
+      kind: 'text',
+      text: prompt,
+    },
+  });
+}
+
+/**
+ * Entrypoint di convenienza che delega alla funzione corrispondente
+ * in base alla configurazione esplicita presente nell'ambiente.
  */
 export async function searchCompanyCareers(company: {
   name: string;
   description?: string;
 }) {
-  const prompt = company.description
-    ? `Trova la pagina carriere ufficiale dell'azienda "${company.name}". Informazioni di contesto: ${company.description}`
-    : `Trova la pagina carriere ufficiale dell'azienda "${company.name}".`;
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_MODEL) {
+    return await searchCompanyCareersWithGemini(company, {
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL,
+      timeoutMs: process.env.GEMINI_TIMEOUT_MS ? parseInt(process.env.GEMINI_TIMEOUT_MS, 10) : undefined,
+    });
+  }
 
-  return await careerRunner.run({
-    userContent: {
-      kind: 'text',
-      text: prompt
-    }
+  return await searchCompanyCareersWithQwen(company, {
+    baseUrl: process.env.LLAMA_BASE_URL,
+    modelName: process.env.LLAMA_MODEL_NAME,
   });
 }

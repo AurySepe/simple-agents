@@ -44,8 +44,9 @@ export function createCareerGeminiAdapter(options: CreateCareerGeminiAdapterOpti
 /**
  * Factory helper per istanziare l'adattatore llama-server Qwen con vincolo grammaticale
  * ottimizzato per l'agente di ricerca web.
+ * Ritorna LlamaCppModelAdapter preservando i tipi specifici di errore.
  */
-export function createCareerLlamaAdapter(options?: CreateCareerLlamaAdapterOptions): LanguageModelAdapter {
+export function createCareerLlamaAdapter(options?: CreateCareerLlamaAdapterOptions): LlamaCppModelAdapter {
   const baseUrl = options?.baseUrl ?? "http://localhost:30000";
   const modelName = options?.modelName ?? "qwen3.5-9b";
   // Con i modelli di reasoning (CoT), temperature=0.6 e presence_penalty=0.3 impediscono
