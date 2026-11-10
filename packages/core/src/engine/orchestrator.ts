@@ -31,6 +31,7 @@ import { WorldRegistry } from '../world/index.js';
 import { computeVisibleTools, SystemFrameProjector } from './projection.js';
 import { defaultMarkdownProjector } from '../defaults/projectors/markdown-projector.js';
 import { defaultOperationalPolicy, OperationalPolicy } from '../defaults/policies/operational-policy.js';
+import { deriveFSMState, deriveTimeIndex } from '../definition/state-parser.js';
 
 export type { OperationalPolicy as OrchestratorPolicy } from '../defaults/policies/operational-policy.js';
 
@@ -102,6 +103,7 @@ export interface RunOptions<T = DataValue> {
   maxMacroCycles?: number;
   maxTicks?: number;
   observers?: AgentObserver[];
+  signal?: AbortSignal;
   onMacroCycle?: (macroCycle: number, outcome: ExecutionOutcome<T>) => void | Promise<void>;
   beforeToolExecution?: (toolId: string, args: DataRecord) => void | Promise<void>;
   afterToolExecution?: (toolId: string, args: DataRecord, result: ToolResult) => void | Promise<void>;
@@ -117,15 +119,27 @@ export interface HaltRunResult<T = DataValue> extends BaseRunResult {
   status: 'halt';
   result: ExitResult<T>;
   stall?: never;
+  reason?: never;
 }
 
 export interface StallRunResult extends BaseRunResult {
   status: 'stall';
   stall: DeliberationStall;
   result?: never;
+  reason?: never;
 }
 
-export type RunResult<T = DataValue> = HaltRunResult<T> | StallRunResult;
+export interface SuspendedRunResult extends BaseRunResult {
+  status: 'suspended';
+  reason: 'aborted' | 'cycle_limit' | 'tick_limit';
+  stall?: never;
+  result?: never;
+}
+
+export type RunResult<T = DataValue> =
+  | HaltRunResult<T>
+  | StallRunResult
+  | SuspendedRunResult;
 
 /**
  * ============================================================================
@@ -185,15 +199,16 @@ export class FrameworkEngine {
   public spawn<T extends DataValue = DataValue>(
     agent: AgentPackage<T> | AgentManifest<T>,
     model: LanguageModelAdapter,
-    world?: WorldRegistry
+    world?: WorldRegistry,
+    initialState?: AgentState
   ): AgentInstance<T> {
     if (isAgentPackage<T>(agent)) {
-      return this.bindWorld(agent.world).spawnAgent(agent.manifest, model);
+      return this.bindWorld(agent.world).spawnAgent(agent.manifest, model, initialState);
     }
     if (!world) {
       throw new Error("To spawn a pure AgentManifest, a WorldRegistry must be provided as the third parameter.");
     }
-    return this.bindWorld(world).spawnAgent(agent, model);
+    return this.bindWorld(world).spawnAgent(agent, model, initialState);
   }
 
   /**
@@ -203,7 +218,7 @@ export class FrameworkEngine {
   public async run<T extends DataValue = DataValue>(
     agent: AgentPackage<T> | AgentManifest<T>,
     model: LanguageModelAdapter,
-    options?: RunOptions<T> & { world?: WorldRegistry }
+    options?: RunOptions<T> & { world?: WorldRegistry; initialState?: AgentState }
   ): Promise<RunResult<T>> {
     if (isAgentPackage<T>(agent)) {
       return await this.bindWorld(agent.world).runAgent(agent.manifest, model, options);
@@ -234,9 +249,10 @@ export class BoundRuntime {
 
   public spawnAgent<T extends DataValue = DataValue>(
     manifest: AgentManifest<T>,
-    model: LanguageModelAdapter
+    model: LanguageModelAdapter,
+    initialState?: AgentState
   ): AgentInstance<T> {
-    const agent = new AgentInstance<T>(this.frameworkConfig, this.world, manifest, model);
+    const agent = new AgentInstance<T>(this.frameworkConfig, this.world, manifest, model, initialState);
     for (const obs of this.observers) {
       agent.addObserver(obs);
     }
@@ -246,9 +262,9 @@ export class BoundRuntime {
   public async runAgent<T extends DataValue = DataValue>(
     manifest: AgentManifest<T>,
     model: LanguageModelAdapter,
-    options?: RunOptions<T>
+    options?: RunOptions<T> & { initialState?: AgentState }
   ): Promise<RunResult<T>> {
-    const agent = this.spawnAgent<T>(manifest, model);
+    const agent = this.spawnAgent<T>(manifest, model, options?.initialState);
     return await agent.run(options);
   }
 }
@@ -273,7 +289,8 @@ export class AgentInstance<T extends DataValue = DataValue> {
     private readonly framework: FrameworkConfig,
     private readonly world: WorldRegistry,
     private readonly manifest: AgentManifest<T>,
-    private readonly model: LanguageModelAdapter
+    private readonly model: LanguageModelAdapter,
+    initialState?: AgentState
   ) {
     this.projector = this.framework.systemFrameProjector ?? defaultMarkdownProjector;
     this.policy = this.framework.policy ?? defaultOperationalPolicy;
@@ -284,17 +301,32 @@ export class AgentInstance<T extends DataValue = DataValue> {
       }
     }
 
-    // Inizializzazione dello Stato S_0 dal Manifesto
-    this.state = {
-      I: this.manifest.I,
-      Ms: this.manifest.Ms0,
-      Ds: this.manifest.Ds0 ? { ...this.manifest.Ds0 } : {},
-      Ta: this.manifest.Ta0 ? new Set(this.manifest.Ta0) : new Set(),
-      Ka: this.manifest.Ka0
-        ? new Map(Array.from(this.manifest.Ka0).map((c) => [c.name, c]))
-        : new Map(),
-      Ep: this.manifest.Ep0 ? [...this.manifest.Ep0] : []
-    };
+    if (initialState) {
+      this.state = {
+        I: initialState.I,
+        Ms: initialState.Ms,
+        Ds: { ...initialState.Ds },
+        Ta: new Set(initialState.Ta),
+        Ka: new Map(initialState.Ka),
+        Ep: [...initialState.Ep]
+      };
+      const tau = deriveTimeIndex(this.state.Ep);
+      this.c = tau.c;
+      this.t = tau.t;
+      this.fsm = deriveFSMState(this.state, this.manifest.A_term);
+    } else {
+      // Inizializzazione dello Stato S_0 dal Manifesto
+      this.state = {
+        I: this.manifest.I,
+        Ms: this.manifest.Ms0,
+        Ds: this.manifest.Ds0 ? { ...this.manifest.Ds0 } : {},
+        Ta: this.manifest.Ta0 ? new Set(this.manifest.Ta0) : new Set(),
+        Ka: this.manifest.Ka0
+          ? new Map(Array.from(this.manifest.Ka0).map((c) => [c.name, c]))
+          : new Map(),
+        Ep: this.manifest.Ep0 ? [...this.manifest.Ep0] : []
+      };
+    }
   }
 
   public addObserver(observer: AgentObserver): void {
@@ -373,6 +405,16 @@ export class AgentInstance<T extends DataValue = DataValue> {
    * Invia un payload esogeno all'agente risvegliandolo.
    */
   public feedPayload(payload: WakeupPayload): void {
+    // Validazione rigorosa del Vincolo di Quiescenza:
+    // Lo stimolo utente può essere fornito esclusivamente quando l'agente è a riposo (q_sleep o q_halt)
+    if (payload.userContent !== undefined) {
+      if (this.fsm.phase !== 'q_sleep' && this.fsm.phase !== 'q_halt') {
+        throw new Error(
+          `User stimulus can only be provided when the agent is in a quiescent state ('q_sleep' or 'q_halt'). Current control state: '${this.fsm.phase}'.`
+        );
+      }
+    }
+
     void this.emitEvent({
       type: 'macro_cycle_start',
       timestamp: new Date(),
@@ -405,9 +447,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
         content: payload.userContent
       });
 
-      if (this.fsm.phase === 'q_sleep' || this.fsm.phase === 'q_halt') {
-        this.transitionTo({ phase: 'q_exec' }, 'stimulus_received');
-      }
+      this.transitionTo({ phase: 'q_exec' }, 'stimulus_received');
     }
   }
 
@@ -1083,6 +1123,34 @@ export class AgentInstance<T extends DataValue = DataValue> {
    * Esegue step() continui finché non si cede il controllo (yield) o si termina (halt).
    */
   public async resume(maxSteps: number = 500): Promise<ExecutionOutcome<T>> {
+    if (this.fsm.phase === 'q_yield') {
+      return {
+        status: 'yield',
+        macroCycle: this.c,
+        tick: this.t,
+        pendingCalls: this.fsm.pendingCalls,
+        state: this.state
+      };
+    }
+    if (this.fsm.phase === 'q_halt') {
+      return {
+        status: 'halt',
+        macroCycle: this.c,
+        tick: this.t,
+        result: this.fsm.exitResult,
+        state: this.state
+      };
+    }
+    if (this.fsm.phase === 'q_stall') {
+      return {
+        status: 'stall',
+        macroCycle: this.c,
+        tick: this.t,
+        stall: this.fsm.stall,
+        state: this.state
+      };
+    }
+
     let steps = 0;
     while (true) {
       if (++steps > maxSteps) {
@@ -1116,11 +1184,57 @@ export class AgentInstance<T extends DataValue = DataValue> {
       }
 
       while (true) {
+        if (options?.signal?.aborted) {
+          void this.emitEvent({
+            type: 'suspend',
+            timestamp: new Date(),
+            macroCycle: this.c,
+            tick: this.t,
+            reason: 'aborted',
+            stateSnapshot: this.getSnapshot()
+          });
+          return {
+            status: 'suspended',
+            reason: 'aborted',
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
+        }
+
         if (this.c > maxMacroCycles) {
-          throw new Error(`Reached maximum macro-cycle limit (${maxMacroCycles}).`);
+          void this.emitEvent({
+            type: 'suspend',
+            timestamp: new Date(),
+            macroCycle: this.c,
+            tick: this.t,
+            reason: 'cycle_limit',
+            stateSnapshot: this.getSnapshot()
+          });
+          return {
+            status: 'suspended',
+            reason: 'cycle_limit',
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
         }
         if (this.t > maxTicks) {
-          throw new Error(`Reached maximum decision tick limit (${maxTicks}).`);
+          void this.emitEvent({
+            type: 'suspend',
+            timestamp: new Date(),
+            macroCycle: this.c,
+            tick: this.t,
+            reason: 'tick_limit',
+            stateSnapshot: this.getSnapshot()
+          });
+          return {
+            status: 'suspended',
+            reason: 'tick_limit',
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
         }
 
         const outcome = await this.resume();
@@ -1143,6 +1257,26 @@ export class AgentInstance<T extends DataValue = DataValue> {
           return {
             status: 'stall',
             stall: outcome.stall,
+            macroCycles: this.c,
+            ticks: this.t,
+            state: this.state
+          };
+        }
+
+        // Se è stato richiesto un abort durante la deliberazione,
+        // sospendiamo prima di eseguire fisicamente i tool nel mondo W
+        if (options?.signal?.aborted) {
+          void this.emitEvent({
+            type: 'suspend',
+            timestamp: new Date(),
+            macroCycle: this.c,
+            tick: this.t,
+            reason: 'aborted',
+            stateSnapshot: this.getSnapshot()
+          });
+          return {
+            status: 'suspended',
+            reason: 'aborted',
             macroCycles: this.c,
             ticks: this.t,
             state: this.state

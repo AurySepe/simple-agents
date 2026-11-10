@@ -6,7 +6,7 @@ import {
 } from '../engine/orchestrator.js';
 import { DataValue, LanguageModelAdapter } from '../types/index.js';
 import { createDefaultFrameworkConfig } from '../defaults/index.js';
-import { AgentRunResult, ImplementedAgent } from './types.js';
+import { AgentRunResult, ImplementedAgent, TypedAgentState } from './types.js';
 
 type InferAgentRunResult<TAgent> = TAgent extends ImplementedAgent<any, any, infer TTerminations>
   ? AgentRunResult<TTerminations>
@@ -90,6 +90,19 @@ export class RunnerBuilder<
   }
 
   /**
+   * Spawna l'istanza dell'agente nel runtime ripartendo da uno stato pregresso fortemente tipizzato.
+   * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
+   */
+  public spawnFromState(
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter, ImplementedAgent<any, any, any>, any>,
+    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any>
+      ? TypedAgentState<TTools, TStateSchema>
+      : TypedAgentState<any, any>
+  ): AgentInstance<DataValue> {
+    return this.state.agent!.spawnFromState(this.state.engine!, this.state.model!, state as any);
+  }
+
+  /**
    * Esegue l'agente end-to-end.
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
    * Ritorna un esito tipizzato con unione discriminata sul tipo di terminazione e relativo payload.
@@ -105,6 +118,29 @@ export class RunnerBuilder<
     return (await this.state.agent!.run(
       this.state.engine!,
       this.state.model!,
+      mergedOptions
+    )) as unknown as InferAgentRunResult<TAgent>;
+  }
+
+  /**
+   * Esegue l'agente a partire da uno stato pregresso fortemente tipizzato fino alla terminazione (halt).
+   * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
+   */
+  public async runFromState(
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter, ImplementedAgent<any, any, any>, any>,
+    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any>
+      ? TypedAgentState<TTools, TStateSchema>
+      : TypedAgentState<any, any>,
+    runOptions?: Partial<RunOptions<DataValue>>
+  ): Promise<InferAgentRunResult<TAgent>> {
+    const mergedOptions: RunOptions<DataValue> = {
+      ...this.state.options,
+      ...runOptions
+    };
+    return (await this.state.agent!.runFromState(
+      this.state.engine!,
+      this.state.model!,
+      state as any,
       mergedOptions
     )) as unknown as InferAgentRunResult<TAgent>;
   }

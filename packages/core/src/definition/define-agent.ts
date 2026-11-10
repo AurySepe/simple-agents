@@ -10,6 +10,7 @@ import {
   ValidateContractTools
 } from './types.js';
 import { ImplementedAgentImpl } from './implemented-agent.js';
+import { createAgentStateParser } from './state-parser.js';
 
 /**
  * ============================================================================
@@ -33,8 +34,13 @@ export function defineAgent<
     ? { terminations: 'ERRORE_COMPILE_TIME: terminations non può essere vuoto. Devi dichiarare almeno una terminazione.' }
     : unknown)
 ): AgentDefinition<TTools, TStateSchema, TTerminations> {
+  const parser = createAgentStateParser(contract as AgentContract<TTools, TStateSchema, TTerminations>);
+
   return {
     contract,
+    parseState(raw: unknown) {
+      return parser(raw);
+    },
     implement(
       binding: AgentBinding<TTools, TStateSchema>
     ): ImplementedAgent<TTools, TStateSchema, TTerminations> {

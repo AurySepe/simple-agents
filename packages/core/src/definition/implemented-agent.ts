@@ -4,6 +4,7 @@ import {
   Concept,
   DataRecord,
   DataValue,
+  deserializeAgentState,
   TerminationContract,
   ToolResult,
   WorldTool,
@@ -17,8 +18,10 @@ import {
   AgentRunResult,
   ImplementedAgent,
   TerminationContractDef,
-  ToolContract
+  ToolContract,
+  TypedAgentState
 } from './types.js';
+import { createAgentStateParser } from './state-parser.js';
 
 export class ImplementedAgentImpl<
   TTools extends Record<string, ToolContract>,
@@ -27,6 +30,7 @@ export class ImplementedAgentImpl<
 > implements ImplementedAgent<TTools, TStateSchema, TTerminations> {
   readonly manifest: AgentManifest<DataValue>;
   readonly world: WorldRegistry;
+  private readonly parser: (raw: unknown) => TypedAgentState<TTools, TStateSchema>;
 
   constructor(
     readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
@@ -114,6 +118,13 @@ export class ImplementedAgentImpl<
       Ds0: validatedInitialState,
       A_term: terminations
     };
+
+    // 9. Sintesi automatica del parser di stato type-safe conforme al contratto
+    this.parser = createAgentStateParser(contract);
+  }
+
+  public parseState(raw: unknown): TypedAgentState<TTools, TStateSchema> {
+    return this.parser(raw);
   }
 
   public spawn(
@@ -122,6 +133,16 @@ export class ImplementedAgentImpl<
   ): AgentInstance<DataValue> {
     const boundRuntime = engine.bindWorld(this.world);
     return boundRuntime.spawnAgent(this.manifest, model);
+  }
+
+  public spawnFromState(
+    engine: FrameworkEngine,
+    model: LanguageModelAdapter,
+    state: TypedAgentState<TTools, TStateSchema>
+  ): AgentInstance<DataValue> {
+    const rawState = deserializeAgentState(state as any);
+    const boundRuntime = engine.bindWorld(this.world);
+    return boundRuntime.spawnAgent(this.manifest, model, rawState);
   }
 
   public async run(
@@ -134,6 +155,21 @@ export class ImplementedAgentImpl<
       this.manifest,
       model,
       options
+    )) as unknown as AgentRunResult<TTerminations>;
+  }
+
+  public async runFromState(
+    engine: FrameworkEngine,
+    model: LanguageModelAdapter,
+    state: TypedAgentState<TTools, TStateSchema>,
+    options?: RunOptions<DataValue>
+  ): Promise<AgentRunResult<TTerminations>> {
+    const rawState = deserializeAgentState(state as any);
+    const boundRuntime = engine.bindWorld(this.world);
+    return (await boundRuntime.runAgent(
+      this.manifest,
+      model,
+      { ...options, initialState: rawState }
     )) as unknown as AgentRunResult<TTerminations>;
   }
 }

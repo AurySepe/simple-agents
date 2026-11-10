@@ -368,5 +368,53 @@ describe('Automa a Stati Finiti: Stepping (step) e Resumption (resume) in Ω_op'
       expect(lastThought.type).toBe('thought');
       expect(lastThought.content).toBe('Stavo tentando di riparare il payload ma ho esaurito i token.');
     });
+
+    it('dovrebbe rifiutare rigorosamente con errore esplicito uno stimolo utente se l\'agente non è in stato di quiete (q_sleep o q_halt)', async () => {
+      const framework = new FrameworkEngine();
+      const world = createWorldRegistry([
+        {
+          id: 'tool_a',
+          description: 'Tool A',
+          parameters: z.object({}),
+          execute: async () => ({})
+        }
+      ]);
+      const runtime = framework.bindWorld(world);
+
+      const manifest: AgentManifest = {
+        I: 'StrictAgent',
+        Ms0: 'Missione',
+        Ta0: ['tool_a'],
+        A_term: [{ id: 'done', description: 'Done', schema: z.object({}) }]
+      };
+
+      const model: LanguageModelAdapter = {
+        infer: async () => ({
+          calls: [{ id: 'c1', name: 'tool_a', payload: {} }]
+        })
+      };
+
+      const agent = runtime.spawnAgent(manifest, model);
+
+      // In q_sleep: ammissibile
+      expect(() =>
+        agent.feedPayload({ userContent: { kind: 'text', text: 'Avvio' } })
+      ).not.toThrow();
+
+      // Ora è in q_exec: uno stimolo utente deve lanciare errore
+      expect(() =>
+        agent.feedPayload({ userContent: { kind: 'text', text: 'Interrompi' } })
+      ).toThrow(/User stimulus can only be provided when the agent is in a quiescent state/);
+
+      // Step verso q_yield
+      const outcome = await agent.step();
+      expect(outcome.status).toBe('yield');
+      expect(agent.getControlState()).toBe('q_yield');
+
+      // In q_yield: uno stimolo utente deve lanciare errore esplicito
+      expect(() =>
+        agent.feedPayload({ userContent: { kind: 'text', text: 'Messaggio durante i tool' } })
+      ).toThrow(/User stimulus can only be provided when the agent is in a quiescent state/);
+    });
   });
 });

@@ -83,6 +83,12 @@ export interface StallEvent extends BaseAgentEvent {
   stateSnapshot: Readonly<AgentState>;
 }
 
+export interface SuspendEvent extends BaseAgentEvent {
+  type: 'suspend';
+  reason: 'aborted' | 'cycle_limit' | 'tick_limit';
+  stateSnapshot: Readonly<AgentState>;
+}
+
 export type AgentEvent =
   | MacroCycleStartEvent
   | StepStartEvent
@@ -92,4 +98,5 @@ export type AgentEvent =
   | ToolErrorEvent
   | YieldEvent
   | HaltEvent
-  | StallEvent;
+  | StallEvent
+  | SuspendEvent;

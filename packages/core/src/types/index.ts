@@ -294,6 +294,59 @@ export interface AgentState {
 
 /**
  * ============================================================================
+ * 6.b STATO SERIALIZZATO DELL'AGENTE (JSON Puro)
+ * ============================================================================
+ * Rappresentazione algebrica dello stato S interamente compatibile con JSON.stringify
+ * e trasmissibile attraverso canali di I/O, database o code di messaggi.
+ * Sostituisce Set<string> con string[] e Map<string, Concept> con Concept[].
+ */
+export interface SerializedAgentState<
+  TTools = Record<string, unknown>,
+  TState = DataRecord
+> {
+  I: string;
+  Ms: string;
+  Ds: TState;
+  Ta: (keyof TTools & string)[];
+  Ka: Concept[];
+  Ep: Message[];
+}
+
+/**
+ * Serializza l'AgentState di runtime in un oggetto SerializedAgentState JSON-safe.
+ */
+export function serializeAgentState<
+  TTools = Record<string, unknown>,
+  TState extends DataRecord = DataRecord
+>(state: AgentState): SerializedAgentState<TTools, TState> {
+  return {
+    I: state.I,
+    Ms: state.Ms,
+    Ds: { ...state.Ds } as TState,
+    Ta: Array.from(state.Ta) as (keyof TTools & string)[],
+    Ka: Array.from(state.Ka.values()),
+    Ep: state.Ep.map((msg) => ({ ...msg }))
+  };
+}
+
+/**
+ * Deserializza un SerializedAgentState JSON in un AgentState di runtime con Set e Map.
+ */
+export function deserializeAgentState(
+  serialized: SerializedAgentState<any, any>
+): AgentState {
+  return {
+    I: serialized.I,
+    Ms: serialized.Ms,
+    Ds: { ...serialized.Ds },
+    Ta: new Set(serialized.Ta),
+    Ka: new Map((serialized.Ka ?? []).map((c) => [c.name, c])),
+    Ep: (serialized.Ep ?? []).map((msg) => ({ ...msg }))
+  };
+}
+
+/**
+ * ============================================================================
  * 7. LA TRIPLA DI CONTESTO PER L'INFERENZA: C_Ω
  * ============================================================================
  * C_Ω(S, q) = < F_Ω (System), Ep (Messages), V_Ω (Tools) >

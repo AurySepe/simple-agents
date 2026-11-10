@@ -359,6 +359,13 @@ export class ConsoleLoggerObserver implements AgentObserver {
         this.write('');
         break;
       }
+
+      case 'suspend': {
+        this.write('');
+        this.write(pfx + this.bold(this.yellow(`⏸️  [Execution Suspended - ${event.reason}]`)));
+        this.write('');
+        break;
+      }
     }
   }
 

@@ -3,12 +3,13 @@ import {
   Concept,
   DataRecord,
   DataValue,
+  Message,
   ToolResult,
   LanguageModelAdapter,
   AgentManifest,
   AgentState
 } from '../types/index.js';
-import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult } from '../engine/orchestrator.js';
+import { FrameworkEngine, AgentInstance, RunOptions, RunResult, StallRunResult, SuspendedRunResult } from '../engine/orchestrator.js';
 import { WorldRegistry } from '../world/index.js';
 
 /**
@@ -132,8 +133,10 @@ export type AgentRunResult<TTerminations extends Record<string, TerminationContr
       state: AgentState;
       result: InferTerminationsUnion<TTerminations>;
       stall?: never;
+      reason?: never;
     }
-  | StallRunResult;
+  | StallRunResult
+  | SuspendedRunResult;
 
 /**
  * Mapped type che esige l'esatta implementazione per ciascun tool dichiarato nel contratto.
@@ -149,6 +152,23 @@ export type ToolImplementations<TTools extends Record<string, ToolContract>> = {
 export type InferInitialState<TStateSchema> = TStateSchema extends z.ZodType
   ? z.infer<TStateSchema>
   : DataRecord;
+
+/**
+ * ============================================================================
+ * TIPO DELLO STATO FORTEMENTE TIPIZZATO SUL CONTRATTO
+ * ============================================================================
+ */
+export type TypedAgentState<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined
+> = {
+  I: string;
+  Ms: string;
+  Ds: TStateSchema extends z.ZodType ? z.infer<TStateSchema> : DataRecord;
+  Ta: (keyof TTools & string)[];
+  Ka: Concept[];
+  Ep: Message[];
+};
 
 /**
  * Binding esecutivo: esecutori dei tool e stato iniziale concreto.
@@ -177,6 +197,11 @@ export interface AgentDefinition<
   implement(
     binding: AgentBinding<TTools, TStateSchema>
   ): ImplementedAgent<TTools, TStateSchema, TTerminations>;
+  /**
+   * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON
+   * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
+   */
+  parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;
 }
 
 /**
@@ -192,11 +217,27 @@ export interface ImplementedAgent<
   readonly world: WorldRegistry;
 
   /**
+   * Convalida e raffina a runtime uno stato serializzato 'unknown' o una stringa JSON
+   * trasformandolo in uno stato fortemente tipizzato TypedAgentState conforme al contratto.
+   */
+  parseState(raw: unknown): TypedAgentState<TTools, TStateSchema>;
+
+  /**
    * Spawna un'istanza dell'agente nel runtime collegandola automaticamente al Mondo implementato.
    */
   spawn(
     engine: FrameworkEngine,
     model: LanguageModelAdapter
+  ): AgentInstance<DataValue>;
+
+  /**
+   * Spawna un'istanza dell'agente nel runtime ripartendo da uno stato pregresso fortemente tipizzato.
+   * Calcola deterministicamente la fase FSM e l'indice temporale dall'Ep dello stato.
+   */
+  spawnFromState(
+    engine: FrameworkEngine,
+    model: LanguageModelAdapter,
+    state: TypedAgentState<TTools, TStateSchema>
   ): AgentInstance<DataValue>;
 
   /**
@@ -206,6 +247,16 @@ export interface ImplementedAgent<
   run(
     engine: FrameworkEngine,
     model: LanguageModelAdapter,
+    options?: RunOptions<DataValue>
+  ): Promise<AgentRunResult<TTerminations>>;
+
+  /**
+   * Esegue l'agente a partire da uno stato pregresso fortemente tipizzato fino alla terminazione (halt).
+   */
+  runFromState(
+    engine: FrameworkEngine,
+    model: LanguageModelAdapter,
+    state: TypedAgentState<TTools, TStateSchema>,
     options?: RunOptions<DataValue>
   ): Promise<AgentRunResult<TTerminations>>;
 }
