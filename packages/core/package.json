@@ -1,7 +1,18 @@
 {
   "name": "@formal-agent/core",
   "version": "1.0.0",
-  "description": "Micro-kernel FSM e framework di runtime per agenti autonomi a stati finiti fortemente tipizzati",
+  "description": "Strictly typed, deterministic state-machine runtime for resilient AI agents in TypeScript",
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "agent",
+    "state-machine",
+    "fsm",
+    "typescript",
+    "deterministic",
+    "zod",
+    "typed-errors"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

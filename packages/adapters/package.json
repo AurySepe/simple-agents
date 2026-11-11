@@ -1,7 +1,19 @@
 {
   "name": "@formal-agent/adapters",
   "version": "1.0.0",
-  "description": "Adapter e strategie di inferenza per modelli linguistici (LlamaCpp, Ollama, SGLang)",
+  "description": "Stateless model adapters and multimodal context projection strategies (Gemini, SGLang, Ollama, LlamaCpp)",
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "agent",
+    "llm-adapters",
+    "gemini",
+    "sglang",
+    "ollama",
+    "llamacpp",
+    "multimodal",
+    "thought-signature"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

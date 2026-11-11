@@ -19,11 +19,33 @@ import { extractBehavioralTrajectory } from './trajectory-extractor.js';
  * ============================================================================
  * FACTORY DICHIARATIVA DELL'AGENTE: defineAgent
  * ============================================================================
- * Definisce un contratto cognitivo di Livello 3 fortemente tipizzato a dipendenze zero.
- * Ritorna un AgentDefinition che espone il metodo .implement() per eseguire il binding esecutivo.
+ * Declares a strictly-typed, contract-first agent definition with zero runtime dependencies.
+ * Returns an `AgentDefinition` providing `.implement()` for world binding, `.parseState()` for offline validation,
+ * and `.extractTrajectory()` for behavioral audits.
  *
- * @param contract La specifica dichiarativa (I, Ms0, Ta0 contracts, Ka0, A_term, Ds schema).
- * @returns AgentDefinition pronto per il binding con il Mondo.
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ * import { defineAgent } from '@formal-agent/core';
+ *
+ * export const myAgent = defineAgent({
+ *   identity: 'SupportAgent',
+ *   mission: 'Assist users with order lookups.',
+ *   tools: {
+ *     lookupOrder: {
+ *       description: 'Fetch order details by order ID.',
+ *       parameters: z.object({ orderId: z.string() }),
+ *       result: z.object({ status: z.string(), items: z.array(z.string()) }),
+ *     },
+ *   },
+ *   terminations: {
+ *     completed: z.object({ message: z.string() }),
+ *   },
+ * });
+ * ```
+ *
+ * @param contract The declarative contract specifying tools, terminations, identity, mission, and optional custom state schema.
+ * @returns AgentDefinition ready for implementation binding.
  */
 export function defineAgent<
   TTools extends Record<string, ToolContract>,

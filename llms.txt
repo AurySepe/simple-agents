@@ -1,0 +1,114 @@
+# Formal Agent Framework - AI Assistant Reference Guide
+
+> Strictly typed, deterministic state-machine runtime for building resilient AI agents in TypeScript.
+
+## Architecture & Design Principles
+
+The framework separates agent systems into three decoupled layers:
+1. **Contract Layer**: Pure declaration of agent identity, mission, tools, and terminations using Zod schemas (`defineAgent`). No runtime dependencies.
+2. **Implementation Layer**: Environmental binding of tools (`agent.implement`). Tools return discriminated unions (`toolOk` or `toolFail`).
+3. **Execution & Adapter Layer**: Orchestration (`createRunner`), execution engine (`FrameworkEngine`), and stateless model adapters (`createGeminiAdapter`, `createSglangAdapter`, etc.).
+
+---
+
+## Package Map
+
+### `@formal-agent/core`
+Primary runtime, contracts, and state-machine primitives.
+- `defineAgent(contract)`: Declare agent interface, tool parameters, results, and terminations.
+- `createRunner()`: Type-safe fluent builder for running agents (`.withModel()`, `.withAgent()`, `.withEngine()`).
+- `toolOk(data)`: Helper returning `{ ok: true, data }`.
+- `toolFail(error)`: Helper returning `{ ok: false, error }` (error MUST have a `type: string` discriminant).
+- `serializeAgentState(state)`: Serializes full agent state machine to JSON.
+- `modelOk(output)` / `modelFail(error)`: Model adapter return types.
+
+### `@formal-agent/core/defaults`
+- `createDefaultExecutionEngine()`: Default local single-agent execution engine.
+
+### `@formal-agent/adapters`
+Model adapters and context projection strategies.
+- `createGeminiAdapter(config)`: Adapter for Google Gemini models (Gemini 2.5/3.0). Requires `mediaResolver`.
+- `NodeFileSystemMediaResolver`: Resolves local file paths from disk.
+- `InMemoryMediaResolver`: Resolves virtual/in-memory file buffers.
+- `createSglangAdapter(config)`: SGLang structured inference adapter.
+- `createOllamaAdapter(config)`: Ollama local model adapter.
+- `createLlamaCppAdapter(config)`: Llama.cpp inference adapter.
+
+---
+
+## Canonical Usage Pattern
+
+```typescript
+import { z } from 'zod';
+import { defineAgent, createRunner, toolOk, toolFail, serializeAgentState } from '@formal-agent/core';
+import { createDefaultExecutionEngine } from '@formal-agent/core/defaults';
+import { createGeminiAdapter, NodeFileSystemMediaResolver } from '@formal-agent/adapters';
+
+// 1. Declare contract
+export const myAgent = defineAgent({
+  identity: 'ResearchAgent',
+  mission: 'Search information and synthesize findings.',
+  tools: {
+    search: {
+      description: 'Search documentation.',
+      parameters: z.object({ query: z.string() }),
+      result: z.object({ results: z.array(z.string()) }),
+    },
+  },
+  terminations: {
+    completed: z.object({ answer: z.string() }),
+  },
+});
+
+// 2. Implement tools
+export const myImpl = myAgent.implement({
+  tools: {
+    search: async ({ query }) => {
+      try {
+        const results = await fetchDocs(query);
+        return toolOk({ results });
+      } catch (err) {
+        return toolFail({ type: 'SEARCH_FAILED', message: String(err) } as const);
+      }
+    },
+  },
+});
+
+// 3. Configure runner & execute
+const mediaResolver = new NodeFileSystemMediaResolver();
+const model = createGeminiAdapter({
+  apiKey: process.env.GEMINI_API_KEY!,
+  model: 'gemini-2.5-flash',
+  mediaResolver,
+});
+
+const runner = createRunner()
+  .withEngine(createDefaultExecutionEngine())
+  .withModel(model)
+  .withAgent(myAgent, myImpl);
+
+const result = await runner.run({
+  userContent: { kind: 'text', text: 'How does authentication work?' },
+});
+
+// 4. State Persistence & Resume
+const stateJson = serializeAgentState(result.state);
+const parsed = myAgent.parseState(stateJson);
+if (parsed.ok) {
+  const resumed = await myAgent.runFromState(engine, model, myImpl, parsed.state);
+}
+```
+
+---
+
+## Critical Rules & Negative Constraints
+
+1. **NEVER throw untyped exceptions in tool implementations**:
+   Always return `toolFail({ type: 'YOUR_CODE', ... } as const)` for environmental/API failures. Unhandled throws are converted to `UnexpectedToolError`.
+2. **NEVER use `any` in contracts or error definitions**:
+   The entire framework relies on full TypeScript inference. Error objects must include a string literal `type` discriminant.
+3. **NEVER omit `mediaResolver` in Gemini adapters**:
+   Gemini adapter requires an explicit `MediaResolver` (`NodeFileSystemMediaResolver` or `InMemoryMediaResolver`).
+4. **ALWAYS use `serializeAgentState` and `agent.parseState` for state persistence**:
+   Do not manually mutate or construct internal agent state objects.
+

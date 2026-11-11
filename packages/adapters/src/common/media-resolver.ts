@@ -60,8 +60,20 @@ export interface MediaResolver {
 }
 
 /**
- * Risolutore in-memory: risolve i file da una mappa interna senza toccare il filesystem fisico.
- * Ideale per ambienti isolati, browser, edge workers e unit test.
+ * In-memory media resolver: resolves files from an internal map without accessing disk.
+ * Ideal for unit testing, browser contexts, edge workers, and sandboxed test environments.
+ *
+ * @example
+ * ```typescript
+ * import { InMemoryMediaResolver } from '@formal-agent/adapters';
+ *
+ * const resolver = new InMemoryMediaResolver({
+ *   'sample.png': {
+ *     data: Buffer.from('mock-bytes'),
+ *     mimeType: 'image/png',
+ *   },
+ * });
+ * ```
  */
 export class InMemoryMediaResolver implements MediaResolver {
   private readonly files = new Map<string, InMemoryFileEntry>();
@@ -127,7 +139,14 @@ export class InMemoryMediaResolver implements MediaResolver {
 }
 
 /**
- * Risolutore Node.js: legge asincronamente i file dal filesystem dell'host usando fs.promises.
+ * Node.js filesystem media resolver: resolves files asynchronously from the host filesystem.
+ *
+ * @example
+ * ```typescript
+ * import { NodeFileSystemMediaResolver } from '@formal-agent/adapters';
+ *
+ * const resolver = new NodeFileSystemMediaResolver();
+ * ```
  */
 export class NodeFileSystemMediaResolver implements MediaResolver {
   async resolveBinary(key: string, mimeTypeHint?: string): Promise<ResolvedMedia> {

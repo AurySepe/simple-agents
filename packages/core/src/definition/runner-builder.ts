@@ -220,11 +220,27 @@ export class RunnerBuilder<
 }
 
 /**
- * Inizializza un nuovo RunnerBuilder.
- * Di default pre-configura il FrameworkEngine con createDefaultFrameworkConfig()
- * consentendo di passare direttamente al modello e all'agente.
+ * Initializes a new type-safe `RunnerBuilder`.
+ * By default, pre-configures a default `FrameworkEngine`, allowing you to directly chain `.withModel()` and `.withAgent()`.
  *
- * @param options.defaultEngine Se false, richiede l'esplicito .withEngine(engine).
+ * @example
+ * ```typescript
+ * import { createRunner } from '@formal-agent/core';
+ *
+ * const runner = createRunner()
+ *   .withModel(myModelAdapter)
+ *   .withAgent(myAgentDefinition, myAgentImplementation);
+ *
+ * const result = await runner.run({
+ *   userContent: { kind: 'text', text: 'Analyze this input' },
+ * });
+ *
+ * if (result.status === 'completed') {
+ *   console.log('Result:', result.output);
+ * }
+ * ```
+ *
+ * @param options.defaultEngine If false, requires an explicit `.withEngine(engine)`.
  */
 export function createRunner(options?: {
   defaultEngine?: true;

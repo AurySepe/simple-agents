@@ -268,8 +268,22 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
 }
 
 /**
- * Factory helper per istanziare il GeminiModelAdapter.
- * Richiede la configurazione esplicita di apiKey e model.
+ * Factory helper to instantiate a GeminiModelAdapter.
+ * Requires explicit configuration with zero implicit defaults.
+ *
+ * @example
+ * ```typescript
+ * import { createGeminiAdapter, NodeFileSystemMediaResolver } from '@formal-agent/adapters';
+ *
+ * const adapter = createGeminiAdapter({
+ *   apiKey: process.env.GEMINI_API_KEY!,
+ *   model: 'gemini-2.5-flash',
+ *   mediaResolver: new NodeFileSystemMediaResolver(),
+ *   options: {
+ *     temperature: 0.2,
+ *   },
+ * });
+ * ```
  */
 export function createGeminiAdapter(config: GeminiAdapterConfig): GeminiModelAdapter {
   return new GeminiModelAdapter(config);

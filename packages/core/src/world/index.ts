@@ -22,10 +22,30 @@ export type ToolReturn<TOutput = ToolResult, TCustomError = never> =
   | { ok: true; data: TOutput; error?: never }
   | { ok: false; error: TCustomError; data?: never };
 
+/**
+ * Wraps a successful tool execution payload into a discriminated union result.
+ *
+ * @example
+ * ```typescript
+ * return toolOk({ temperatureC: 21, condition: 'Clear' });
+ * ```
+ */
 export function toolOk<T>(data: T): { ok: true; data: T; error?: never } {
   return { ok: true, data };
 }
 
+/**
+ * Wraps an expected infrastructure or domain error into a typed failure result.
+ * The error object must specify a discriminator `type: string`.
+ *
+ * @example
+ * ```typescript
+ * return toolFail({
+ *   type: 'CONNECTION_TIMEOUT',
+ *   retryAfterSeconds: 5,
+ * } as const);
+ * ```
+ */
 export function toolFail<E extends { type: string }>(error: E): { ok: false; error: E; data?: never } {
   return { ok: false, error };
 }
