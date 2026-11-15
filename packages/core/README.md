@@ -1,4 +1,4 @@
-# @formal-agent/core
+# @simple-agents/core
 
 A strictly typed, deterministic state-machine runtime for building resilient AI agents in TypeScript.
 
@@ -19,7 +19,7 @@ Designed for production environments where reliability, auditability, and compil
 ## Installation
 
 ```bash
-npm install @formal-agent/core zod
+npm install @simple-agents/core zod
 ```
 
 ---
@@ -32,7 +32,7 @@ Define what the agent can do, what inputs it expects, and how it can terminate:
 
 ```typescript
 import { z } from 'zod';
-import { defineAgent } from '@formal-agent/core';
+import { defineAgent } from '@simple-agents/core';
 
 export const weatherAgent = defineAgent({
   identity: 'WeatherAssistant',
@@ -62,7 +62,7 @@ export const weatherAgent = defineAgent({
 Bind the contract to actual logic. Use `toolOk` for successes and `toolFail` for environmental or infrastructure errors:
 
 ```typescript
-import { toolOk, toolFail } from '@formal-agent/core';
+import { toolOk, toolFail } from '@simple-agents/core';
 import { weatherAgent } from './contract.js';
 
 export const weatherImpl = weatherAgent.implement({
@@ -91,9 +91,9 @@ export const weatherImpl = weatherAgent.implement({
 Combine the agent definition, implementation, and a model adapter using `createRunner`:
 
 ```typescript
-import { createRunner } from '@formal-agent/core';
-import { createDefaultExecutionEngine } from '@formal-agent/core/defaults';
-// Import any model adapter (e.g. Gemini, SGLang, Ollama) from @formal-agent/adapters
+import { createRunner } from '@simple-agents/core';
+import { createDefaultExecutionEngine } from '@simple-agents/core/defaults';
+// Import any model adapter (e.g. Gemini, SGLang, Ollama) from @simple-agents/adapters
 import { myModelAdapter } from './model-adapter.js';
 import { weatherAgent } from './contract.js';
 import { weatherImpl } from './implementation.js';
@@ -141,7 +141,7 @@ const testImpl = weatherAgent.implement({
 Agents maintain an explicit state machine. You can persist the full runtime state to a database or disk, validate it safely, and resume execution later:
 
 ```typescript
-import { serializeAgentState } from '@formal-agent/core';
+import { serializeAgentState } from '@simple-agents/core';
 
 // 1. Serialize running state to a plain JSON string
 const stateJson = serializeAgentState(result.state);
@@ -183,7 +183,7 @@ while (!runner.isTerminal(currentState)) {
 Tool failures and LLM outages are first-class values rather than untyped thrown exceptions:
 
 ```typescript
-import { toolFail, toolOk } from '@formal-agent/core';
+import { toolFail, toolOk } from '@simple-agents/core';
 
 // Inside a tool implementation:
 if (isRateLimited) {

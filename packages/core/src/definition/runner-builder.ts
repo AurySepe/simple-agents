@@ -375,7 +375,7 @@ export class RunnerBuilder<
  *
  * @example
  * ```typescript
- * import { createRunner } from '@formal-agent/core';
+ * import { createRunner } from '@simple-agents/core';
  *
  * const runner = createRunner()
  *   .withModel(myModelAdapter)

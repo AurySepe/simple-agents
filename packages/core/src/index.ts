@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * FORMAL AGENT ENGINE (@formal-agent/core)
+ * FORMAL AGENT ENGINE (@simple-agents/core)
  * ============================================================================
  * Micro-kernel FSM per agenti autonomi a stati finiti fortemente tipizzati.
  * Disaccoppiamento ortogonale di Livello 1 (Framework invariante).

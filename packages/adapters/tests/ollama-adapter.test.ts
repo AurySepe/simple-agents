@@ -5,7 +5,7 @@ import {
   OllamaModelAdapter,
   QwenModelStrategy
 } from '../src/index.js';
-import { InferenceTriple, ToolDefinition } from '@formal-agent/core';
+import { InferenceTriple, ToolDefinition } from '@simple-agents/core';
 
 describe('Ollama Transport & Qwen Strategy', () => {
   const originalFetch = global.fetch;

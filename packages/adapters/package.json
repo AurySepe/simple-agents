@@ -1,5 +1,5 @@
 {
-  "name": "@formal-agent/adapters",
+  "name": "@simple-agents/adapters",
   "version": "1.0.0",
   "description": "Stateless model adapters and multimodal context projection strategies (Gemini, SGLang, Ollama, LlamaCpp)",
   "license": "MIT",
@@ -32,7 +32,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@formal-agent/core": "*",
+    "@simple-agents/core": "*",
     "@google/genai": "^3.0.0",
     "openai": "^7.53.0",
     "zod": "^4.6.7"

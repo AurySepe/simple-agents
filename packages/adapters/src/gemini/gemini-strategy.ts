@@ -5,7 +5,7 @@ import type {
   Message,
   UserMessageContent,
   ToolDefinition
-} from '@formal-agent/core';
+} from '@simple-agents/core';
 import { FunctionCallingConfigMode, ThinkingLevel } from '@google/genai';
 import type { MediaResolver } from '../common/media-resolver.js';
 import type { GeminiChatOptions } from './types.js';

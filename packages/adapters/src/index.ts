@@ -1,10 +1,10 @@
-import type { InferenceTriple, ModelResult, LanguageModelAdapter } from '@formal-agent/core';
+import type { InferenceTriple, ModelResult, LanguageModelAdapter } from '@simple-agents/core';
 
 /**
  * ============================================================================
  * INTERFACCIA DEL MODELLO LINGUISTICO: M
  * ============================================================================
- * Rilasciata e re-esportata da @formal-agent/core per retrocompatibilità.
+ * Rilasciata e re-esportata da @simple-agents/core per retrocompatibilità.
  */
 export type { LanguageModelAdapter, InferenceTriple, ModelResult };
 

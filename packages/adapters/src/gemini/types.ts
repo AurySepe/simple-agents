@@ -1,4 +1,4 @@
-import type { DataRecord } from '@formal-agent/core';
+import type { DataRecord } from '@simple-agents/core';
 import type { ThinkingLevel } from '@google/genai';
 import type { MediaResolver } from '../common/media-resolver.js';
 

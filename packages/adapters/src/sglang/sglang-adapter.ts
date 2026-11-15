@@ -1,4 +1,4 @@
-import type { InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
+import type { InferenceTriple, ModelOutput, ModelResult } from '@simple-agents/core';
 import type { LanguageModelAdapter } from '../index.js';
 import { SGLangClient } from './client.js';
 import {

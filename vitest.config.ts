@@ -13,8 +13,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@formal-agent/core': path.resolve(__dirname, './packages/core/src/index.ts'),
-      '@formal-agent/adapters': path.resolve(__dirname, './packages/adapters/src/index.ts'),
+      '@simple-agents/core': path.resolve(__dirname, './packages/core/src/index.ts'),
+      '@simple-agents/adapters': path.resolve(__dirname, './packages/adapters/src/index.ts'),
     },
   },
 });

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { InputMediaAsset } from '@formal-agent/core';
+import type { InputMediaAsset } from '@simple-agents/core';
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -65,7 +65,7 @@ export interface MediaResolver {
  *
  * @example
  * ```typescript
- * import { InMemoryMediaResolver } from '@formal-agent/adapters';
+ * import { InMemoryMediaResolver } from '@simple-agents/adapters';
  *
  * const resolver = new InMemoryMediaResolver({
  *   'sample.png': {
@@ -143,7 +143,7 @@ export class InMemoryMediaResolver implements MediaResolver {
  *
  * @example
  * ```typescript
- * import { NodeFileSystemMediaResolver } from '@formal-agent/adapters';
+ * import { NodeFileSystemMediaResolver } from '@simple-agents/adapters';
  *
  * const resolver = new NodeFileSystemMediaResolver();
  * ```

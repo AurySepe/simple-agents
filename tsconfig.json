@@ -10,10 +10,10 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@formal-agent/core": ["./packages/core/src/index.ts"],
-      "@formal-agent/core/*": ["./packages/core/src/*"],
-      "@formal-agent/adapters": ["./packages/adapters/src/index.ts"],
-      "@formal-agent/adapters/*": ["./packages/adapters/src/*"]
+      "@simple-agents/core": ["./packages/core/src/index.ts"],
+      "@simple-agents/core/*": ["./packages/core/src/*"],
+      "@simple-agents/adapters": ["./packages/adapters/src/index.ts"],
+      "@simple-agents/adapters/*": ["./packages/adapters/src/*"]
     }
   },
   "include": [

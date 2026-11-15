@@ -1,6 +1,6 @@
-# @formal-agent/adapters
+# @simple-agents/adapters
 
-Stateless model adapters and multimodal context projection strategies for `@formal-agent/core`.
+Stateless model adapters and multimodal context projection strategies for `@simple-agents/core`.
 
 Supports **Google Gemini** (Gemini 2.5 / 3.0), **SGLang**, **Ollama**, and **Llama.cpp**.
 
@@ -24,7 +24,7 @@ Supports **Google Gemini** (Gemini 2.5 / 3.0), **SGLang**, **Ollama**, and **Lla
 ## Installation
 
 ```bash
-npm install @formal-agent/adapters @formal-agent/core zod
+npm install @simple-agents/adapters @simple-agents/core zod
 ```
 
 If you use Google Gemini:
@@ -37,9 +37,9 @@ npm install @google/genai
 ## Quickstart (Google Gemini)
 
 ```typescript
-import { createGeminiAdapter, NodeFileSystemMediaResolver } from '@formal-agent/adapters';
-import { createRunner } from '@formal-agent/core';
-import { createDefaultExecutionEngine } from '@formal-agent/core/defaults';
+import { createGeminiAdapter, NodeFileSystemMediaResolver } from '@simple-agents/adapters';
+import { createRunner } from '@simple-agents/core';
+import { createDefaultExecutionEngine } from '@simple-agents/core/defaults';
 
 // 1. Configure the media resolver (mandatory)
 const mediaResolver = new NodeFileSystemMediaResolver();
@@ -65,7 +65,7 @@ const runner = createRunner()
 
 ## Multimodal Inputs: Images, Audio, and Documents
 
-`@formal-agent/adapters` projects rich media into model-specific formats across three distinct sources:
+`@simple-agents/adapters` projects rich media into model-specific formats across three distinct sources:
 
 ### 1. Local Files (`kind: 'path'`)
 Resolves paths safely through the injected `MediaResolver`:
@@ -117,7 +117,7 @@ Allows passing multi-gigabyte videos or large PDFs directly via URI without down
 For testing and sandboxed execution, inject virtual files without touching disk:
 
 ```typescript
-import { InMemoryMediaResolver } from '@formal-agent/adapters';
+import { InMemoryMediaResolver } from '@simple-agents/adapters';
 
 const mockResolver = new InMemoryMediaResolver({
   'sample.png': {

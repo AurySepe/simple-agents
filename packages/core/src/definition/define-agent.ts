@@ -26,7 +26,7 @@ import { extractBehavioralTrajectory } from './trajectory-extractor.js';
  * @example
  * ```typescript
  * import { z } from 'zod';
- * import { defineAgent } from '@formal-agent/core';
+ * import { defineAgent } from '@simple-agents/core';
  *
  * export const myAgent = defineAgent({
  *   identity: 'SupportAgent',

@@ -1,4 +1,4 @@
-import type { DataRecord, InferenceTriple, ModelOutput, ModelResult } from '@formal-agent/core';
+import type { DataRecord, InferenceTriple, ModelOutput, ModelResult } from '@simple-agents/core';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

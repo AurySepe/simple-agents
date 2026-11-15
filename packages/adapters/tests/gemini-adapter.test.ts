@@ -16,7 +16,7 @@ import type {
   InferenceTriple,
   ToolDefinition,
   UserMessageContent
-} from '@formal-agent/core';
+} from '@simple-agents/core';
 import { FinishReason, FunctionCallingConfigMode, ThinkingLevel } from '@google/genai';
 
 describe('Gemini Adapter Suite (Gemini 3 & 4 - Zero Implicit Defaults)', () => {

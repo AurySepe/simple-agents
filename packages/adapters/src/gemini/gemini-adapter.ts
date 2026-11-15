@@ -8,7 +8,7 @@ import {
   type ToolCallInput,
   modelFail,
   modelOk
-} from '@formal-agent/core';
+} from '@simple-agents/core';
 import { FinishReason, GoogleGenAI } from '@google/genai';
 import type { LanguageModelAdapter } from '../index.js';
 import { GeminiStrategy } from './gemini-strategy.js';
@@ -273,7 +273,7 @@ export class GeminiModelAdapter implements LanguageModelAdapter<GeminiModelError
  *
  * @example
  * ```typescript
- * import { createGeminiAdapter, NodeFileSystemMediaResolver } from '@formal-agent/adapters';
+ * import { createGeminiAdapter, NodeFileSystemMediaResolver } from '@simple-agents/adapters';
  *
  * const adapter = createGeminiAdapter({
  *   apiKey: process.env.GEMINI_API_KEY!,

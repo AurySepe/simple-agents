@@ -9,7 +9,7 @@ import {
   type ModelResult,
   type ToolCall,
   type UserMessageContent
-} from '@formal-agent/core';
+} from '@simple-agents/core';
 import { resolveMediaBase64, resolveTextFileContent } from '../../common/media-resolver.js';
 import {
   ModelFamilyStrategy,
