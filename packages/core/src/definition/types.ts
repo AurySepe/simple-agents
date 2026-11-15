@@ -298,15 +298,13 @@ export type TypedAgentState<
  */
 export type AgentBinding<
   TTools extends Record<string, ToolContract>,
-  TStateSchema extends z.ZodType | undefined = undefined,
+  _TStateSchema extends z.ZodType | undefined = undefined,
   TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>,
   TWorld = undefined
 > = {
   /** Esecutori asincroni tipizzati per ciascun tool dichiarato nel contratto */
   tools: ToolImplementations<TTools, TToolErrorsMap, TWorld>;
-} & (TStateSchema extends z.ZodType
-  ? { initialState: z.infer<TStateSchema> }
-  : { initialState?: never });
+};
 
 /**
  * Context passed to a `beforeToolUse` interceptor.
@@ -358,6 +356,30 @@ export type AfterToolUseInterceptor<
 ) => Promise<InferInitialState<TStateSchema> | void> | InferInitialState<TStateSchema> | void;
 
 /**
+ * Context passed to a `beforeDeliberation` interceptor right before `renderFrame` and `model.infer`.
+ */
+export interface BeforeDeliberationContext<
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TWorld = undefined
+> {
+  readonly state: Readonly<Omit<AgentState, 'Ds'> & { Ds: InferInitialState<TStateSchema> }>;
+  readonly world: TWorld;
+  readonly macroCycle: number;
+  readonly tick: number;
+}
+
+/**
+ * Pure interceptor executed before every model deliberation (`q_exec`).
+ * May optionally return a new `Ds` state to synchronize `TWorld -> Ds` immutably.
+ */
+export type BeforeDeliberationInterceptor<
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TWorld = undefined
+> = (
+  context: BeforeDeliberationContext<TStateSchema, TWorld>
+) => Promise<InferInitialState<TStateSchema> | void> | InferInitialState<TStateSchema> | void;
+
+/**
  * Blueprint dell'agente (Fase 1): contiene il contratto e l'implementazione dei tool
  * parametrizzata su TWorld, non ancora legata a un'istanza concreta di mondo.
  */
@@ -376,7 +398,9 @@ export interface AgentBlueprint<
    * Per blueprint stateless (TWorld = undefined) si invoca senza argomenti: `.bind()`.
    */
   bind(
-    ...args: TWorld extends undefined ? [] : [world: TWorld]
+    ...args: TWorld extends undefined
+      ? [world?: undefined, initialState?: InferInitialState<TStateSchema>]
+      : [world: TWorld, initialState?: InferInitialState<TStateSchema>]
   ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap>;
 }
 

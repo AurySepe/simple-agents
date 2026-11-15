@@ -83,9 +83,11 @@ export class AgentBlueprintImpl<
   ) {}
 
   bind(
-    ...args: TWorld extends undefined ? [] : [world: TWorld]
+    ...args: TWorld extends undefined
+      ? [world?: undefined, initialState?: unknown]
+      : [world: TWorld, initialState?: unknown]
   ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap> {
-    return new ImplementedAgentImpl(this.contract, this.binding, args[0] as TWorld);
+    return new ImplementedAgentImpl(this.contract, this.binding, args[0] as TWorld, args[1]);
   }
 }
 
@@ -103,7 +105,8 @@ export class ImplementedAgentImpl<
   constructor(
     readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
     readonly binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap, TWorld>,
-    private readonly worldInstance: TWorld
+    private readonly worldInstance: TWorld,
+    initialState?: unknown
   ) {
     // 1. Fail-fast validation of ontological Identity (I)
     if (!contract.identity || contract.identity.trim().length === 0) {
@@ -127,10 +130,10 @@ export class ImplementedAgentImpl<
     // 4. Fail-fast validation of initial state against stateSchema
     let validatedInitialState: DataRecord = {};
     if (contract.stateSchema) {
-      const rawInitialState = (binding as { initialState?: unknown }).initialState;
+      const rawInitialState = initialState;
       if (rawInitialState === undefined || rawInitialState === null) {
         throw new Error(
-          `'stateSchema' was defined for agent '${contract.identity}', but 'initialState' was not provided in binding.`
+          `'stateSchema' was defined for agent '${contract.identity}', but 'initialState' was not provided.`
         );
       }
       const parsed = contract.stateSchema.safeParse(rawInitialState);

@@ -88,12 +88,12 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    const toolDefs = agent.bind(undefined).world.getAllDefinitions();
+    const toolDefs = agent.bind(undefined, { sessione_id: 'SESS-001', tentativi: 0 }).world.getAllDefinitions();
     const toolIds = toolDefs.map(t => t.id);
 
     expect(toolIds).toContain('cerca_cliente');
     expect(toolIds).toContain('verifica_ordine');
-    expect(agent.bind(undefined).manifest.Ta0).toEqual(['cerca_cliente', 'verifica_ordine']);
+    expect(agent.bind(undefined, { sessione_id: 'SESS-001', tentativi: 0 }).manifest.Ta0).toEqual(['cerca_cliente', 'verifica_ordine']);
   });
 
   it('deve consentire il binding multiplo (Mock vs Live) a partire dallo stesso contratto', async () => {
@@ -115,8 +115,8 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    const resMock = await mockAgent.bind(undefined).world.executeTool('cerca_cliente', { cliente_id: 1 });
-    const resLive = await liveAgent.bind(undefined).world.executeTool('cerca_cliente', { cliente_id: 1 });
+    const resMock = await mockAgent.bind(undefined, { sessione_id: 'TEST-MOCK', tentativi: 0 }).world.executeTool('cerca_cliente', { cliente_id: 1 });
+    const resLive = await liveAgent.bind(undefined, { sessione_id: 'LIVE-PROD', tentativi: 0 }).world.executeTool('cerca_cliente', { cliente_id: 1 });
 
     expect(resMock).toEqual({ ok: true, data: { nome: 'Mock User', categoria: 'STANDARD' } });
     expect(resLive).toEqual({ ok: true, data: { nome: 'Utente 1', categoria: 'VIP' } });
@@ -176,7 +176,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    const outcome = await agent.bind(undefined).run(engine, mockModel, {
+    const outcome = await agent.bind(undefined, { sessione_id: 'RUN-TEST-01', tentativi: 1 }).run(engine, mockModel, {
       userContent: { kind: 'text', text: 'Verifica lo stato del cliente 42.' }
     });
 

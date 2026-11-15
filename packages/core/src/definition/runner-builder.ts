@@ -13,12 +13,15 @@ import {
   AgentBlueprint,
   AgentRunnerResult,
   AfterToolUseInterceptor,
+  BeforeDeliberationInterceptor,
   BeforeToolUseInterceptor,
   ImplementedAgent,
+  InferInitialState,
   TypedAgentState,
   WorldExecutionError,
   ModelExecutionError
 } from './types.js';
+import { z } from 'zod';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 import { UnexpectedToolError } from '../world/index.js';
 
@@ -70,7 +73,8 @@ export class RunnerBuilder<
   TAgent extends AgentBlueprint<any, any, any, any, any> | undefined = undefined,
   TOptions extends RunOptions<DataValue> = RunOptions<DataValue>,
   TWorld = undefined,
-  THasWorld extends boolean = false
+  THasWorld extends boolean = false,
+  THasInitialState extends boolean = false
 > {
   constructor(
     private readonly state: {
@@ -78,9 +82,11 @@ export class RunnerBuilder<
       model?: LanguageModelAdapter<any>;
       agent?: AgentBlueprint<any, any, any, any, any>;
       world?: TWorld;
+      initialState?: unknown;
       options?: RunOptions<DataValue>;
       beforeToolUse?: BeforeToolUseInterceptor<any, any>[];
       afterToolUse?: AfterToolUseInterceptor<any, any>[];
+      beforeDeliberation?: BeforeDeliberationInterceptor<any, any>[];
     }
   ) {}
 
@@ -89,7 +95,7 @@ export class RunnerBuilder<
    */
   public withEngine(
     engine: FrameworkEngine
-  ): RunnerBuilder<FrameworkEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+  ): RunnerBuilder<FrameworkEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
     return new RunnerBuilder({
       ...this.state,
       engine
@@ -101,7 +107,7 @@ export class RunnerBuilder<
    */
   public withModel<M extends LanguageModelAdapter<any>>(
     model: M
-  ): RunnerBuilder<TEngine, M, TAgent, TOptions, TWorld, THasWorld> {
+  ): RunnerBuilder<TEngine, M, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
     return new RunnerBuilder({
       ...this.state,
       model
@@ -111,6 +117,7 @@ export class RunnerBuilder<
   /**
    * Associa il blueprint dell'agente da eseguire (Fase 1).
    * Se il blueprint richiede un TWorld diverso da undefined, è necessario chiamare .withWorld(world).
+   * Se il contratto definisce uno stateSchema, è necessario chiamare .withInitialState(initialState).
    */
   public withAgent<A extends AgentBlueprint<any, any, any, any, any>>(
     agent: A
@@ -120,19 +127,22 @@ export class RunnerBuilder<
     A,
     TOptions,
     ExtractBlueprintWorld<A>,
-    ExtractBlueprintWorld<A> extends undefined ? true : false
+    ExtractBlueprintWorld<A> extends undefined ? true : false,
+    ExtractBlueprintStateSchema<A> extends z.ZodType ? false : true
   > {
     return new RunnerBuilder({
       ...this.state,
       agent,
-      world: undefined
+      world: undefined,
+      initialState: undefined
     }) as unknown as RunnerBuilder<
       TEngine,
       TModel,
       A,
       TOptions,
       ExtractBlueprintWorld<A>,
-      ExtractBlueprintWorld<A> extends undefined ? true : false
+      ExtractBlueprintWorld<A> extends undefined ? true : false,
+      ExtractBlueprintStateSchema<A> extends z.ZodType ? false : true
     >;
   }
 
@@ -141,10 +151,23 @@ export class RunnerBuilder<
    */
   public withWorld(
     world: TWorld
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, true> {
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, true, THasInitialState> {
     return new RunnerBuilder({
       ...this.state,
       world
+    });
+  }
+
+  /**
+   * Imposta lo stato iniziale tipizzato (Ds) dell'agente per questa esecuzione.
+   * Obbligatorio a compile-time quando il contratto definisce uno stateSchema.
+   */
+  public withInitialState(
+    initialState: InferInitialState<ExtractBlueprintStateSchema<TAgent>>
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, true> {
+    return new RunnerBuilder({
+      ...this.state,
+      initialState
     });
   }
 
@@ -154,7 +177,7 @@ export class RunnerBuilder<
    */
   public beforeToolUse(
     interceptor: BeforeToolUseInterceptor<ExtractBlueprintStateSchema<TAgent>, TWorld>
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
     return new RunnerBuilder({
       ...this.state,
       beforeToolUse: [...(this.state.beforeToolUse ?? []), interceptor as BeforeToolUseInterceptor<any, any>]
@@ -167,10 +190,26 @@ export class RunnerBuilder<
    */
   public afterToolUse(
     interceptor: AfterToolUseInterceptor<ExtractBlueprintStateSchema<TAgent>, TWorld>
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
     return new RunnerBuilder({
       ...this.state,
       afterToolUse: [...(this.state.afterToolUse ?? []), interceptor as AfterToolUseInterceptor<any, any>]
+    });
+  }
+
+  /**
+   * Registra un interceptor puro eseguito prima di ogni deliberazione del modello (q_exec).
+   * Ideale per sincronizzare lo stato del mondo condiviso (TWorld) in Ds prima di renderFrame(state).
+   */
+  public beforeDeliberation(
+    interceptor: BeforeDeliberationInterceptor<ExtractBlueprintStateSchema<TAgent>, TWorld>
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
+    return new RunnerBuilder({
+      ...this.state,
+      beforeDeliberation: [
+        ...(this.state.beforeDeliberation ?? []),
+        interceptor as BeforeDeliberationInterceptor<any, any>
+      ]
     });
   }
 
@@ -182,7 +221,7 @@ export class RunnerBuilder<
       TAgent extends AgentBlueprint<any, any, any, infer TToolErrors, any> ? TToolErrors : Record<string, unknown>,
       TModel extends LanguageModelAdapter<infer TModelErrors> ? TModelErrors : unknown
     >
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
     const orchestratorRecovery: OrchestratorRecoveryConfig = {
       onModelError: recovery.onModelError
         ? (error, context) =>
@@ -203,7 +242,7 @@ export class RunnerBuilder<
       }
     };
 
-    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld>({
+    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState>({
       ...this.state,
       options: {
         ...this.state.options,
@@ -217,8 +256,8 @@ export class RunnerBuilder<
    */
   public withOptions(
     options: Partial<RunOptions<DataValue>>
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
-    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld>({
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState> {
+    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld, THasInitialState>({
       ...this.state,
       options: { ...this.state.options, ...options }
     });
@@ -229,9 +268,9 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model, Agent e World sono tutti definiti nel tipo.
    */
   public spawn(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true, true>
   ): AgentInstance<DataValue> {
-    const implemented = this.state.agent!.bind(this.state.world);
+    const implemented = this.state.agent!.bind(this.state.world, this.state.initialState);
     return implemented.spawn(this.state.engine!, this.state.model!);
   }
 
@@ -240,12 +279,12 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model, Agent e World sono tutti definiti nel tipo.
    */
   public spawnFromState(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>,
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true, boolean>,
     state: TAgent extends AgentBlueprint<infer TTools, infer TStateSchema, any, any, any>
       ? TypedAgentState<TTools, TStateSchema>
       : TypedAgentState<any, any>
   ): AgentInstance<DataValue> {
-    const implemented = this.state.agent!.bind(this.state.world);
+    const implemented = this.state.agent!.bind(this.state.world, this.state.initialState ?? state.Ds);
     return implemented.spawnFromState(this.state.engine!, this.state.model!, state as any);
   }
 
@@ -264,7 +303,7 @@ export class RunnerBuilder<
    * Ritorna un esito tipizzato con unione discriminata ok: true | false.
    */
   public async run(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>,
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true, true>,
     runOptions?: Partial<RunOptions<DataValue>>
   ): Promise<InferAgentRunnerResult<TAgent, TModel>> {
     const mergedOptions: RunOptions<DataValue> = {
@@ -278,9 +317,13 @@ export class RunnerBuilder<
       afterToolUse: [
         ...(this.state.afterToolUse ?? []),
         ...(runOptions?.afterToolUse ?? [])
+      ],
+      beforeDeliberation: [
+        ...(this.state.beforeDeliberation ?? []),
+        ...(runOptions?.beforeDeliberation ?? [])
       ]
     };
-    const implemented = this.state.agent!.bind(this.state.world);
+    const implemented = this.state.agent!.bind(this.state.world, this.state.initialState);
     return (await implemented.run(
       this.state.engine!,
       this.state.model!,
@@ -293,7 +336,7 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
    */
   public async runFromState(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>,
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true, boolean>,
     state: TAgent extends AgentBlueprint<infer TTools, infer TStateSchema, any, any, any>
       ? TypedAgentState<TTools, TStateSchema>
       : TypedAgentState<Record<string, never>, undefined>,
@@ -310,9 +353,13 @@ export class RunnerBuilder<
       afterToolUse: [
         ...(this.state.afterToolUse ?? []),
         ...(runOptions?.afterToolUse ?? [])
+      ],
+      beforeDeliberation: [
+        ...(this.state.beforeDeliberation ?? []),
+        ...(runOptions?.beforeDeliberation ?? [])
       ]
     };
-    const implemented = this.state.agent!.bind(this.state.world);
+    const implemented = this.state.agent!.bind(this.state.world, this.state.initialState ?? state.Ds);
     return (await implemented.runFromState(
       this.state.engine!,
       this.state.model!,

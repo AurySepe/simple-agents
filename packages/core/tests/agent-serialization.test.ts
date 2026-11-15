@@ -399,7 +399,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
       // FASE 1: Avvia l'agente e fallo avanzare solo fino al completamento del primo tool
-      const instance = implementedAgent.bind(undefined).spawn(engine, model);
+      const instance = implementedAgent.bind(undefined, { accountId: 'ACC-1', totalTransactions: 0 }).spawn(engine, model);
       instance.feedPayload({ userContent: { kind: 'text', text: 'Esegui operazione' } });
 
       // Avanza il primo passo deliberativo: il modello emette w_add_credit e transita direttamente a q_yield
@@ -411,7 +411,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const serializedJsonString = JSON.stringify(serializeAgentState(suspendedSnapshot));
 
       // FASE 2: In un contesto separato (nuova esecuzione), convalidiamo l'oggetto deserializzato con il contratto
-      const parseOutcome = implementedAgent.bind(undefined).parseState(JSON.parse(serializedJsonString));
+      const parseOutcome = implementedAgent.bind(undefined, { accountId: 'ACC-1', totalTransactions: 0 }).parseState(JSON.parse(serializedJsonString));
       expect(parseOutcome.ok).toBe(true);
       if (!parseOutcome.ok) throw new Error(parseOutcome.error.message);
       const validatedState = parseOutcome.state;
@@ -493,7 +493,8 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const runner = createRunner({ defaultEngine: false })
         .withEngine(engine)
         .withModel(model)
-        .withAgent(implemented);
+        .withAgent(implemented)
+        .withInitialState({ topic: 'Coding' });
 
       // Prima esecuzione con segnale di abort
       const runOutcome = await runner.run({
@@ -513,7 +514,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         const json = JSON.stringify(serialized);
 
         // Ora riprendiamo in un nuovo runner senza abort signal
-        const parseOutcome = implemented.bind(undefined).parseState(JSON.parse(json));
+        const parseOutcome = implemented.bind(undefined, { topic: 'Coding' }).parseState(JSON.parse(json));
         expect(parseOutcome.ok).toBe(true);
         if (!parseOutcome.ok) throw new Error(parseOutcome.error.message);
         const restoredState = parseOutcome.state;
@@ -559,7 +560,8 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const runner = createRunner({ defaultEngine: false })
         .withEngine(engine)
         .withModel(model)
-        .withAgent(implemented);
+        .withAgent(implemented)
+        .withInitialState({ topic: 'Coding' });
 
       const outcome = await runner.run({
         userContent: { kind: 'text', text: 'Ping' },
@@ -641,7 +643,8 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
       const runner = createRunner({ defaultEngine: false })
         .withEngine(engine)
         .withModel(model)
-        .withAgent(implemented);
+        .withAgent(implemented)
+        .withInitialState({ topic: 'Coding' });
 
       // TURNO 1
       const turn1Result = await runner.run({
@@ -657,7 +660,7 @@ describe('Test di Serializzazione Pura, Parsing e Ripristino dell\'Agente', () =
         const serializedJson = JSON.stringify(serializeAgentState(turn1Result.state));
 
         // TURNO 2: Ripartiamo dallo stato serializzato in halt, passando un nuovo stimulus!
-        const parseOutcome = implemented.bind(undefined).parseState(JSON.parse(serializedJson));
+        const parseOutcome = implemented.bind(undefined, { topic: 'Coding' }).parseState(JSON.parse(serializedJson));
         expect(parseOutcome.ok).toBe(true);
         if (!parseOutcome.ok) throw new Error(parseOutcome.error.message);
         const parsedState = parseOutcome.state;

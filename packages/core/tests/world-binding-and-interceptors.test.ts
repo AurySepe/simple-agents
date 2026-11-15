@@ -146,10 +146,6 @@ describe('Two-Phase World Binding & Pure Interceptor Pipeline', () => {
     });
 
     const blueprint = agentContract.implement<SharedBrowserWorld>({
-      initialState: {
-        stepLog: [],
-        lastObservedUrl: null
-      },
       tools: {
         visit: async ({ url }, world) => {
           world.currentUrl = url;
@@ -168,6 +164,10 @@ describe('Two-Phase World Binding & Pure Interceptor Pipeline', () => {
       .withModel(createMockSequenceModel([{ name: 'visit', payload: { url: 'https://acme.dev' } }], { done: true }))
       .withAgent(blueprint)
       .withWorld(sharedWorld)
+      .withInitialState({
+        stepLog: [],
+        lastObservedUrl: null
+      })
       .beforeToolUse(({ state, toolId }) => ({
         ...state.Ds,
         stepLog: [...state.Ds.stepLog, `before:${toolId}`]
@@ -188,5 +188,61 @@ describe('Two-Phase World Binding & Pure Interceptor Pipeline', () => {
       stepLog: ['before:visit', 'after1:visit', 'after2:https://acme.dev'],
       lastObservedUrl: 'https://acme.dev'
     });
+  });
+
+  it('esegue beforeDeliberation prima di ogni inferenza (incluso il Turno 0)', async () => {
+    const stateSchema = z.object({
+      syncedUrls: z.array(z.string())
+    });
+
+    const contract = defineAgent({
+      identity: 'DelibSyncAgent',
+      mission: 'Test beforeDeliberation',
+      stateSchema,
+      tools: {
+        navigate: {
+          description: 'Navigate',
+          parameters: z.object({ url: z.string() }),
+          returns: z.object({ ok: z.boolean() })
+        }
+      },
+      terminations: {
+        finish: {
+          description: 'Done',
+          schema: z.object({ done: z.boolean() })
+        }
+      }
+    });
+
+    const blueprint = contract.implement<SharedBrowserWorld>({
+      tools: {
+        navigate: async ({ url }, world) => {
+          world.currentUrl = url;
+          return toolOk({ ok: true });
+        }
+      }
+    });
+
+    const sharedWorld: SharedBrowserWorld = {
+      currentUrl: 'https://initial.dev',
+      history: []
+    };
+
+    const result = await createRunner()
+      .withModel(createMockSequenceModel([{ name: 'navigate', payload: { url: 'https://next.dev' } }], { done: true }))
+      .withAgent(blueprint)
+      .withWorld(sharedWorld)
+      .withInitialState({ syncedUrls: [] })
+      .beforeDeliberation(({ state, world, macroCycle }) => ({
+        ...state.Ds,
+        syncedUrls: [...state.Ds.syncedUrls, `${macroCycle}:${world.currentUrl}`]
+      }))
+      .run({ userContent: { kind: 'text', text: 'Go' } });
+
+    expect(result.ok).toBe(true);
+    expect(result.state.Ds.syncedUrls).toEqual([
+      '0:https://initial.dev',
+      '1:https://next.dev'
+    ]);
   });
 });

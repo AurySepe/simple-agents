@@ -144,6 +144,14 @@ export interface RunOptions<T = DataValue, TWorld = unknown> {
       result: ToolResult;
     }) => Promise<DataRecord | void> | DataRecord | void
   >;
+  beforeDeliberation?: Array<
+    (context: {
+      state: Readonly<AgentState>;
+      world: TWorld;
+      macroCycle: number;
+      tick: number;
+    }) => Promise<DataRecord | void> | DataRecord | void
+  >;
 }
 
 export interface BaseRunResult {
@@ -620,6 +628,19 @@ export class AgentInstance<T extends DataValue = DataValue> {
    * Ciclo di deliberazione ed esecuzione operativa ordinaria (q_exec)
    */
   private async stepExec(): Promise<StepOutcome<T>> {
+    if (this.lastRunOptions?.beforeDeliberation && this.lastRunOptions.beforeDeliberation.length > 0) {
+      for (const interceptor of this.lastRunOptions.beforeDeliberation) {
+        const nextDs = await interceptor({
+          state: this.state,
+          world: this.lastRunOptions.worldInstance,
+          macroCycle: this.c,
+          tick: this.t
+        });
+        if (nextDs !== undefined) {
+          this.state = { ...this.state, Ds: nextDs };
+        }
+      }
+    }
     const context = this.buildInferenceTriple();
     const startInfer = Date.now();
     let rawOutput: unknown;
@@ -1337,6 +1358,7 @@ export class AgentInstance<T extends DataValue = DataValue> {
    * Esegue l'agente end-to-end gestendo automaticamente i tool del mondo W.
    */
   public async run(options?: RunOptions<T>): Promise<RunResult<T>> {
+    this.lastRunOptions = options;
     const maxMacroCycles = options?.maxMacroCycles ?? 50;
     const maxTicks = options?.maxTicks ?? 250;
 

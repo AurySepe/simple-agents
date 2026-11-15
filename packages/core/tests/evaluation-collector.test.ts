@@ -97,7 +97,8 @@ describe('EvaluationCollector & Scorecard System', () => {
     const runner = createRunner({ defaultEngine: false })
       .withEngine(engine)
       .withModel(model)
-      .withAgent(implemented);
+      .withAgent(implemented)
+      .withInitialState({ itemsFound: 0, budgetLeft: 500 });
 
     const runResult = await runner.run({
       userContent: { kind: 'text', text: 'Acquista un laptop entro 500€' },
@@ -195,7 +196,7 @@ describe('EvaluationCollector & Scorecard System', () => {
     });
 
     // 1. Istanziazione tipizzata direttamente dall'agente
-    const collector = implemented.bind(undefined).createEvaluationCollector();
+    const collector = implemented.bind(undefined, { score: 10, category: 'A' }).createEvaluationCollector();
 
     const model: LanguageModelAdapter = {
       infer: async () => ({
@@ -205,7 +206,7 @@ describe('EvaluationCollector & Scorecard System', () => {
     };
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-    await implemented.bind(undefined).run(engine, model, {
+    await implemented.bind(undefined, { score: 10, category: 'A' }).run(engine, model, {
       userContent: { kind: 'text', text: 'Go' },
       observers: [collector]
     });
