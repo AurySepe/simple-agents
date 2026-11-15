@@ -56,3 +56,7 @@ audit/
 docker/**/models/*
 !docker/**/models/.gitkeep
 
+
+# Internal formalization notes
+formalization/
+formalization_v2/
