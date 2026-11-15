@@ -6,6 +6,16 @@ Designed for production environments where reliability, auditability, and compil
 
 ---
 
+## Core Philosophy: Contracts Bound to a World
+
+Most agent frameworks mix prompts, tool implementations, and runtime state into a single tangled object. `@simple-agents/core` separates them into three clean layers:
+
+1. **Contract (`defineAgent`)** — *What* the agent is and *what* it can do (identity, mission, typed tool schemas, typed terminations, and optional domain state schema). Zero runtime dependencies.
+2. **Blueprint (`implement<TWorld>`)** — *How* the agent's tools interact with an abstract world `TWorld` (e.g., a browser session, a database, or an in-memory mock). Reusable across any environment.
+3. **World Binding (`.withWorld(world)`)** — *Where* the agent runs right now. At execution time, you bind a concrete `world` instance (which can even be shared across multiple independent agents) and an initial state.
+
+---
+
 ## Key Highlights
 
 - **Contract-First Agent Definition**: Define your agent interface (identity, mission, tools, and termination schemas) using [Zod](https://github.com/colinhacks/zod). The schema serves as the single source of truth.
