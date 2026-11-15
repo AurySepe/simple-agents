@@ -70,6 +70,27 @@ const result = await createRunner()
   .run({ userContent: { kind: 'text', text: 'Where is order #1234?' } });
 ```
 
+### Handling Typed Terminations
+
+Unlike frameworks that return unstructured text, a Simple Agent **must** finish by invoking one of the `terminations` declared in its contract (e.g. `reply`, `escalate`, `notFound`). TypeScript narrows `result.result` into a discriminated union:
+
+```typescript
+if (result.ok && result.status === 'halt') {
+  switch (result.result.type) {
+    case 'reply':
+      // result.result.payload is strictly typed as { message: string }
+      console.log('Agent replied:', result.result.payload.message);
+      break;
+  }
+}
+```
+
+**Example execution trace:**
+1. **Turn 0**: The model reads *"Where is order #1234?"* and calls `getOrder({ orderId: '1234' })`.
+2. **Tool Execution**: `supportBlueprint` runs `getOrder` against `AppWorld.db` and returns `toolOk({ status: 'shipped', total: 49.9 })`.
+3. **Turn 1**: The model sees the tool result and terminates by calling `reply({ message: 'Order #1234 has been shipped (total: $49.90).' })`.
+4. **Halt**: `runner.run()` returns `{ ok: true, status: 'halt', result: { type: 'reply', payload: { message: '...' } } }`.
+
 ---
 
 ## Why Simple Agents?
