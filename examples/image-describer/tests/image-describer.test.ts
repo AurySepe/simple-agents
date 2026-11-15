@@ -40,12 +40,14 @@ describe('Image Describer Agent - Suite di Test', () => {
 
   describe('Binding Esecutivo (implementation.ts)', () => {
     it('l agente implementato deve avere un Mondo vuoto (nessun tool)', () => {
-      const tools = imageDescriberAgent.world.getAllDefinitions();
+      const bound = imageDescriberAgent.bind(undefined);
+      const tools = bound.world.getAllDefinitions();
       expect(tools).toHaveLength(0);
     });
 
     it('deve possedere la terminazione concludi_descrizione nel manifest', () => {
-      const terminations = imageDescriberAgent.manifest.A_term;
+      const bound = imageDescriberAgent.bind(undefined);
+      const terminations = bound.manifest.A_term;
       expect(terminations.some((t) => t.id === 'concludi_descrizione')).toBe(true);
     });
   });
@@ -78,7 +80,7 @@ describe('Image Describer Agent - Suite di Test', () => {
         }
       };
 
-      const outcome = await imageDescriberAgent.run(engine, mockVlmModel, {
+      const outcome = await imageDescriberAgent.bind(undefined).run(engine, mockVlmModel, {
         userContent: {
           kind: 'text_with_media',
           text: 'Descrivi la foto',

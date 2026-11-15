@@ -72,7 +72,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
   }
 
   it('deve supportare identity come nome formale dell agente', () => {
-    expect(implementedEcho.manifest.I).toBe('Agente Calcolatore Semplice');
+    expect(implementedEcho.bind(undefined).manifest.I).toBe('Agente Calcolatore Semplice');
   });
 
   it('deve supportare la chiamata speculare engine.run(agent, model)', async () => {
@@ -80,7 +80,7 @@ describe('RunnerBuilder & Ergonomia Esecutiva (Type-State Pattern & Symmetric Ru
     const model = createMockCalculatorModel();
 
     // Approccio engine-first: engine.run(agent, model)
-    const outcome = await engine.run(implementedEcho, model, {
+    const outcome = await engine.run(implementedEcho.bind(undefined), model, {
       userContent: { kind: 'text', text: 'Calcola 10 + 25' }
     });
 

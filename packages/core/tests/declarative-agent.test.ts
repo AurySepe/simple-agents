@@ -88,12 +88,12 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    const toolDefs = agent.world.getAllDefinitions();
+    const toolDefs = agent.bind(undefined).world.getAllDefinitions();
     const toolIds = toolDefs.map(t => t.id);
 
     expect(toolIds).toContain('cerca_cliente');
     expect(toolIds).toContain('verifica_ordine');
-    expect(agent.manifest.Ta0).toEqual(['cerca_cliente', 'verifica_ordine']);
+    expect(agent.bind(undefined).manifest.Ta0).toEqual(['cerca_cliente', 'verifica_ordine']);
   });
 
   it('deve consentire il binding multiplo (Mock vs Live) a partire dallo stesso contratto', async () => {
@@ -115,8 +115,8 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    const resMock = await mockAgent.world.executeTool('cerca_cliente', { cliente_id: 1 });
-    const resLive = await liveAgent.world.executeTool('cerca_cliente', { cliente_id: 1 });
+    const resMock = await mockAgent.bind(undefined).world.executeTool('cerca_cliente', { cliente_id: 1 });
+    const resLive = await liveAgent.bind(undefined).world.executeTool('cerca_cliente', { cliente_id: 1 });
 
     expect(resMock).toEqual({ ok: true, data: { nome: 'Mock User', categoria: 'STANDARD' } });
     expect(resLive).toEqual({ ok: true, data: { nome: 'Utente 1', categoria: 'VIP' } });
@@ -176,7 +176,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    const outcome = await agent.run(engine, mockModel, {
+    const outcome = await agent.bind(undefined).run(engine, mockModel, {
       userContent: { kind: 'text', text: 'Verifica lo stato del cliente 42.' }
     });
 
@@ -204,7 +204,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    expect(() => badAgent.implement({ tools: {} })).toThrowError(/identity/i);
+    expect(() => badAgent.implement({ tools: {} }).bind(undefined)).toThrowError(/identity/i);
   });
 
   it('rifiuta a tempo di compilazione ed esecuzione se terminations è vuoto', () => {
@@ -216,7 +216,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       terminations: {}
     });
 
-    expect(() => noTermAgent.implement({ tools: {} })).toThrowError(/termination/i);
+    expect(() => noTermAgent.implement({ tools: {} }).bind(undefined)).toThrowError(/termination/i);
   });
 
   it('rifiuta la costruzione se un tool dichiarato manca di esecutore nel binding', () => {
@@ -238,7 +238,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       toolAgent.implement({
         // @ts-expect-error Verifica runtime per JS o bypass di compilazione
         tools: {}
-      })
+      }).bind(undefined)
     ).toThrowError(/azione_richiesta/i);
   });
 
@@ -257,7 +257,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       statefulAgent.implement({
         initialState: { contatore: 2 },
         tools: {}
-      })
+      }).bind(undefined)
     ).toThrowError(/stateSchema/i);
   });
 
@@ -274,7 +274,7 @@ describe('API Dichiarativa e Type-Safe: defineAgent e Binding', () => {
       }
     });
 
-    expect(() => badConceptAgent.implement({ tools: {} })).toThrowError(/concept #1/i);
+    expect(() => badConceptAgent.implement({ tools: {} }).bind(undefined)).toThrowError(/concept #1/i);
   });
 
   it('rifiuta a tempo di compilazione schemi che non appartengono allo spazio discreto DataValue', () => {

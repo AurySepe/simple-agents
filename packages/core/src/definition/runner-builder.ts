@@ -9,20 +9,38 @@ import {
 } from '../engine/orchestrator.js';
 import { DataValue, LanguageModelAdapter, UnexpectedModelError } from '../types/index.js';
 import { createDefaultFrameworkConfig } from '../defaults/index.js';
-import { AgentRunnerResult, ImplementedAgent, TypedAgentState, WorldExecutionError, ModelExecutionError } from './types.js';
+import {
+  AgentBlueprint,
+  AgentRunnerResult,
+  AfterToolUseInterceptor,
+  BeforeToolUseInterceptor,
+  ImplementedAgent,
+  TypedAgentState,
+  WorldExecutionError,
+  ModelExecutionError
+} from './types.js';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 import { UnexpectedToolError } from '../world/index.js';
 
-type InferAgentRunnerResult<TAgent, TModel> = TAgent extends ImplementedAgent<
+type InferAgentRunnerResult<TAgent, TModel> = TAgent extends AgentBlueprint<
   any,
   any,
   infer TTerminations,
-  infer TToolErrorsMap
+  infer TToolErrorsMap,
+  any
 >
   ? TModel extends LanguageModelAdapter<infer TModelErrors>
     ? AgentRunnerResult<TTerminations, TToolErrorsMap, TModelErrors>
     : AgentRunnerResult<TTerminations, TToolErrorsMap, any>
   : AgentRunnerResult<any, any, any>;
+
+type ExtractBlueprintWorld<TAgent> = TAgent extends AgentBlueprint<any, any, any, any, infer TWorld>
+  ? TWorld
+  : undefined;
+
+type ExtractBlueprintStateSchema<TAgent> = TAgent extends AgentBlueprint<any, infer TStateSchema, any, any, any>
+  ? TStateSchema
+  : undefined;
 
 export interface TypedRunnerRecoveryConfig<TToolErrorsMap extends Record<string, any>, TModelErrors> {
   onModelError?: (
@@ -49,23 +67,30 @@ export interface TypedRunnerRecoveryConfig<TToolErrorsMap extends Record<string,
 export class RunnerBuilder<
   TEngine extends FrameworkEngine | undefined = undefined,
   TModel extends LanguageModelAdapter<any> | undefined = undefined,
-  TAgent extends ImplementedAgent<any, any, any, any> | undefined = undefined,
-  TOptions extends RunOptions<DataValue> = RunOptions<DataValue>
+  TAgent extends AgentBlueprint<any, any, any, any, any> | undefined = undefined,
+  TOptions extends RunOptions<DataValue> = RunOptions<DataValue>,
+  TWorld = undefined,
+  THasWorld extends boolean = false
 > {
   constructor(
     private readonly state: {
       engine?: FrameworkEngine;
       model?: LanguageModelAdapter<any>;
-      agent?: ImplementedAgent<any, any, any, any>;
+      agent?: AgentBlueprint<any, any, any, any, any>;
+      world?: TWorld;
       options?: RunOptions<DataValue>;
+      beforeToolUse?: BeforeToolUseInterceptor<any, any>[];
+      afterToolUse?: AfterToolUseInterceptor<any, any>[];
     }
   ) {}
 
   /**
    * Associa o sovrascrive il FrameworkEngine di Livello 1.
    */
-  public withEngine(engine: FrameworkEngine): RunnerBuilder<FrameworkEngine, TModel, TAgent, TOptions> {
-    return new RunnerBuilder<FrameworkEngine, TModel, TAgent, TOptions>({
+  public withEngine(
+    engine: FrameworkEngine
+  ): RunnerBuilder<FrameworkEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+    return new RunnerBuilder({
       ...this.state,
       engine
     });
@@ -74,22 +99,78 @@ export class RunnerBuilder<
   /**
    * Associa o sovrascrive l'adapter del modello linguistico (LLM).
    */
-  public withModel<M extends LanguageModelAdapter<any>>(model: M): RunnerBuilder<TEngine, M, TAgent, TOptions> {
-    return new RunnerBuilder<TEngine, M, TAgent, TOptions>({
+  public withModel<M extends LanguageModelAdapter<any>>(
+    model: M
+  ): RunnerBuilder<TEngine, M, TAgent, TOptions, TWorld, THasWorld> {
+    return new RunnerBuilder({
       ...this.state,
       model
     });
   }
 
   /**
-   * Associa o sovrascrive l'agente implementato da eseguire.
+   * Associa il blueprint dell'agente da eseguire (Fase 1).
+   * Se il blueprint richiede un TWorld diverso da undefined, è necessario chiamare .withWorld(world).
    */
-  public withAgent<A extends ImplementedAgent<any, any, any, any>>(
+  public withAgent<A extends AgentBlueprint<any, any, any, any, any>>(
     agent: A
-  ): RunnerBuilder<TEngine, TModel, A, TOptions> {
-    return new RunnerBuilder<TEngine, TModel, A, TOptions>({
+  ): RunnerBuilder<
+    TEngine,
+    TModel,
+    A,
+    TOptions,
+    ExtractBlueprintWorld<A>,
+    ExtractBlueprintWorld<A> extends undefined ? true : false
+  > {
+    return new RunnerBuilder({
       ...this.state,
-      agent
+      agent,
+      world: undefined
+    }) as unknown as RunnerBuilder<
+      TEngine,
+      TModel,
+      A,
+      TOptions,
+      ExtractBlueprintWorld<A>,
+      ExtractBlueprintWorld<A> extends undefined ? true : false
+    >;
+  }
+
+  /**
+   * Collega l'istanza concreta del mondo condiviso al blueprint dell'agente (Fase 2).
+   */
+  public withWorld(
+    world: TWorld
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, true> {
+    return new RunnerBuilder({
+      ...this.state,
+      world
+    });
+  }
+
+  /**
+   * Registra un interceptor puro eseguito prima di ogni tool call.
+   * Può essere chiamato più volte per comporre una pipeline in ordine di registrazione.
+   */
+  public beforeToolUse(
+    interceptor: BeforeToolUseInterceptor<ExtractBlueprintStateSchema<TAgent>, TWorld>
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+    return new RunnerBuilder({
+      ...this.state,
+      beforeToolUse: [...(this.state.beforeToolUse ?? []), interceptor as BeforeToolUseInterceptor<any, any>]
+    });
+  }
+
+  /**
+   * Registra un interceptor puro eseguito dopo ogni tool call riuscita.
+   * Può essere chiamato più volte per comporre una pipeline in ordine di registrazione.
+   */
+  public afterToolUse(
+    interceptor: AfterToolUseInterceptor<ExtractBlueprintStateSchema<TAgent>, TWorld>
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+    return new RunnerBuilder({
+      ...this.state,
+      afterToolUse: [...(this.state.afterToolUse ?? []), interceptor as AfterToolUseInterceptor<any, any>]
     });
   }
 
@@ -98,10 +179,10 @@ export class RunnerBuilder<
    */
   public withRecovery(
     recovery: TypedRunnerRecoveryConfig<
-      TAgent extends ImplementedAgent<any, any, any, infer TToolErrors> ? TToolErrors : Record<string, unknown>,
+      TAgent extends AgentBlueprint<any, any, any, infer TToolErrors, any> ? TToolErrors : Record<string, unknown>,
       TModel extends LanguageModelAdapter<infer TModelErrors> ? TModelErrors : unknown
     >
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions> {
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
     const orchestratorRecovery: OrchestratorRecoveryConfig = {
       onModelError: recovery.onModelError
         ? (error, context) =>
@@ -122,7 +203,7 @@ export class RunnerBuilder<
       }
     };
 
-    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions>({
+    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld>({
       ...this.state,
       options: {
         ...this.state.options,
@@ -136,8 +217,8 @@ export class RunnerBuilder<
    */
   public withOptions(
     options: Partial<RunOptions<DataValue>>
-  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions> {
-    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions>({
+  ): RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld> {
+    return new RunnerBuilder<TEngine, TModel, TAgent, TOptions, TWorld, THasWorld>({
       ...this.state,
       options: { ...this.state.options, ...options }
     });
@@ -145,31 +226,33 @@ export class RunnerBuilder<
 
   /**
    * Spawna l'istanza dell'agente nel runtime.
-   * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
+   * DISPONIBILE SOLO QUANDO Engine, Model, Agent e World sono tutti definiti nel tipo.
    */
   public spawn(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>
   ): AgentInstance<DataValue> {
-    return this.state.agent!.spawn(this.state.engine!, this.state.model!);
+    const implemented = this.state.agent!.bind(this.state.world);
+    return implemented.spawn(this.state.engine!, this.state.model!);
   }
 
   /**
    * Spawna l'istanza dell'agente nel runtime ripartendo da uno stato pregresso fortemente tipizzato.
-   * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
+   * DISPONIBILE SOLO QUANDO Engine, Model, Agent e World sono tutti definiti nel tipo.
    */
   public spawnFromState(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
-    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any, any>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>,
+    state: TAgent extends AgentBlueprint<infer TTools, infer TStateSchema, any, any, any>
       ? TypedAgentState<TTools, TStateSchema>
       : TypedAgentState<any, any>
   ): AgentInstance<DataValue> {
-    return this.state.agent!.spawnFromState(this.state.engine!, this.state.model!, state as any);
+    const implemented = this.state.agent!.bind(this.state.world);
+    return implemented.spawnFromState(this.state.engine!, this.state.model!, state as any);
   }
 
   /**
    * Crea un EvaluationCollector tipizzato sull'agente associato a questo runner.
    */
-  public createEvaluationCollector(): TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, infer TTerminations, any>
+  public createEvaluationCollector(): TAgent extends AgentBlueprint<infer TTools, infer TStateSchema, infer TTerminations, any, any>
     ? EvaluationCollector<TTools, TStateSchema, TTerminations>
     : EvaluationCollector {
     return new EvaluationCollector() as any;
@@ -177,18 +260,28 @@ export class RunnerBuilder<
 
   /**
    * Esegue l'agente end-to-end.
-   * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
+   * DISPONIBILE SOLO QUANDO Engine, Model, Agent e World sono tutti definiti nel tipo.
    * Ritorna un esito tipizzato con unione discriminata ok: true | false.
    */
   public async run(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>,
     runOptions?: Partial<RunOptions<DataValue>>
   ): Promise<InferAgentRunnerResult<TAgent, TModel>> {
     const mergedOptions: RunOptions<DataValue> = {
       ...this.state.options,
-      ...runOptions
+      ...runOptions,
+      worldInstance: this.state.world,
+      beforeToolUse: [
+        ...(this.state.beforeToolUse ?? []),
+        ...(runOptions?.beforeToolUse ?? [])
+      ],
+      afterToolUse: [
+        ...(this.state.afterToolUse ?? []),
+        ...(runOptions?.afterToolUse ?? [])
+      ]
     };
-    return (await this.state.agent!.run(
+    const implemented = this.state.agent!.bind(this.state.world);
+    return (await implemented.run(
       this.state.engine!,
       this.state.model!,
       mergedOptions
@@ -200,17 +293,27 @@ export class RunnerBuilder<
    * DISPONIBILE SOLO QUANDO Engine, Model e Agent sono tutti definiti nel tipo.
    */
   public async runFromState(
-    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, ImplementedAgent<any, any, any, any>, any>,
-    state: TAgent extends ImplementedAgent<infer TTools, infer TStateSchema, any, any>
+    this: RunnerBuilder<FrameworkEngine, LanguageModelAdapter<any>, AgentBlueprint<any, any, any, any, any>, any, any, true>,
+    state: TAgent extends AgentBlueprint<infer TTools, infer TStateSchema, any, any, any>
       ? TypedAgentState<TTools, TStateSchema>
       : TypedAgentState<Record<string, never>, undefined>,
     runOptions?: Partial<RunOptions<DataValue>>
   ): Promise<InferAgentRunnerResult<TAgent, TModel>> {
     const mergedOptions: RunOptions<DataValue> = {
       ...this.state.options,
-      ...runOptions
+      ...runOptions,
+      worldInstance: this.state.world,
+      beforeToolUse: [
+        ...(this.state.beforeToolUse ?? []),
+        ...(runOptions?.beforeToolUse ?? [])
+      ],
+      afterToolUse: [
+        ...(this.state.afterToolUse ?? []),
+        ...(runOptions?.afterToolUse ?? [])
+      ]
     };
-    return (await this.state.agent!.runFromState(
+    const implemented = this.state.agent!.bind(this.state.world);
+    return (await implemented.runFromState(
       this.state.engine!,
       this.state.model!,
       state as unknown as TypedAgentState<Record<string, never>, undefined>,

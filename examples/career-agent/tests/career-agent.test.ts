@@ -97,12 +97,14 @@ describe("Career Web Agent - Suite di Test", () => {
     });
 
     it("l'agente implementato deve avere i tool w_cerca_web e w_leggi_pagina_web nel Mondo", () => {
-      expect(careerAgent.world.getToolDefinition("w_cerca_web")).toBeDefined();
-      expect(careerAgent.world.getToolDefinition("w_leggi_pagina_web")).toBeDefined();
+      const bound = careerAgent.bind(undefined);
+      expect(bound.world.getToolDefinition("w_cerca_web")).toBeDefined();
+      expect(bound.world.getToolDefinition("w_leggi_pagina_web")).toBeDefined();
     });
 
     it("il manifesto generato dall'agente implementato deve avere i contratti di terminazione registrati", () => {
-      const termIds = careerAgent.manifest.A_term.map((t) => t.id);
+      const bound = careerAgent.bind(undefined);
+      const termIds = bound.manifest.A_term.map((t) => t.id);
       expect(termIds).toContain("conferma_pagina_carriere");
       expect(termIds).toContain("segnala_pagina_inesistente");
       expect(termIds).toContain("segnala_ricerca_non_conclusiva");

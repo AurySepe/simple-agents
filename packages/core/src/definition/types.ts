@@ -259,10 +259,12 @@ export type ExtractToolCustomError<TReturn> = TReturn extends { ok: false; error
  */
 export type ToolImplementations<
   TTools extends Record<string, ToolContract>,
-  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>,
+  TWorld = undefined
 > = {
   [K in keyof TTools]: (
-    args: z.infer<TTools[K]['parameters']>
+    args: z.infer<TTools[K]['parameters']>,
+    world: TWorld
   ) =>
     | Promise<ToolReturn<TTools[K]['returns'] extends z.ZodType ? z.infer<TTools[K]['returns']> : ToolResult, TToolErrorsMap[K]>>
     | ToolReturn<TTools[K]['returns'] extends z.ZodType ? z.infer<TTools[K]['returns']> : ToolResult, TToolErrorsMap[K]>;
@@ -297,13 +299,86 @@ export type TypedAgentState<
 export type AgentBinding<
   TTools extends Record<string, ToolContract>,
   TStateSchema extends z.ZodType | undefined = undefined,
-  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>,
+  TWorld = undefined
 > = {
   /** Esecutori asincroni tipizzati per ciascun tool dichiarato nel contratto */
-  tools: ToolImplementations<TTools, TToolErrorsMap>;
+  tools: ToolImplementations<TTools, TToolErrorsMap, TWorld>;
 } & (TStateSchema extends z.ZodType
   ? { initialState: z.infer<TStateSchema> }
   : { initialState?: never });
+
+/**
+ * Context passed to a `beforeToolUse` interceptor.
+ */
+export interface BeforeToolUseContext<
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TWorld = undefined
+> {
+  readonly state: Readonly<Omit<AgentState, 'Ds'> & { Ds: InferInitialState<TStateSchema> }>;
+  readonly world: TWorld;
+  readonly toolId: string;
+  readonly args: DataRecord;
+}
+
+/**
+ * Context passed to an `afterToolUse` interceptor.
+ */
+export interface AfterToolUseContext<
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TWorld = undefined
+> {
+  readonly state: Readonly<Omit<AgentState, 'Ds'> & { Ds: InferInitialState<TStateSchema> }>;
+  readonly world: TWorld;
+  readonly toolId: string;
+  readonly args: DataRecord;
+  readonly result: ToolResult;
+}
+
+/**
+ * Pure interceptor executed before a tool call.
+ * May optionally return a new `Ds` state to update the agent's domain state immutably.
+ */
+export type BeforeToolUseInterceptor<
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TWorld = undefined
+> = (
+  context: BeforeToolUseContext<TStateSchema, TWorld>
+) => Promise<InferInitialState<TStateSchema> | void> | InferInitialState<TStateSchema> | void;
+
+/**
+ * Pure interceptor executed after a successful tool call.
+ * May optionally return a new `Ds` state to update the agent's domain state immutably.
+ */
+export type AfterToolUseInterceptor<
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TWorld = undefined
+> = (
+  context: AfterToolUseContext<TStateSchema, TWorld>
+) => Promise<InferInitialState<TStateSchema> | void> | InferInitialState<TStateSchema> | void;
+
+/**
+ * Blueprint dell'agente (Fase 1): contiene il contratto e l'implementazione dei tool
+ * parametrizzata su TWorld, non ancora legata a un'istanza concreta di mondo.
+ */
+export interface AgentBlueprint<
+  TTools extends Record<string, ToolContract> = Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined = undefined,
+  TTerminations extends Record<string, TerminationContractDef> = Record<string, TerminationContractDef>,
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>,
+  TWorld = undefined
+> {
+  readonly contract: AgentContract<TTools, TStateSchema, TTerminations>;
+  readonly binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap, TWorld>;
+
+  /**
+   * Fase 2: Lega il blueprint a un'istanza concreta di TWorld, producendo un ImplementedAgent eseguibile.
+   * Per blueprint stateless (TWorld = undefined) si invoca senza argomenti: `.bind()`.
+   */
+  bind(
+    ...args: TWorld extends undefined ? [] : [world: TWorld]
+  ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap>;
+}
 
 /**
  * Interfaccia della definizione dell'agente prima del binding esecutivo.
@@ -314,9 +389,12 @@ export interface AgentDefinition<
   TTerminations extends Record<string, TerminationContractDef>
 > {
   readonly contract: AgentContract<TTools, TStateSchema, TTerminations>;
-  implement<TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>>(
-    binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap>
-  ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap>;
+  implement<
+    TWorld = undefined,
+    TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+  >(
+    binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap, TWorld>
+  ): AgentBlueprint<TTools, TStateSchema, TTerminations, TToolErrorsMap, TWorld>;
   /**
    * Convalida e raffina a runtime uno stato 'unknown'
    * restituendo un Result tipizzato (StateParseResult) senza lanciare eccezioni.

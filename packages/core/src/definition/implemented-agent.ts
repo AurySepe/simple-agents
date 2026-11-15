@@ -15,6 +15,7 @@ import { FrameworkEngine, AgentInstance, RunOptions, RunResult } from '../engine
 import { createWorldRegistry, WorldRegistry } from '../world/index.js';
 import {
   AgentBinding,
+  AgentBlueprint,
   AgentContract,
   AgentRunnerResult,
   AgentRunResult,
@@ -69,11 +70,31 @@ function mapExecutionErrorDetail<TToolErrorsMap extends Record<string, unknown>,
   };
 }
 
+export class AgentBlueprintImpl<
+  TTools extends Record<string, ToolContract>,
+  TStateSchema extends z.ZodType | undefined,
+  TTerminations extends Record<string, TerminationContractDef>,
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>,
+  TWorld = undefined
+> implements AgentBlueprint<TTools, TStateSchema, TTerminations, TToolErrorsMap, TWorld> {
+  constructor(
+    readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
+    readonly binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap, TWorld>
+  ) {}
+
+  bind(
+    ...args: TWorld extends undefined ? [] : [world: TWorld]
+  ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap> {
+    return new ImplementedAgentImpl(this.contract, this.binding, args[0] as TWorld);
+  }
+}
+
 export class ImplementedAgentImpl<
   TTools extends Record<string, ToolContract>,
   TStateSchema extends z.ZodType | undefined,
   TTerminations extends Record<string, TerminationContractDef>,
-  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+  TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>,
+  TWorld = undefined
 > implements ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap> {
   readonly manifest: AgentManifest<DataValue>;
   readonly world: WorldRegistry;
@@ -81,7 +102,8 @@ export class ImplementedAgentImpl<
 
   constructor(
     readonly contract: AgentContract<TTools, TStateSchema, TTerminations>,
-    readonly binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap>
+    readonly binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap, TWorld>,
+    private readonly worldInstance: TWorld
   ) {
     // 1. Fail-fast validation of ontological Identity (I)
     if (!contract.identity || contract.identity.trim().length === 0) {
@@ -139,8 +161,10 @@ export class ImplementedAgentImpl<
         parameters: toolDef.parameters,
         returns: toolDef.returns,
         execute: async (args: DataRecord): Promise<ToolResult> => {
-          const executor = (binding.tools as Record<string, (input: unknown) => Promise<ToolResult> | ToolResult>)[toolId];
-          return await executor(args);
+          const executor = (
+            binding.tools as Record<string, (input: unknown, world: TWorld) => Promise<ToolResult> | ToolResult>
+          )[toolId];
+          return await executor(args, this.worldInstance);
         }
       };
     });

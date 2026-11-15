@@ -222,9 +222,11 @@ describe('Walkthrough End-to-End: Ordine e Sconto Commerciale (3 Macro-Cicli in 
       onMacroCycle: (cycle) => {
         visitedCycles.push(cycle);
       },
-      beforeToolExecution: (toolId) => {
-        executedTools.push(toolId);
-      }
+      beforeToolUse: [
+        ({ toolId }) => {
+          executedTools.push(toolId);
+        }
+      ]
     });
 
     // 1. Verifica terminazione corretta

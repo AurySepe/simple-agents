@@ -118,7 +118,7 @@ export interface OrchestratorRecoveryConfig {
 /**
  * Opzioni di configurazione per l'esecuzione autonoma end-to-end (run)
  */
-export interface RunOptions<T = DataValue> {
+export interface RunOptions<T = DataValue, TWorld = unknown> {
   userContent?: UserPayload;
   maxMacroCycles?: number;
   maxTicks?: number;
@@ -126,8 +126,24 @@ export interface RunOptions<T = DataValue> {
   signal?: AbortSignal;
   recovery?: OrchestratorRecoveryConfig;
   onMacroCycle?: (macroCycle: number, outcome: ExecutionOutcome<T>) => void | Promise<void>;
-  beforeToolExecution?: (toolId: string, args: DataRecord) => void | Promise<void>;
-  afterToolExecution?: (toolId: string, args: DataRecord, result: ToolResult) => void | Promise<void>;
+  worldInstance?: TWorld;
+  beforeToolUse?: Array<
+    (context: {
+      state: Readonly<AgentState>;
+      world: TWorld;
+      toolId: string;
+      args: DataRecord;
+    }) => Promise<DataRecord | void> | DataRecord | void
+  >;
+  afterToolUse?: Array<
+    (context: {
+      state: Readonly<AgentState>;
+      world: TWorld;
+      toolId: string;
+      args: DataRecord;
+      result: ToolResult;
+    }) => Promise<DataRecord | void> | DataRecord | void
+  >;
 }
 
 export interface BaseRunResult {
@@ -1509,8 +1525,18 @@ export class AgentInstance<T extends DataValue = DataValue> {
         while (!allToolsSucceeded) {
           toolExecutionOutcomes = await Promise.all(
             outcome.pendingCalls.map(async (call: ToolCall) => {
-              if (options?.beforeToolExecution) {
-                await options.beforeToolExecution(call.name, call.payload);
+              if (options?.beforeToolUse && options.beforeToolUse.length > 0) {
+                for (const interceptor of options.beforeToolUse) {
+                  const nextDs = await interceptor({
+                    state: this.state,
+                    world: options.worldInstance,
+                    toolId: call.name,
+                    args: call.payload
+                  });
+                  if (nextDs !== undefined) {
+                    this.state = { ...this.state, Ds: nextDs };
+                  }
+                }
               }
               const startTime = Date.now();
               const execResult = await this.world.executeTool(call.name, call.payload);
@@ -1530,8 +1556,19 @@ export class AgentInstance<T extends DataValue = DataValue> {
                   durationMs
                 });
 
-                if (options?.afterToolExecution) {
-                  await options.afterToolExecution(call.name, call.payload, execResult.data);
+                if (options?.afterToolUse && options.afterToolUse.length > 0) {
+                  for (const interceptor of options.afterToolUse) {
+                    const nextDs = await interceptor({
+                      state: this.state,
+                      world: options.worldInstance,
+                      toolId: call.name,
+                      args: call.payload,
+                      result: execResult.data
+                    });
+                    if (nextDs !== undefined) {
+                      this.state = { ...this.state, Ds: nextDs };
+                    }
+                  }
                 }
                 return { ok: true as const, callId: call.id, result: execResult.data };
               } else {

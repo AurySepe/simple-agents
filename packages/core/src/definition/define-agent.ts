@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import {
   AgentBinding,
+  AgentBlueprint,
   AgentContract,
   AgentDefinition,
-  ImplementedAgent,
   TerminationContractDef,
   ToolContract,
   TypedAgentState,
   ValidateContractTerminations,
   ValidateContractTools
 } from './types.js';
-import { ImplementedAgentImpl } from './implemented-agent.js';
+import { AgentBlueprintImpl } from './implemented-agent.js';
 import { createAgentStateParser } from './state-parser.js';
 import { EvaluationCollector } from '../observability/collectors/evaluation-collector.js';
 import { extractBehavioralTrajectory } from './trajectory-extractor.js';
@@ -72,10 +72,16 @@ export function defineAgent<
     extractTrajectory(state: TypedAgentState<TTools, TStateSchema>) {
       return extractBehavioralTrajectory(this, state);
     },
-    implement<TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>>(
-      binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap>
-    ): ImplementedAgent<TTools, TStateSchema, TTerminations, TToolErrorsMap> {
-      return new ImplementedAgentImpl(contract, binding);
+    implement<
+      TWorld = undefined,
+      TToolErrorsMap extends Record<keyof TTools, any> = Record<keyof TTools, any>
+    >(
+      binding: AgentBinding<TTools, TStateSchema, TToolErrorsMap, TWorld>
+    ): AgentBlueprint<TTools, TStateSchema, TTerminations, TToolErrorsMap, TWorld> {
+      return new AgentBlueprintImpl(
+        contract as AgentContract<TTools, TStateSchema, TTerminations>,
+        binding
+      );
     }
   };
 }

@@ -199,7 +199,7 @@ describe('Discriminated Union Results & Robust Error Handling', () => {
 
       const collector = createEvaluationCollector(implemented);
       const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-      const outcome = await implemented.run(engine, model, {
+      const outcome = await implemented.bind(undefined).run(engine, model, {
         userContent: { kind: 'text', text: 'Start' },
         observers: [collector]
       });
@@ -234,7 +234,7 @@ describe('Discriminated Union Results & Robust Error Handling', () => {
       const implemented = agentDef.implement({ tools: {} });
       const engine = new FrameworkEngine(createDefaultFrameworkConfig());
 
-      const instance = implemented.spawn(engine, {
+      const instance = implemented.bind(undefined).spawn(engine, {
         infer: async () => ({ calls: [{ id: 't', name: 'done', payload: {} }] })
       });
 

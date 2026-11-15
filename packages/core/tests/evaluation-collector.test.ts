@@ -195,7 +195,7 @@ describe('EvaluationCollector & Scorecard System', () => {
     });
 
     // 1. Istanziazione tipizzata direttamente dall'agente
-    const collector = implemented.createEvaluationCollector();
+    const collector = implemented.bind(undefined).createEvaluationCollector();
 
     const model: LanguageModelAdapter = {
       infer: async () => ({
@@ -205,7 +205,7 @@ describe('EvaluationCollector & Scorecard System', () => {
     };
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-    await implemented.run(engine, model, {
+    await implemented.bind(undefined).run(engine, model, {
       userContent: { kind: 'text', text: 'Go' },
       observers: [collector]
     });

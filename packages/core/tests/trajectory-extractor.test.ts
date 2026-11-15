@@ -75,20 +75,20 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     };
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-    const runResult = await implemented.run(engine, model, {
+    const runResult = await implemented.bind(undefined).run(engine, model, {
       userContent: { kind: 'text', text: 'Organizza viaggio a Parigi' }
     });
 
     expect(runResult.status).toBe('halt');
 
     // 1. Validazione e tipizzazione dello stato mediante parseState
-    const parseResult = implemented.parseState(runResult.state);
+    const parseResult = implemented.bind(undefined).parseState(runResult.state);
     expect(parseResult.ok).toBe(true);
     if (!parseResult.ok) throw new Error(parseResult.error.message);
     const typedState = parseResult.state;
 
     // 2. Estrazione della traiettoria dallo stato tipizzato
-    const trajectory = implemented.extractTrajectory(typedState);
+    const trajectory = implemented.bind(undefined).extractTrajectory(typedState);
 
     // Verifiche sul Summary
     expect(trajectory.summary.isTerminated).toBe(true);
@@ -152,7 +152,7 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     };
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-    const runResult = await implemented.run(engine, model, {
+    const runResult = await implemented.bind(undefined).run(engine, model, {
       userContent: { kind: 'text', text: 'Volo per Londra' }
     });
 
@@ -215,13 +215,13 @@ describe('extractBehavioralTrajectory & Offline State Trajectory', () => {
     };
 
     const engine = new FrameworkEngine(createDefaultFrameworkConfig());
-    const runResult = await implemented.run(engine, model, { userContent: { kind: 'text', text: 'Test loop' } });
+    const runResult = await implemented.bind(undefined).run(engine, model, { userContent: { kind: 'text', text: 'Test loop' } });
 
-    const parseResult = implemented.parseState(runResult.state);
+    const parseResult = implemented.bind(undefined).parseState(runResult.state);
     expect(parseResult.ok).toBe(true);
     if (!parseResult.ok) throw new Error(parseResult.error.message);
     const typedState = parseResult.state;
-    const trajectory = implemented.extractTrajectory(typedState);
+    const trajectory = implemented.bind(undefined).extractTrajectory(typedState);
 
     expect(trajectory.summary.redundantCallsCount).toBe(1);
     expect(trajectory.tools.usageCounts.check_flight).toBe(2);
