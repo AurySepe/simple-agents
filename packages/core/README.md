@@ -178,7 +178,7 @@ while (!runner.isTerminal(currentState)) {
 }
 ```
 
-### Strongly Typed Environmental Errors
+### Typed Environmental Errors
 
 Tool failures and LLM outages are first-class values rather than untyped thrown exceptions:
 
@@ -188,15 +188,63 @@ import { toolFail, toolOk } from '@formal-agent/core';
 // Inside a tool implementation:
 if (isRateLimited) {
   return toolFail({
-    kind: 'RATE_LIMIT',
+    type: 'RATE_LIMIT',
     retryAfterSeconds: 30,
-  });
+  } as const);
 }
 
 return toolOk({ data: result });
 ```
 
 With `withRecovery`, you can configure declarative fallback strategies for specific error types directly in the runner.
+
+### Two-Phase World Binding & Shared State (`AgentBlueprint` + `.withWorld()`)
+
+`implement<TWorld>({ tools })` returns a reusable `AgentBlueprint` decoupled from any concrete runtime instance. Tool handlers receive `(args, world)` with `world` strictly typed as `TWorld`:
+
+```typescript
+interface BrowserWorld {
+  currentUrl: string;
+}
+
+const navigatorBlueprint = navigatorContract.implement<BrowserWorld>({
+  tools: {
+    goto: async ({ url }, world) => {
+      world.currentUrl = url;
+      return toolOk({ ok: true });
+    },
+  },
+});
+
+const sharedWorld: BrowserWorld = { currentUrl: 'about:blank' };
+
+const runner = createRunner()
+  .withModel(myModelAdapter)
+  .withAgent(navigatorBlueprint)
+  .withWorld(sharedWorld); // Required at compile time when TWorld is defined
+```
+
+If the agent contract defines a `stateSchema`, TypeScript also enforces `.withInitialState(Ds)` on the builder before `.run()` or `.spawn()` can be called.
+
+### Pure Interceptor Pipeline (`beforeDeliberation`, `beforeToolUse`, `afterToolUse`)
+
+Register composable, type-safe interceptors directly on `RunnerBuilder`. Each interceptor receives an immutable `Readonly` `state` and `world: TWorld`, and can optionally return a new `Ds` that is chained immutably to the next interceptor:
+
+```typescript
+const result = await createRunner()
+  .withModel(myModelAdapter)
+  .withAgent(navigatorBlueprint)
+  .withWorld(sharedWorld)
+  .withInitialState({ lastUrl: null })
+  .beforeDeliberation(({ state, world }) => ({
+    ...state.Ds,
+    lastUrl: world.currentUrl,
+  }))
+  .afterToolUse(({ state, toolId }) => {
+    console.log(`Executed ${toolId} in state`, state.Ds);
+  })
+  .run({ userContent: { kind: 'text', text: 'Navigate to example.com' } });
+```
 
 ---
 

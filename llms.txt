@@ -16,7 +16,7 @@ The framework separates agent systems into three decoupled layers:
 ### `@formal-agent/core`
 Primary runtime, contracts, and state-machine primitives.
 - `defineAgent(contract)`: Declare agent interface, tool parameters, results, and terminations.
-- `createRunner()`: Type-safe fluent builder for running agents (`.withModel()`, `.withAgent()`, `.withEngine()`).
+- `createRunner()`: Type-safe fluent builder for running agents (`.withModel()`, `.withAgent()`, `.withWorld()`, `.withInitialState()`, `.beforeDeliberation()`, `.beforeToolUse()`, `.afterToolUse()`, `.withEngine()`).
 - `toolOk(data)`: Helper returning `{ ok: true, data }`.
 - `toolFail(error)`: Helper returning `{ ok: false, error }` (error MUST have a `type: string` discriminant).
 - `serializeAgentState(state)`: Serializes full agent state machine to JSON.
