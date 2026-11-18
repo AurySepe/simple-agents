@@ -455,5 +455,37 @@ describe('SGLang Transport & Qwen Strategy', () => {
       expect(capturedMetrics).toBeDefined();
     });
   });
+
+  describe('buildExclusiveActionSchema (Exclusive Grammar)', () => {
+    it('genera uno schema oneOf che separa 1 terminazione da 1..N tool normali', async () => {
+      const { buildExclusiveActionSchema } = await import('../src/sglang/grammar.js');
+      const { z } = await import('zod');
+      const schema = buildExclusiveActionSchema([
+        ...sampleTriple.visibleTools,
+        {
+          id: 'a_concludi',
+          kind: 'termination',
+          description: 'Concludi il task',
+          parameters: z.object({ summary: z.string() })
+        }
+      ]);
+
+      expect(schema).toBeDefined();
+      expect(schema?.name).toBe('exclusive_agent_action');
+      expect(schema?.strict).toBe(true);
+
+      const oneOf = schema?.schema.oneOf as Array<Record<string, unknown>>;
+      expect(oneOf).toHaveLength(2);
+
+      const termBranch = oneOf[0] as { properties: { kind: { const: string }; calls: { maxItems?: number } } };
+      const toolsBranch = oneOf[1] as { properties: { kind: { const: string }; calls: { minItems?: number } } };
+
+      expect(termBranch.properties.kind.const).toBe('termination');
+      expect(termBranch.properties.calls.maxItems).toBe(1);
+
+      expect(toolsBranch.properties.kind.const).toBe('tools');
+      expect(toolsBranch.properties.calls.minItems).toBe(1);
+    });
+  });
 });
 

@@ -1,5 +1,6 @@
 import type { OpenAI } from 'openai';
 import { zodFunction } from 'openai/helpers/zod';
+import { z } from 'zod';
 import {
   type DataRecord,
   type InferenceTriple,
@@ -14,6 +15,7 @@ import {
   type ValidToolCall
 } from '@simple-agents/core';
 import { resolveMediaBase64, resolveTextFileContent } from '../../common/media-resolver.js';
+import { buildExclusiveActionSchema } from '../grammar.js';
 import {
   SGLangAssistantMessageParam,
   SGLangChatResponse,
@@ -45,12 +47,23 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
     this.includeHistoricalThinking = options?.includeHistoricalThinking ?? false;
     this.defaultToolChoice = options?.defaultToolChoice ?? 'required';
     this.parallelToolCalls = options?.parallelToolCalls ?? false;
+    this.enforceExclusiveGrammar = options?.enforceExclusiveGrammar ?? false;
   }
+
+  private readonly enforceExclusiveGrammar: boolean;
 
   formatContext(context: InferenceTriple): {
     messages: SGLangMessage[];
     tools?: SGLangToolDefinition[];
     toolChoice?: SGLangToolChoice;
+    responseFormat?: {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        strict: true;
+        schema: Record<string, unknown>;
+      };
+    };
   } {
     const messages: SGLangMessage[] = [];
 
@@ -226,7 +239,32 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
 
     flushPendingAgent();
 
-    // 3. Maschera di Visibilità V_Ω (Tools) generata tramite l'helper ufficiale zodFunction
+    // 3. Maschera di Visibilità V_Ω (Tools) o Grammatica Esclusiva (response_format)
+    if (this.enforceExclusiveGrammar && context.visibleTools.length > 0) {
+      const jsonSchema = buildExclusiveActionSchema(context.visibleTools);
+      if (jsonSchema) {
+        const toolCatalogText = context.visibleTools
+          .map((t) => {
+            const schemaStr = JSON.stringify(z.toJSONSchema(t.parameters));
+            return `- ${t.id} (kind: ${t.kind}): ${t.description}\n  parameters: ${schemaStr}`;
+          })
+          .join('\n');
+
+        const systemMsg = messages[0];
+        if (systemMsg && systemMsg.role === 'system' && typeof systemMsg.content === 'string') {
+          systemMsg.content = `${systemMsg.content}\n\n[AVAILABLE ACTIONS]\n${toolCatalogText}\n\nRespond ONLY with a JSON object matching the exclusive_agent_action schema: {"kind": "tools", "calls": [...]} OR {"kind": "termination", "calls": [...]}.`;
+        }
+
+        return {
+          messages,
+          responseFormat: {
+            type: 'json_schema' as const,
+            json_schema: jsonSchema
+          }
+        };
+      }
+    }
+
     let tools: OpenAI.Chat.ChatCompletionTool[] | undefined;
     let toolChoice: SGLangToolChoice | undefined;
 
@@ -296,9 +334,47 @@ export class SGLangQwenStrategy implements SGLangModelFamilyStrategy {
       }
     }
 
-    // 2. Estrazione e validazione delle Tool Calls
+    // 2. Estrazione e validazione delle Tool Calls (o payload JSON da grammatica esclusiva)
     const rawCalls = rawMessage.tool_calls;
     if (!rawCalls || rawCalls.length === 0) {
+      if (this.enforceExclusiveGrammar && rawMessage.content) {
+        const cleanedContent = rawMessage.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        const ExclusiveResponseSchema = z.object({
+          kind: z.enum(['termination', 'tools']),
+          calls: z
+            .array(
+              z.object({
+                name: z.string(),
+                arguments: z.record(z.string(), z.unknown())
+              })
+            )
+            .min(1)
+        });
+
+        try {
+          const parsedJson = JSON.parse(cleanedContent);
+          const validated = ExclusiveResponseSchema.parse(parsedJson);
+          const effectiveItems =
+            validated.kind === 'termination' || this.parallelToolCalls === false
+              ? validated.calls.slice(0, 1)
+              : validated.calls;
+
+          const grammarCalls: ToolCall[] = effectiveItems.map((item, idx) => ({
+            status: 'valid',
+            id: `call_${idx}_${Date.now()}`,
+            name: item.name,
+            payload: item.arguments as DataRecord
+          }));
+
+          if (isNonEmptyArray(grammarCalls)) {
+            const output: ModelOutput = { thought, calls: grammarCalls };
+            return output;
+          }
+        } catch {
+          // Fallback al controllo standard sotto se il JSON non è valido o budget esaurito
+        }
+      }
+
       if (choice.finish_reason === 'length') {
         const thoughtLength = thought ? thought.length : 0;
         const thoughtTail = thought ? `\nThinking finale (ultimi 1500 caratteri di ${thoughtLength}):\n${thought.slice(-1500)}` : '';

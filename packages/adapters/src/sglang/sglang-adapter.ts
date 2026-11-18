@@ -46,18 +46,19 @@ export class SGLangModelAdapter implements LanguageModelAdapter {
   }
 
   async infer(context: InferenceTriple): Promise<ModelResult> {
-    const { messages, tools, toolChoice } = this.strategy.formatContext(context);
+    const { messages, tools, toolChoice, responseFormat } = this.strategy.formatContext(context);
 
-    // Se l'utente ha specificato esplicitamente un tool_choice nelle options, ha priorità,
-    // altrimenti usiamo quello determinato dalla strategia (es. 'required' se ci sono tool)
-    const effectiveToolChoice = this.options.tool_choice ?? toolChoice;
+    // Quando responseFormat (grammatica esclusiva) è attivo, omettiamo tools e tool_choice
+    // affinché SGLang / llama-server applichino il constrained decoding su response_format.
+    const effectiveToolChoice = responseFormat ? undefined : (this.options.tool_choice ?? toolChoice);
 
     const { response, metrics } = await this.client.chatCompletions(
       {
         model: this.model,
         messages,
-        tools,
+        tools: responseFormat ? undefined : tools,
         tool_choice: effectiveToolChoice,
+        response_format: responseFormat,
         parallel_tool_calls: this.options.parallel_tool_calls,
         temperature: this.options.temperature,
         max_tokens: this.options.max_tokens,

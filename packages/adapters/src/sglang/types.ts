@@ -74,6 +74,7 @@ export interface SGLangQwenStrategyOptions {
   includeHistoricalThinking?: boolean;
   defaultToolChoice?: 'required' | 'auto';
   parallelToolCalls?: boolean;
+  enforceExclusiveGrammar?: boolean;
 }
 
 export interface SGLangModelFamilyStrategy {
@@ -81,6 +82,14 @@ export interface SGLangModelFamilyStrategy {
     messages: SGLangMessage[];
     tools?: SGLangToolDefinition[];
     toolChoice?: SGLangToolChoice;
+    responseFormat?: {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        strict: true;
+        schema: Record<string, unknown>;
+      };
+    };
   };
 
   parseResponse(response: SGLangChatResponse): ModelResult;
